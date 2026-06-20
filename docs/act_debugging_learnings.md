@@ -141,14 +141,68 @@ insertion".)
 - **Objective/data:** whether chunk sampling / loss lets the model collapse to
   "predict current pose".
 
+## Real robot diagnosis: pretrained backbone matters (2026-06-16)
+
+On the real OMX robot (`pour_water` task, 50 demos), the custom ACT was
+"memorizing trajectories" — it ignored visual input and replayed a fixed motion
+regardless of object positions.
+
+### Root cause: randomly initialized ResNet18 backbone
+
+The custom `train.py` called `ACTPolicy(cfg)` without `pretrained_backbone=True`,
+so the ResNet18 visual encoder started from **random weights** instead of
+ImageNet-pretrained weights.
+
+**Evidence from causal ablation tests:**
+- Shuffling all images, keeping qpos: first-action change ~5.63 L2
+- Shuffling qpos, keeping images: first-action change ~55.74 L2
+- **Ratio: qpos affects output ~10x more than images**
+
+**Evidence from weight comparison:**
+| Metric | Random init | ImageNet pretrained | Our trained model |
+|--------|-------------|---------------------|-------------------|
+| conv1 std | 0.025 | **0.130** | 0.025 |
+| Distance to our model | **0.028** | 0.083 | — |
+
+The trained model's backbone weights were 3x closer to random init than to
+ImageNet pretrained — confirming it never had meaningful visual features.
+
+### Fix applied
+
+```python
+# models/act/train.py line 44
+model = ACTPolicy(cfg, pretrained_backbone=True).to(device)
+```
+
+### Retrained results (10k steps, RTX 4090, chunk_size=100)
+
+| Metric | Random backbone (old) | Pretrained backbone (new) |
+|--------|----------------------|---------------------------|
+| Final loss | ~0.3 | **0.12** |
+| Final action L1 | ~0.15 | **0.08** |
+| Final val loss | ~0.2 | **0.10** |
+
+Checkpoint: `outputs/vastai/instance-41278194/outputs/act_experiments/act_custom_train_chunk100_steps10000/20260617-042657/checkpoints/last.pt`
+
+### Why this matters
+
+With only ~50 demonstrations, a randomly initialized ResNet cannot learn useful
+visual features. The model compensates by relying on qpos (proprioception),
+which causes it to replay memorized trajectories. ImageNet pretraining provides
+a strong visual prior that lets the model actually use camera input.
+
 ## Suggested next steps
 
-1. Reproduce the paper recipe first with the **official** model (all 50 demos,
+1. ~~Reproduce the paper recipe first with the **official** model (all 50 demos,
    match epochs/eval protocol) until it hits ~90% — that validates the harness.
-   Only then is a custom-vs-official success-rate comparison meaningful.
-2. Once the harness reproduces the paper, re-evaluate the patched custom model.
-3. Retrain on the real OMX pour-water dataset with these fixes and check the
-   latent (KL not collapsing) and val behavior there.
+   Only then is a custom-vs-official success-rate comparison meaningful.~~
+2. ~~Once the harness reproduces the paper, re-evaluate the patched custom model.~~
+3. ~~Retrain on the real OMX pour-water dataset with these fixes and check the
+   latent (KL not collapsing) and val behavior there.~~
+4. **Run real robot eval with pretrained backbone checkpoint** to verify visual
+   conditioning is working.
+5. If still underperforming, consider: reduce chunk_size, use relative actions,
+   add more demonstrations.
 
 ## Reproduce
 

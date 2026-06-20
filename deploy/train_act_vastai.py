@@ -37,6 +37,7 @@ MIN_RELIABILITY = 0.98
 REMOTE_WORKSPACE = "/workspace/act-sim"
 REMOTE_LOG = "/workspace/act-sim/train.log"
 DEFAULT_IMAGE = "nvidia/cuda:12.6.3-cudnn-runtime-ubuntu24.04"
+LEROBOT_GIT_REF = "87242cfced5228b6181fb0047021d684d424df38"
 BAD_STATUSES = {"offline", "exited", "error", "dead"}
 BAD_STATUS_MESSAGES = (
     "OCI runtime create failed",
@@ -49,16 +50,37 @@ BAD_STATUS_MESSAGES = (
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Launch act-sim one-batch ACT debug on Vast.ai.")
-    parser.add_argument("--steps", type=int, default=300, help="Number of one-batch smoke training steps.")
-    parser.add_argument("--gpu-name", default=os.environ.get("OMX_GPU_NAME", "RTX_3090"))
+    parser = argparse.ArgumentParser(description="Launch act-sim ACT training on Vast.ai.")
+    parser.add_argument("--steps", type=int, default=5_000, help="Number of normal dataset training steps.")
+    parser.add_argument("--chunk-size", type=int, default=100, help="Training action chunk size.")
+    parser.add_argument(
+        "--save-freq",
+        type=int,
+        default=None,
+        help="Checkpoint save frequency. Defaults to --steps.",
+    )
+    parser.add_argument(
+        "--dataset-repo-id",
+        default=os.environ.get("ACT_TRAIN_DATASET_REPO_ID"),
+        help="Override the LeRobot dataset repo used for training.",
+    )
+    parser.add_argument(
+        "--runner",
+        choices=["custom", "lerobot", "diffusion"],
+        default="custom",
+        help="Which normal dataset trainer to execute.",
+    )
+    parser.add_argument("--resume-checkpoint", default=None, help="Local checkpoint .pt to upload and resume from.")
+    parser.add_argument("--gpu-name", default=os.environ.get("OMX_GPU_NAME", "RTX_4090"))
     parser.add_argument("--min-gpu-ram-mb", type=int, default=20_000)
     parser.add_argument("--disk-gb", type=int, default=80)
     parser.add_argument("--boot-timeout", type=int, default=BOOT_TIMEOUT)
     parser.add_argument("--image", default=os.environ.get("OMX_VAST_IMAGE", DEFAULT_IMAGE))
-    parser.add_argument("--instance-label", default="act-sim-one-batch-smoke")
+    parser.add_argument("--instance-label", default="act-sim-train")
     parser.add_argument("--remote-workspace", default=REMOTE_WORKSPACE)
     parser.add_argument("--output-dir", default="outputs/vastai")
+    parser.add_argument("--exclude-host-id", action="append", default=[], help="Vast host_id to skip. Repeatable.")
+    parser.add_argument("--exclude-machine-id", action="append", default=[], help="Vast machine_id to skip. Repeatable.")
     parser.add_argument("--keep-instance", action="store_true", help="Do not destroy the instance after the run.")
     parser.add_argument("--no-download", action="store_true", help="Do not copy remote outputs back after completion.")
     return parser.parse_args()
@@ -94,6 +116,14 @@ def sanitize_error(error: object) -> str:
     return message.replace(api_key, "***") if api_key else message
 
 
+def read_local_vast_key() -> str | None:
+    key_path = repo_root() / ".secrets" / "vast_key"
+    if not key_path.exists():
+        return None
+    key = key_path.read_text().strip()
+    return key or None
+
+
 def format_offer(offer: dict) -> str:
     price = offer.get("dph_total", offer.get("dph_base", "?"))
     reliability = offer.get("reliability2", offer.get("reliability", "?"))
@@ -111,8 +141,14 @@ def search_candidate_offers(vast: VastAI, args: argparse.Namespace) -> list[dict
         raise RuntimeError(f"Unexpected search_offers result: {offers}")
 
     filtered = []
+    excluded_hosts = {str(value) for value in args.exclude_host_id}
+    excluded_machines = {str(value) for value in args.exclude_machine_id}
     for offer in offers:
         if not isinstance(offer, dict):
+            continue
+        if str(offer.get("host_id")) in excluded_hosts:
+            continue
+        if str(offer.get("machine_id")) in excluded_machines:
             continue
         if int(offer.get("num_gpus", 0)) != 1:
             continue
@@ -254,11 +290,9 @@ PY
 
     command = r"""bash -lc 'set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
-if ! command -v python3 >/dev/null 2>&1 || ! python3 -m venv --help >/dev/null 2>&1; then
-  echo "Installing system dependencies..."
-  apt-get update -qq
-  apt-get install -y -qq python3 python3-dev python3-pip python3-venv git ffmpeg linux-libc-dev build-essential clang rsync
-fi
+echo "Installing system dependencies..."
+apt-get update -qq
+apt-get install -y -qq python3 python3-dev python3-pip python3-venv git ffmpeg linux-libc-dev build-essential clang rsync
 if [[ ! -d /opt/venv ]]; then
   echo "Creating /opt/venv..."
   python3 -m venv /opt/venv
@@ -316,8 +350,39 @@ def upload_repo(instance: dict, remote_workspace: str) -> None:
     )
 
 
+def upload_resume_checkpoint(instance: dict, args: argparse.Namespace) -> str:
+    if not args.resume_checkpoint:
+        return ""
+    checkpoint = Path(args.resume_checkpoint).expanduser()
+    if not checkpoint.is_file():
+        raise FileNotFoundError(f"Resume checkpoint not found: {checkpoint}")
+    remote_path = f"{args.remote_workspace}/.resume/{checkpoint.name}"
+    run_ssh(instance, f"mkdir -p {shlex.quote(args.remote_workspace + '/.resume')}")
+    print(f"Uploading resume checkpoint {checkpoint} -> {remote_path}")
+    subprocess.run(
+        [
+            "rsync",
+            "-az",
+            "-e",
+            rsync_ssh(instance),
+            str(checkpoint),
+            f"root@{instance['ssh_host']}:{remote_path}",
+        ],
+        check=True,
+    )
+    return remote_path
+
+
 def remote_training_command(args: argparse.Namespace) -> str:
-    hf_token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_HUB_TOKEN") or ""
+    from huggingface_hub import get_token
+
+    hf_token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_HUB_TOKEN") or get_token() or ""
+    module = {
+        "custom": "models.act.train",
+        "lerobot": "models.act.train_lerobot",
+        "diffusion": "models.act.train_diffusion",
+    }[args.runner]
+    job_name = f"act_{args.runner}_train_chunk{args.chunk_size}_steps{args.steps}"
     return f"""bash -lc 'set -euo pipefail
 cd {shlex.quote(args.remote_workspace)}
 . /opt/venv/bin/activate
@@ -325,9 +390,19 @@ export PYTHONUNBUFFERED=1
 export HF_TOKEN={json.dumps(hf_token)}
 export HUGGINGFACE_HUB_TOKEN={json.dumps(hf_token)}
 export ACT_DEVICE=cuda
-export ACT_SMOKE_STEPS={int(args.steps)}
+export ACT_TRAIN_STEPS={int(args.steps)}
+export ACT_TRAIN_CHUNK_SIZE={json.dumps(str(args.chunk_size))}
+export ACT_TRAIN_SAVE_FREQ={int(args.save_freq or args.steps)}
+export ACT_TRAIN_JOB_NAME={json.dumps(job_name)}
+export ACT_TRAIN_DATASET_REPO_ID={json.dumps(args.dataset_repo_id or "")}
+export ACT_TRAIN_RESUME_CHECKPOINT={json.dumps(getattr(args, "remote_resume_checkpoint", "") or "")}
 python -m pip install --no-cache-dir -e .
-python -m models.act.one_batch_smoke 2>&1 | tee {shlex.quote(REMOTE_LOG)}
+python -m pip install --no-cache-dir --no-deps --force-reinstall git+https://github.com/huggingface/lerobot.git@{LEROBOT_GIT_REF}
+python - <<PY
+import lerobot
+print("LeRobot:", getattr(lerobot, "__version__", "unknown"))
+PY
+python -m {module} 2>&1 | tee {shlex.quote(REMOTE_LOG)}
 '"""
 
 
@@ -346,6 +421,10 @@ def run_remote_training(instance: dict, args: argparse.Namespace, local_output_d
         for line in process.stdout:
             print(f"[remote] {line}", end="")
             log_file.write(line)
+            log_file.flush()
+            if "Saved checkpoint:" in line:
+                print("Checkpoint saved remotely; syncing outputs snapshot...", flush=True)
+                download_outputs(instance, args, local_output_dir)
         return_code = process.wait()
     if return_code != 0:
         raise RuntimeError(f"Remote training failed with exit code {return_code}; see {live_log}")
@@ -397,7 +476,7 @@ def main() -> None:
         pass
 
     args = parse_args()
-    api_key = os.environ.get("VASTAI_API_KEY") or os.environ.get("VAST_API_KEY")
+    api_key = os.environ.get("VASTAI_API_KEY") or os.environ.get("VAST_API_KEY") or read_local_vast_key()
     if not api_key:
         print("ERROR: VASTAI_API_KEY is not set.")
         sys.exit(1)
@@ -440,6 +519,7 @@ def main() -> None:
         wait_for_ssh(instance)
         bootstrap_remote(instance)
         upload_repo(instance, args.remote_workspace)
+        args.remote_resume_checkpoint = upload_resume_checkpoint(instance, args)
         run_remote_training(instance, args, local_output_dir)
     finally:
         if instance is not None and local_output_dir is not None:

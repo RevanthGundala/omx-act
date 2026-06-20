@@ -68,8 +68,11 @@ modal run --detach deploy/train_official_act_modal.py::train_remote --profile si
 OMX_VAST_IMAGE=<your-dockerhub-user>/act-sim-vastai:latest \
   uv run python deploy/train_act_vastai.py --steps 300
 
-# MuJoCo success-rate eval (needs a tonyzhaozh/act checkout for sim_env):
-python -m models.act.eval --checkpoint <run>/checkpoint_last.pt --act-repo-dir /path/to/tonyzhaozh/act --episodes 50
+# Live custom-ACT eval on the OMX follower arm:
+python -m models.act.eval --checkpoint <run>/checkpoint_last.pt --steps 400
+
+# MuJoCo success-rate eval for the archived custom sim path (needs a tonyzhaozh/act checkout for sim_env):
+python -m models.act.old.eval --checkpoint <run>/checkpoint_last.pt --act-repo-dir /path/to/tonyzhaozh/act --episodes 50
 python -m models.act_official.eval_official --checkpoint <run>/checkpoint_last.pt --act-repo-dir /path/to/tonyzhaozh/act --episodes 50
 
 # --- World B: stock LeRobot ACT on the aloha dataset, eval in gym-aloha ---

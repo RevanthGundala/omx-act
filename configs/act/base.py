@@ -33,6 +33,7 @@ class ACTConfig:
     num_heads: int = 8
     mlp_dim: int = 3200
     dropout: float = 0.1
+    exp_weight: float = 0.01
 
     # Optimization
     num_train_steps: int = 100_000

@@ -1,4 +1,4 @@
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime
 import json
 import os
@@ -29,16 +29,33 @@ def compute_loss(model, batch, device, kl_weight):
 
 
 def main():
-    cfg = ACTConfig(dataset_repo_id=RECORD_DATASET_REPO_ID)
+    base_cfg = ACTConfig(dataset_repo_id=os.environ.get("ACT_TRAIN_DATASET_REPO_ID") or RECORD_DATASET_REPO_ID)
+    cfg = replace(
+        base_cfg,
+        job_name=os.environ.get("ACT_TRAIN_JOB_NAME", base_cfg.job_name),
+        num_train_steps=int(os.environ.get("ACT_TRAIN_STEPS", base_cfg.num_train_steps)),
+        chunk_size=int(os.environ.get("ACT_TRAIN_CHUNK_SIZE") or base_cfg.chunk_size),
+        save_freq=int(os.environ.get("ACT_TRAIN_SAVE_FREQ", base_cfg.save_freq)),
+    )
     device_name = os.environ.get("ACT_DEVICE")
     if device_name is None:
         device_name = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
     device = torch.device(device_name)
-    model = ACTPolicy(cfg).to(device)
+    model = ACTPolicy(cfg, pretrained_backbone=True).to(device)
     optim = torch.optim.AdamW(model.parameters(), lr=cfg.learning_rate, weight_decay=cfg.weight_decay)
     train_loader, val_loader = make_dataloaders(cfg)
+    resume_checkpoint = os.environ.get("ACT_TRAIN_RESUME_CHECKPOINT")
+    start_step = 0
+    if resume_checkpoint:
+        checkpoint = torch.load(resume_checkpoint, map_location=device)
+        model.load_state_dict(checkpoint["model_state_dict"])
+        optim.load_state_dict(checkpoint["optimizer_state_dict"])
+        start_step = int(checkpoint["step"])
+        print(f"Resumed checkpoint {resume_checkpoint} at step {start_step}", flush=True)
     run_dir = Path(cfg.output_root) / cfg.job_name / datetime.now().strftime("%Y%m%d-%H%M%S")
     run_dir.mkdir(parents=True, exist_ok=False)
+    checkpoint_dir = run_dir / "checkpoints"
+    checkpoint_dir.mkdir(parents=True, exist_ok=False)
     (run_dir / "config.json").write_text(json.dumps(asdict(cfg), indent=2) + "\n")
 
     mlflow_module = None
@@ -70,7 +87,7 @@ def main():
 
     model.train()
 
-    step = 0
+    step = start_step
     try:
         if mlflow_module is not None:
             mlflow_module.log_artifact(str(run_dir / "config.json"), artifact_path="config")
@@ -138,6 +155,9 @@ def main():
                     print(f"step={step} val_loss={val_metrics['loss']:.4f}", flush=True)
                     model.train()
 
+                if (step + 1) % cfg.save_freq == 0 or (step + 1) >= cfg.num_train_steps:
+                    save_checkpoint(checkpoint_dir, step + 1, model, optim, cfg, train_metrics)
+
                 step += 1
                 if step >= cfg.num_train_steps:
                     break
@@ -146,6 +166,20 @@ def main():
             if (run_dir / "metrics.jsonl").exists():
                 mlflow_module.log_artifact(str(run_dir / "metrics.jsonl"), artifact_path="metrics")
             mlflow_module.end_run()
+
+
+def save_checkpoint(checkpoint_dir, step, model, optim, cfg, metrics):
+    checkpoint = {
+        "step": step,
+        "config": asdict(cfg),
+        "model_state_dict": model.state_dict(),
+        "optimizer_state_dict": optim.state_dict(),
+        "metrics": metrics,
+    }
+    step_path = checkpoint_dir / f"step_{step:06d}.pt"
+    torch.save(checkpoint, step_path)
+    torch.save(checkpoint, checkpoint_dir / "last.pt")
+    print(f"Saved checkpoint: {step_path}", flush=True)
 
 
 if __name__ == "__main__":

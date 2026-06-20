@@ -34,6 +34,12 @@ class ACTPolicy(nn.Module):
             dropout=config.dropout,
             pretrained_backbone=pretrained_backbone,
         )
+        temporal_weights = torch.exp(-config.exp_weight * torch.arange(0, config.chunk_size, dtype=torch.float32))
+        self.register_buffer("temporal_weights", temporal_weights, persistent=False)
+        self.register_buffer("temporal_weights_cumsum", torch.cumsum(temporal_weights, dim=0), persistent=False)
+        self.action_buffer = None 
+        self.actions_number = None
+        
 
     def forward(self, images, qpos, future_actions=None, action_mask=None):
         if future_actions is None:
@@ -45,9 +51,52 @@ class ACTPolicy(nn.Module):
         return act_pred, mu, log_var
 
     @torch.no_grad()
-    def select_action(self, images, qpos):
-        act_pred, _, _ = self.forward(images, qpos)
-        return act_pred
+    def select_action(self, images, qpos, use_temporal_ensemble=True):
+        act_pred, _, _ = self.forward(images, qpos)  # [B, K, A]
+
+        if use_temporal_ensemble is False:
+            return act_pred[:, 0]
+
+        chunk_size = act_pred.shape[1]
+        device = act_pred.device
+
+        if self.action_buffer is None:
+            self.action_buffer = act_pred.clone()
+            self.actions_number = torch.ones((chunk_size,), device=device, dtype=torch.long)
+
+        else:
+            old_len = self.action_buffer.shape[1]
+            old_count = self.actions_number[:old_len]
+
+            old_weight_sum = self.temporal_weights_cumsum[old_count - 1].to(device=device, dtype=act_pred.dtype).view(1, old_len, 1)
+            new_weight = self.temporal_weights[old_count].to(device=device, dtype=act_pred.dtype).view(1, old_len, 1)
+            overlap = (self.action_buffer * old_weight_sum + act_pred[:, :old_len] * new_weight) / (old_weight_sum + new_weight)
+
+            self.action_buffer = torch.cat(
+                [overlap, act_pred[:, old_len:old_len + 1]],
+                dim=1,
+            )
+
+            self.actions_number = torch.cat(
+                [
+                    old_count + 1,
+                    torch.ones((1,), device=device, dtype=torch.long),
+                ],
+                dim=0,
+            )
+
+        # return current action
+        action = self.action_buffer[:, 0]
+
+        # pop current action for next timestep
+        self.action_buffer = self.action_buffer[:, 1:]
+        self.actions_number = self.actions_number[1:]
+
+        return action
+
+    def reset_action_selection(self):
+        self.action_buffer = None
+        self.actions_number = None
 
 class CVAE_Encoder(nn.Module):
     def __init__(
