@@ -207,7 +207,10 @@ def _horizon_summary(values: np.ndarray, valid: np.ndarray) -> list[float | None
     return summary
 
 
-def _scene_tracking(predicted: np.ndarray, target: np.ndarray) -> dict[str, dict[str, float]]:
+def _scene_tracking(
+    predicted: np.ndarray,
+    target: np.ndarray,
+) -> dict[str, dict[str, float | None]]:
     result = {}
     for joint_index, joint_name in enumerate(JOINT_NAMES):
         prediction = predicted[:, -1, joint_index]
@@ -215,7 +218,7 @@ def _scene_tracking(predicted: np.ndarray, target: np.ndarray) -> dict[str, dict
         if prediction.std() > 1e-8 and truth.std() > 1e-8:
             correlation = float(np.corrcoef(prediction, truth)[0, 1])
         else:
-            correlation = float("nan")
+            correlation = None
         result[joint_name] = {
             "target_std_degrees": float(truth.std()),
             "prediction_std_degrees": float(prediction.std()),
