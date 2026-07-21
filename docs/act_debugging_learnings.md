@@ -4,7 +4,104 @@ Record of the investigation into why the custom `models/act` ACT policy was
 training poorly, what we changed, and (importantly) what we did and did not
 actually measure.
 
-## TL;DR
+## Current diagnosis — read this first (2026-07-21)
+
+The current comparison is:
+
+- Stock LeRobot ACT 20k:
+  `instance-44620633/.../020000/pretrained_model`
+- Custom ACT 20k, trained on all 50 episodes:
+  `instance-45436934/.../checkpoints/step_020000.pt`
+
+The custom checkpoint's lower training loss is real but misleading. It was
+trained with `train_split=1.0`, so it has no held-out validation loss, and
+aggregate frame-level joint L1 is dominated by easy mid-trajectory states. On
+50 uniformly sampled recorded frames, deterministic custom inference is better
+than stock LeRobot (`0.92°` vs `1.75°` raw joint MAE). At the 50 episode starts,
+where the policy must choose the grasp trajectory from vision, custom is worse:
+
+| episode-start metric, 30-step chunks | stock LeRobot 20k | custom all-50 20k |
+|---|---:|---:|
+| joint MAE | **1.709°** | 1.882° |
+| end-effector position error | **9.20 mm** | 11.16 mm |
+| end-effector orientation error | **4.19°** | 6.23° |
+| gripper error | **0.527°** | 0.895° |
+| image-swap response / natural output variation | 66.2% | 68.5% |
+| adjacent-replan overlap error | **0.209°** | 0.233° |
+
+The task-space gap is larger than joint L1 suggests: custom is 21% worse in
+end-effector position, 49% worse in orientation, and 70% worse on the gripper.
+Its horizon-29 wrist-flex error is `6.03°` versus `3.73°` for stock LeRobot.
+That is enough to turn a plausible-looking joint trajectory into a missed
+grasp.
+
+### What is now ruled out
+
+- **Broken custom export/eval normalization:** the exported LeRobot adapter and
+  direct raw-checkpoint inference agree within `1.6e-5°`.
+- **A dead/ignored camera path:** image swaps change the custom output by 68.5%
+  of its natural scene-to-scene output variation, comparable to stock.
+- **The custom policy producing no motion:** live traces show a full reach.
+- **Async replanning as the primary difference:** overlap inconsistency is only
+  modestly worse (`0.233°` vs `0.209°`).
+- **Aggregate train loss as a useful selector:** it ranks custom above stock
+  while the task-critical episode-start geometry ranks it below stock.
+
+### Concrete training/debugging issue found
+
+`ACTConfig.seed` previously controlled only the episode split. The custom
+trainer never seeded Python, NumPy, PyTorch, model initialization, or dataloader
+shuffling. Therefore earlier custom "seed 1000" runs, including the current
+checkpoint, were not actually controlled seed-matched comparisons. This is now
+fixed in `models/act/train.py`; it affects future fresh runs, not existing
+weights.
+
+The custom transformer's legacy path is not stock-equivalent: it uses pre-norm,
+GELU, different attention residual-dropout/initialization behavior, an extra
+camera embedding, and was missing stock ACT's final decoder LayerNorm. The
+working LeRobot ACT uses post-norm and ReLU.
+
+An opt-in `ACTConfig.stock_parity` mode now removes those differences while
+leaving old checkpoints on the unchanged legacy path. The local parity tests
+map identical LeRobot weights into the custom model and verify matching
+inference **and VAE training-forward outputs** (`atol=rtol=1e-5`). This is the
+implementation gate that the earlier train-loss A/B never provided.
+
+These architecture differences are still not individually proven causal for
+the live gap. Do **not** launch more broad hyperparameter ablations. The next
+and only justified training comparison is one fresh, seeded, all-50,
+`stock_parity=True` custom run against the existing stock 20k checkpoint:
+
+```bash
+uv run python deploy/train_act_vastai.py \
+  --runner custom \
+  --stock-parity \
+  --dataset-repo-id RevanthGundala/014-place-sponge-in-bowl-diverse-50 \
+  --train-split 1.0 \
+  --chunk-size 30 \
+  --steps 20000 \
+  --save-freq 2000 \
+  --job-name act_custom_stock_parity_chunk30_steps20000_all50
+```
+
+Do not reuse/resume the legacy custom checkpoint: the architecture and its
+missing decoder normalization are different.
+
+### Repeat the decisive offline comparison
+
+```bash
+uv run python evaluation/compare_act_policies.py \
+  --dataset RevanthGundala/014-place-sponge-in-bowl-diverse-50 \
+  --policy "official-20k=<official pretrained_model dir>" \
+  --policy "custom-all50-20k=<custom exported pretrained_model dir>" \
+  --output outputs/dataset_audits/014_episode_start_task_space_comparison.json
+```
+
+This is now the checkpoint gate: compare episode-start task-space geometry,
+visual conditioning, and replan consistency before spending time on live
+rollouts.
+
+## Historical sim TL;DR (June 2026; not the current sponge diagnosis)
 
 - The custom ACT was failing: a hard ~0.08 normalized-L1 floor on a
   single-episode overfit, with a weak/ignored latent.
