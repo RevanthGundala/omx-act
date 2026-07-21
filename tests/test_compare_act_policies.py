@@ -1,3 +1,5 @@
+import json
+
 import numpy as np
 import pytest
 
@@ -52,3 +54,12 @@ def test_episode_start_pairs_skip_missing_and_cross_episode_next_frames():
             return len(self.hf_dataset)
 
     assert comparison.episode_start_frame_pairs(FakeDataset()) == [(1, 3), (2, 4)]
+
+
+def test_scene_tracking_serializes_undefined_correlations_as_null():
+    constant_actions = np.ones((3, 4, 6), dtype=np.float32)
+
+    tracking = comparison._scene_tracking(constant_actions, constant_actions)
+
+    assert all(joint["correlation"] is None for joint in tracking.values())
+    json.dumps(tracking, allow_nan=False)
