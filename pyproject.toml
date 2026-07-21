@@ -9,7 +9,7 @@ dependencies = [
     "torchvision",
     "numpy",
     # LeRobot stack (datasets, stock ACT policy, train/eval) + sim env
-    "lerobot[diffusion,dynamixel,training]>=0.5.1",
+    "lerobot[async,diffusion,dynamixel,training]>=0.5.1",
     "gym-aloha>=0.1.4",
     "accelerate",
     "huggingface-hub>=1.0,<2.0",
@@ -30,7 +30,12 @@ dependencies = [
 environments = ["sys_platform == 'darwin'", "sys_platform == 'linux'"]
 
 [tool.setuptools.packages.find]
-include = ["configs*", "models*", "utils*"]
+include = ["configs*", "models*", "utils*", "data*"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
 
 [[tool.uv.index]]
 name = "pytorch-cu128"

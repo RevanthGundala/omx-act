@@ -39,8 +39,17 @@ class ACTConfig:
     num_train_steps: int = 100_000
     learning_rate: float = 1e-5
     weight_decay: float = 1e-4
-    warmup_steps: int = 1000
-    grad_clip: float = 1.0
+    warmup_steps: int = 1000  # NOTE: not currently wired into a scheduler in models/act/train.py;
+    # LR stays constant at `learning_rate` throughout training, matching LeRobot's own ACT policy
+    # (get_scheduler_preset() -> None, no scheduler either). Kept as a documented no-op rather
+    # than silently removed, in case a scheduler is added later.
+    grad_clip: float = 10.0  # matches LeRobot's AdamWConfig default (lerobot/optim/optimizers.py,
+    # grad_clip_norm=10.0), confirmed via the actual official checkpoint's train_config.json.
+    # Previously 1.0 here -- 10x stricter than what trained the official 20k checkpoint we
+    # compare against; our custom run's own logged grad_norm was ~5-6 for most of training
+    # (see outputs/vastai/instance-43177076/.../metrics.jsonl), meaning the old value of 1.0
+    # was actively clamping gradients on 100% of logged steps, while LeRobot's 10.0 would only
+    # have engaged on ~55% of them.
     kl_weight: float = 10.0
     dropout: float = 0.1
     seed: int = 1000

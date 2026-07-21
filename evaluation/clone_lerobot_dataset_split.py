@@ -65,7 +65,11 @@ def main() -> None:
     parser.add_argument("--push", action="store_true")
     parser.add_argument("--private", action="store_true")
     parser.add_argument("--no-videos", action="store_true", help="Store images instead of encoded videos.")
+    parser.add_argument("--frame-stride", type=int, default=1, help="Keep every Nth source frame within each episode.")
+    parser.add_argument("--target-fps", type=int, default=None, help="FPS for the cloned dataset. Defaults to source FPS.")
     args = parser.parse_args()
+    if args.frame_stride < 1:
+        raise ValueError("--frame-stride must be >= 1")
 
     split = json.loads(Path(args.split_json).read_text())
     episodes = [int(episode) for episode in split[args.episodes_key]]
@@ -84,7 +88,7 @@ def main() -> None:
     }
     target = LeRobotDataset.create(
         repo_id=args.target_repo,
-        fps=getattr(source, "fps", source.meta.info["fps"]),
+        fps=args.target_fps or getattr(source, "fps", source.meta.info["fps"]),
         features=features,
         root=root,
         robot_type=source.meta.info.get("robot_type"),
@@ -102,8 +106,12 @@ def main() -> None:
         indices = source_by_episode.get(source_episode)
         if not indices:
             raise RuntimeError(f"episode {source_episode} not found in source subset")
-        print(f"Cloning source episode {source_episode} -> target episode {output_episode} ({len(indices)} frames)")
-        for idx in indices:
+        kept_indices = indices[:: args.frame_stride]
+        print(
+            f"Cloning source episode {source_episode} -> target episode {output_episode} "
+            f"({len(kept_indices)}/{len(indices)} frames, stride={args.frame_stride})"
+        )
+        for idx in kept_indices:
             target.add_frame(frame_for_clone(source[idx], feature_keys))
         target.save_episode()
     target.finalize()

@@ -231,6 +231,73 @@ def export_playable_grid_mp4(
         print(f"Wrote {output_path} ({len(episode_ids)} episodes, stride={stride}, fps={fps:g})")
 
 
+def export_episode_raw_mp4(
+    ds: LeRobotDataset,
+    episode: int,
+    cameras: list[str],
+    output_dir: Path,
+    stride: int,
+    fps: float,
+) -> None:
+    episode_indices = collect_episode_indices(ds)
+    indices = episode_indices.get(episode)
+    if not indices:
+        raise ValueError(f"episode {episode} not found")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    for camera in cameras:
+        key = f"observation.images.{camera}"
+        output_path = output_dir / f"{camera}_episode_{episode:04d}.mp4"
+        writer = None
+        frame_count = 0
+        try:
+            for i, dataset_index in enumerate(indices):
+                if i % stride != 0:
+                    continue
+                sample = ds[dataset_index]
+                if key not in sample:
+                    continue
+                frame = image_to_uint8_hwc(sample[key])
+                if writer is None:
+                    height, width = frame.shape[:2]
+                    writer = cv2.VideoWriter(
+                        str(output_path),
+                        cv2.VideoWriter_fourcc(*"mp4v"),
+                        fps,
+                        (width, height),
+                    )
+                    if not writer.isOpened():
+                        raise RuntimeError(f"failed to open video writer: {output_path}")
+                writer.write(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+                frame_count += 1
+        finally:
+            if writer is not None:
+                writer.release()
+        print(f"Wrote {output_path} ({frame_count} raw frames, stride={stride}, fps={fps:g})")
+
+
+def export_episode_stills(
+    ds: LeRobotDataset,
+    episode: int,
+    cameras: list[str],
+    output_dir: Path,
+    frame: int,
+) -> None:
+    episode_indices = collect_episode_indices(ds)
+    indices = episode_indices.get(episode)
+    if not indices:
+        raise ValueError(f"episode {episode} not found")
+    sample = ds[indices[min(frame, len(indices) - 1)]]
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for camera in cameras:
+        key = f"observation.images.{camera}"
+        if key not in sample:
+            continue
+        output_path = output_dir / f"dataset_episode_{episode:04d}_frame_{frame:05d}_{camera}.jpg"
+        cv2.imwrite(str(output_path), cv2.cvtColor(image_to_uint8_hwc(sample[key]), cv2.COLOR_RGB2BGR))
+        print(f"Wrote {output_path}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-id", default=TRAIN_DATASET_REPO_ID)
@@ -247,6 +314,9 @@ def main() -> None:
     parser.add_argument("--samples-per-episode", type=int, default=5, help="Frames sampled across each episode cell")
     parser.add_argument("--thumb-width", type=int, default=128)
     parser.add_argument("--export-mp4", action="store_true", help="Write playable camera-grid MP4 files locally instead of opening Rerun.")
+    parser.add_argument("--export-raw-mp4", action="store_true", help="Write raw per-camera episode MP4 files locally instead of opening Rerun.")
+    parser.add_argument("--export-stills", action="store_true", help="Write camera stills locally instead of opening Rerun.")
+    parser.add_argument("--still-frame", type=int, default=0, help="Relative episode frame for --export-stills.")
     parser.add_argument("--output-dir", type=Path, default=Path("outputs/dataset_videos"), help="Directory for --export-mp4 outputs.")
     parser.add_argument("--output-fps", type=float, default=10.0, help="FPS metadata for --export-mp4 videos.")
     args = parser.parse_args()
@@ -260,6 +330,18 @@ def main() -> None:
     ds = LeRobotDataset(args.repo_id, **ds_kwargs)
     cameras = detect_cameras(ds, args.cameras)
     print(f"Cameras: {cameras}")
+
+    if args.export_stills:
+        selected = episodes if episodes is not None else [args.episode]
+        for episode in selected:
+            export_episode_stills(ds, episode, cameras, args.output_dir, args.still_frame)
+        return
+
+    if args.export_raw_mp4:
+        selected = episodes if episodes is not None else [args.episode]
+        for episode in selected:
+            export_episode_raw_mp4(ds, episode, cameras, args.output_dir, args.stride, args.output_fps)
+        return
 
     if args.export_mp4:
         export_playable_grid_mp4(

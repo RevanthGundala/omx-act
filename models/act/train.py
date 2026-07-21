@@ -28,15 +28,24 @@ def compute_loss(model, batch, device, kl_weight):
     return loss, action_loss, kl_loss
 
 
-def main():
+def config_from_env() -> ACTConfig:
     base_cfg = ACTConfig(dataset_repo_id=os.environ.get("ACT_TRAIN_DATASET_REPO_ID") or RECORD_DATASET_REPO_ID)
+    train_split = os.environ.get("ACT_TRAIN_SPLIT")
     cfg = replace(
         base_cfg,
         job_name=os.environ.get("ACT_TRAIN_JOB_NAME", base_cfg.job_name),
         num_train_steps=int(os.environ.get("ACT_TRAIN_STEPS", base_cfg.num_train_steps)),
         chunk_size=int(os.environ.get("ACT_TRAIN_CHUNK_SIZE") or base_cfg.chunk_size),
         save_freq=int(os.environ.get("ACT_TRAIN_SAVE_FREQ", base_cfg.save_freq)),
+        train_split=float(train_split) if train_split else base_cfg.train_split,
     )
+    if not 0 < cfg.train_split <= 1:
+        raise ValueError(f"ACT_TRAIN_SPLIT must be in (0, 1], got {cfg.train_split}.")
+    return cfg
+
+
+def main():
+    cfg = config_from_env()
     device_name = os.environ.get("ACT_DEVICE")
     if device_name is None:
         device_name = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"

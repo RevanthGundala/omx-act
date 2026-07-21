@@ -3,6 +3,7 @@
 import argparse
 from datetime import datetime
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -26,6 +27,8 @@ try:
     import rerun as rr
 except ImportError:
     rr = None
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from utils.config import CAMERA_HEIGHT, CAMERA_WIDTH, CAMERAS, FOLLOWER_PORT, FPS, JOINT_NAMES
 from utils.rerun_utils import init_rerun
@@ -98,18 +101,78 @@ def uses_env_state(policy: PreTrainedPolicy) -> bool:
 
 
 def action_queue_len(policy: PreTrainedPolicy) -> int | None:
+    # ACTPolicy keeps a plain deque at `_action_queue` (populated only when
+    # temporal_ensemble_coeff is None). Other policy families (e.g. diffusion) use a
+    # `_queues` dict instead; check both so this stays useful across policy types.
+    action_queue = getattr(policy, "_action_queue", None)
+    if action_queue is not None:
+        return len(action_queue)
     queues = getattr(policy, "_queues", None)
-    if not isinstance(queues, dict) or "action" not in queues:
-        return None
-    return len(queues["action"])
+    if isinstance(queues, dict) and "action" in queues:
+        return len(queues["action"])
+    return None
 
 
 def vector_by_joint(values) -> dict[str, float]:
     return {name: float(values[i]) for i, name in enumerate(JOINT_NAMES)}
 
 
+def save_camera_frames(output_dir: Path, camera_frames: dict[str, np.ndarray], *, prefix: str, step: int) -> None:
+    import cv2
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for camera, frame in camera_frames.items():
+        path = output_dir / f"{prefix}_step_{step:05d}_{camera}.jpg"
+        cv2.imwrite(str(path), cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+        print(f"saved_camera_frame={path}", flush=True)
+
+
+def parse_camera_list(value: str, available_cameras: list[str]) -> list[str]:
+    if value == "":
+        return []
+    if value == "all":
+        return list(available_cameras)
+    cameras = [camera.strip() for camera in value.split(",") if camera.strip()]
+    unknown = sorted(set(cameras) - set(available_cameras))
+    if unknown:
+        raise ValueError(f"unknown cameras {unknown}; available cameras={available_cameras}")
+    return cameras
+
+
+def default_video_dir(policy_path: Path) -> Path:
+    run_dir = policy_path if policy_path.name != "pretrained_model" else policy_path.parent
+    return run_dir / "eval_videos"
+
+
 def action_from_vector(values) -> dict[str, float]:
     return {f"{name}.pos": float(values[i]) for i, name in enumerate(JOINT_NAMES)}
+
+
+def send_interpolated_action(
+    follower: OmxFollower,
+    *,
+    start: np.ndarray,
+    target: np.ndarray,
+    steps: int,
+    command_hz: float,
+) -> dict[str, float]:
+    steps = max(1, int(steps))
+    if steps == 1:
+        return follower.send_action(action_from_vector(target))
+    if command_hz <= 0:
+        raise ValueError("command_hz must be > 0")
+
+    sent_action = None
+    for substep in range(1, steps + 1):
+        tick_start = time.perf_counter()
+        alpha = substep / steps
+        command = start + alpha * (target - start)
+        sent_action = follower.send_action(action_from_vector(command))
+        sleep_s = 1.0 / command_hz - (time.perf_counter() - tick_start)
+        if sleep_s > 0 and substep < steps:
+            time.sleep(sleep_s)
+    assert sent_action is not None
+    return sent_action
 
 
 def default_log_path(policy_path: Path) -> Path:
@@ -193,6 +256,7 @@ def move_to_start_state(
     *,
     target: np.ndarray,
     timeout: float,
+    ramp_seconds: float,
     hz: float,
     max_delta: float,
     tolerance: float,
@@ -204,13 +268,18 @@ def move_to_start_state(
         raise ValueError("--hz must be > 0")
     if tolerance <= 0:
         raise ValueError("--start-state-tolerance must be > 0")
+    if ramp_seconds < 0:
+        raise ValueError("--start-state-ramp-seconds must be >= 0")
 
+    initial_obs = follower.get_observation()
+    initial_state = np.array([initial_obs[f"{name}.pos"] for name in JOINT_NAMES], dtype=np.float32)
     entries = []
     start = time.perf_counter()
     next_log_time = start
     step = 0
     while True:
         loop_start = time.perf_counter()
+        elapsed = loop_start - start
         live_obs = follower.get_observation()
         live_state = np.array([live_obs[f"{name}.pos"] for name in JOINT_NAMES], dtype=np.float32)
         error = target - live_state
@@ -242,9 +311,15 @@ def move_to_start_state(
             )
             break
 
-        command = target.copy()
+        if ramp_seconds > 0 and elapsed < ramp_seconds:
+            alpha = min(1.0, elapsed / ramp_seconds)
+            command_target = initial_state + alpha * (target - initial_state)
+        else:
+            command_target = target
+
+        command = command_target.copy()
         if max_delta > 0:
-            command = live_state + np.clip(error, -max_delta, max_delta)
+            command = live_state + np.clip(command_target - live_state, -max_delta, max_delta)
         sent_action = follower.send_action(action_from_vector(command))
         loop_dt = time.perf_counter() - loop_start
         entries.append(
@@ -252,6 +327,7 @@ def move_to_start_state(
                 "phase": "move_to_dataset_start",
                 "step": step,
                 "target": vector_by_joint(target),
+                "command_target": vector_by_joint(command_target),
                 "state": vector_by_joint(live_state),
                 "sent_action": {name: float(sent_action[f"{name}.pos"]) for name in JOINT_NAMES},
                 "delta_to_target": vector_by_joint(error),
@@ -268,6 +344,7 @@ def move_to_start_state(
                 f"step={step} elapsed={now - start:.1f}s max_error={max_abs_error:.3f} "
                 f"worst={worst_joint} state={live_state[worst_joint_index]:.3f} "
                 f"target={target[worst_joint_index]:.3f} "
+                f"ramp_target={command_target[worst_joint_index]:.3f} "
                 f"sent={sent_action[f'{worst_joint}.pos']:.3f}",
                 flush=True,
             )
@@ -287,7 +364,7 @@ def build_observation(
     model_width: int,
     model_height: int,
     include_environment_state: bool,
-) -> tuple[dict[str, torch.Tensor], np.ndarray, dict[str, np.ndarray]]:
+) -> tuple[dict[str, torch.Tensor], np.ndarray, dict[str, np.ndarray], dict[str, np.ndarray]]:
     obs = follower.get_observation()
     state = np.array([obs[f"{name}.pos"] for name in JOINT_NAMES], dtype=np.float32)
     state_tensor = torch.from_numpy(state)
@@ -295,22 +372,26 @@ def build_observation(
     if include_environment_state:
         obs_dict["observation.environment_state"] = state_tensor
 
-    camera_frames = {}
+    raw_camera_frames = {}
+    model_camera_frames = {}
     for camera in capture_camera_names:
         if camera not in obs:
             raise RuntimeError(f"follower did not return camera '{camera}'; available keys: {list(obs.keys())}")
-        frame = obs[camera]
-        camera_frames[camera] = frame
+        raw_frame = obs[camera]
+        raw_camera_frames[camera] = raw_frame
+        frame = raw_frame
         if camera in policy_camera_names:
             height, width = frame.shape[:2]
             if (width, height) != (model_width, model_height):
                 import cv2
 
                 frame = cv2.resize(frame, (model_width, model_height))
-                camera_frames[camera] = frame
+            model_camera_frames[camera] = frame
             image = torch.from_numpy(np.ascontiguousarray(frame)).float() / 255.0
             obs_dict[f"observation.images.{camera}"] = image.permute(2, 0, 1)
-    return obs_dict, state, camera_frames
+        else:
+            model_camera_frames[camera] = frame
+    return obs_dict, state, raw_camera_frames, model_camera_frames
 
 
 def main() -> None:
@@ -322,8 +403,8 @@ def main() -> None:
     parser.add_argument("--camera-fps", type=int, default=FPS)
     parser.add_argument("--device", default="auto")
     parser.add_argument("--follower-port", default=FOLLOWER_PORT)
-    parser.add_argument("--camera-width", type=int, default=1280)
-    parser.add_argument("--camera-height", type=int, default=720)
+    parser.add_argument("--camera-width", type=int, default=CAMERA_WIDTH)
+    parser.add_argument("--camera-height", type=int, default=CAMERA_HEIGHT)
     parser.add_argument("--model-width", type=int, default=CAMERA_WIDTH)
     parser.add_argument("--model-height", type=int, default=CAMERA_HEIGHT)
     parser.add_argument("--start-delay", type=float, default=3.0)
@@ -344,6 +425,14 @@ def main() -> None:
         help="Dataset repo for start-state stats. Defaults to the training dataset recorded with the policy.",
     )
     parser.add_argument(
+        "--task",
+        default=None,
+        help=(
+            "Language instruction for VLA policies (e.g. pi0.5) that condition on a task string. "
+            "Injected into each observation under the 'task' key. Leave unset for ACT/diffusion policies."
+        ),
+    )
+    parser.add_argument(
         "--start-state-revision",
         default=None,
         help="Dataset revision for start-state stats. Defaults to the training revision recorded with the policy.",
@@ -353,6 +442,12 @@ def main() -> None:
         type=float,
         default=5.0,
         help="Maximum seconds to servo from current pose to dataset start state.",
+    )
+    parser.add_argument(
+        "--start-state-ramp-seconds",
+        type=float,
+        default=3.0,
+        help="Seconds to interpolate from current pose to dataset start target before holding the target.",
     )
     parser.add_argument(
         "--start-state-max-delta",
@@ -391,6 +486,68 @@ def main() -> None:
         default=None,
         help="Write structured rollout logs to this JSONL path. Defaults next to the policy checkpoint.",
     )
+    parser.add_argument(
+        "--save-camera-frames-dir",
+        type=Path,
+        default=None,
+        help="Save top/wrist camera stills from the first rollout observation to this directory.",
+    )
+    parser.add_argument(
+        "--save-camera",
+        default="",
+        help="Camera name to save as raw MP4, comma-separated cameras, or 'all'. Example: top,wrist",
+    )
+    parser.add_argument(
+        "--video-dir",
+        type=Path,
+        default=None,
+        help="Directory for saved MP4 videos. Defaults next to the policy checkpoint.",
+    )
+    parser.add_argument("--video-fps", type=float, default=None, help="FPS metadata for saved MP4. Defaults to --hz.")
+    parser.add_argument(
+        "--action-smoothing-alpha",
+        type=float,
+        default=1.0,
+        help="Low-pass filter factor for policy actions. 1 disables smoothing; lower values smooth more.",
+    )
+    parser.add_argument(
+        "--warm-start-steps",
+        type=int,
+        default=0,
+        help="For the first N rollout steps, ramp from current state to the filtered policy command.",
+    )
+    parser.add_argument(
+        "--action-interpolation-steps",
+        type=int,
+        default=1,
+        help="Split each policy command into N motor substeps. 1 disables interpolation.",
+    )
+    parser.add_argument(
+        "--action-interpolation-hz",
+        type=float,
+        default=30.0,
+        help="Motor command rate used for --action-interpolation-steps.",
+    )
+    parser.add_argument(
+        "--policy-n-action-steps",
+        type=int,
+        default=None,
+        help="Override policy.config.n_action_steps before loading the policy, useful for safer ACT eval.",
+    )
+    parser.add_argument(
+        "--policy-temporal-ensemble-coeff",
+        type=float,
+        default=None,
+        help="Override policy.config.temporal_ensemble_coeff before loading the policy, for ACT temporal ensembling.",
+    )
+    parser.add_argument(
+        "--policy-disable-temporal-ensemble",
+        action="store_true",
+        help="Force policy.config.temporal_ensemble_coeff to None, even if the checkpoint was trained/saved with "
+        "temporal ensembling enabled. Required to actually get --policy-n-action-steps queue-based open-loop "
+        "chunk execution: ACTPolicy.select_action always re-queries every step when temporal_ensemble_coeff is "
+        "not None (n_action_steps is silently ignored in that branch), regardless of what n_action_steps is set to.",
+    )
     parser.add_argument("--log-every", type=int, default=1, help="Print every N steps. Use 0 to silence per-step logs.")
     parser.add_argument(
         "--max-joint-delta",
@@ -398,7 +555,16 @@ def main() -> None:
         default=2.0,
         help="Maximum absolute per-joint command change from current observed state per step. Use <=0 to disable.",
     )
+    parser.add_argument(
+        "--action-space",
+        choices=["absolute", "delta"],
+        default="absolute",
+        help="Interpretation of the policy output. 'delta' reconstructs the command as "
+        "current_state + policy_output (use for policies trained on delta-action datasets).",
+    )
     args = parser.parse_args()
+    if not (0.0 < args.action_smoothing_alpha <= 1.0):
+        raise ValueError("--action-smoothing-alpha must be in (0, 1]")
 
     policy_path = Path(args.policy_path)
     if not policy_path.exists():
@@ -408,6 +574,20 @@ def main() -> None:
     device = resolve_device(args.device)
     policy_config = PreTrainedConfig.from_pretrained(policy_path)
     policy_config.device = device.type
+    if args.policy_n_action_steps is not None:
+        if not hasattr(policy_config, "n_action_steps"):
+            raise ValueError(f"policy type {policy_config.type!r} does not support n_action_steps")
+        policy_config.n_action_steps = args.policy_n_action_steps
+    if args.policy_temporal_ensemble_coeff is not None:
+        if not hasattr(policy_config, "temporal_ensemble_coeff"):
+            raise ValueError(f"policy type {policy_config.type!r} does not support temporal_ensemble_coeff")
+        policy_config.temporal_ensemble_coeff = args.policy_temporal_ensemble_coeff
+    if args.policy_disable_temporal_ensemble:
+        if not hasattr(policy_config, "temporal_ensemble_coeff"):
+            raise ValueError(f"policy type {policy_config.type!r} does not support temporal_ensemble_coeff")
+        if args.policy_temporal_ensemble_coeff is not None:
+            raise ValueError("--policy-disable-temporal-ensemble conflicts with --policy-temporal-ensemble-coeff")
+        policy_config.temporal_ensemble_coeff = None
     policy_cls = get_policy_class(policy_config.type)
     policy = policy_cls.from_pretrained(policy_path, config=policy_config)
     policy.to(device)
@@ -447,14 +627,31 @@ def main() -> None:
         "cameras": capture_camera_names,
         "joint_order": list(JOINT_NAMES),
         "max_joint_delta": args.max_joint_delta,
+        "action_space": args.action_space,
         "n_action_steps": getattr(policy.config, "n_action_steps", None),
         "horizon": getattr(policy.config, "horizon", None),
+        "policy_n_action_steps_override": args.policy_n_action_steps,
+        "policy_temporal_ensemble_coeff_override": args.policy_temporal_ensemble_coeff,
+        "policy_disable_temporal_ensemble": args.policy_disable_temporal_ensemble,
+        "effective_temporal_ensemble_coeff": getattr(policy.config, "temporal_ensemble_coeff", None),
+        "action_smoothing_alpha": args.action_smoothing_alpha,
+        "warm_start_steps": args.warm_start_steps,
+        "action_interpolation_steps": args.action_interpolation_steps,
+        "action_interpolation_hz": args.action_interpolation_hz,
         "training_dataset_repo_id": run_config.get("dataset_repo_id"),
         "training_dataset_revision": run_config.get("dataset_revision"),
     }
     log_path = Path(args.log_path) if args.log_path else default_log_path(policy_path)
+    video_dir = args.video_dir if args.video_dir is not None else default_video_dir(policy_path)
+    save_video_cameras = parse_camera_list(args.save_camera, capture_camera_names)
+    video_paths = {
+        camera: video_dir / f"{camera}_{datetime.now().strftime('%Y%m%d-%H%M%S')}.mp4"
+        for camera in save_video_cameras
+    }
+    video_writers = {}
     rollout_entries: list[dict] = []
     exit_reason = "completed"
+    saved_rollout_camera_frames = False
 
     follower = create_follower(
         port=args.follower_port,
@@ -477,6 +674,10 @@ def main() -> None:
 
     follower.connect(calibrate=False)
     try:
+        for camera, video_path in video_paths.items():
+            video_path.parent.mkdir(parents=True, exist_ok=True)
+            print(f"Saving raw {camera} camera video to {video_path}", flush=True)
+
         if args.move_to_dataset_start_state:
             repo_id = args.start_state_repo_id or run_config.get("dataset_repo_id")
             revision = args.start_state_revision or run_config.get("dataset_revision") or "main"
@@ -493,6 +694,7 @@ def main() -> None:
             metadata["dataset_start_state_tolerance"] = args.start_state_tolerance
             metadata["dataset_start_state_warning_tolerance"] = args.start_state_warning_tolerance
             metadata["dataset_start_state_timeout"] = args.start_state_duration
+            metadata["dataset_start_state_ramp_seconds"] = args.start_state_ramp_seconds
             print(
                 "Moving follower to dataset "
                 f"{args.start_state_reducer} start state from {repo_id}@{revision}: "
@@ -504,6 +706,7 @@ def main() -> None:
                     follower,
                     target=target_start_state,
                     timeout=args.start_state_duration,
+                    ramp_seconds=args.start_state_ramp_seconds,
                     hz=args.hz,
                     max_delta=args.start_state_max_delta,
                     tolerance=args.start_state_tolerance,
@@ -542,6 +745,8 @@ def main() -> None:
             time.sleep(args.start_delay)
 
         start_time = time.perf_counter()
+        previous_smoothed_action = None
+        previous_sent_target = None
         for step in range(args.steps):
             elapsed = time.perf_counter() - start_time
             if elapsed >= args.max_duration:
@@ -551,7 +756,7 @@ def main() -> None:
 
             loop_start = time.perf_counter()
             try:
-                obs_dict, state, camera_frames = build_observation(
+                obs_dict, state, raw_camera_frames, model_camera_frames = build_observation(
                     follower,
                     policy_camera_names=policy_camera_names,
                     capture_camera_names=capture_camera_names,
@@ -564,18 +769,68 @@ def main() -> None:
                 exit_reason = "stale_camera_frame"
                 break
 
+            if args.save_camera_frames_dir is not None and not saved_rollout_camera_frames:
+                save_camera_frames(args.save_camera_frames_dir, raw_camera_frames, prefix="eval_raw", step=step)
+                save_camera_frames(args.save_camera_frames_dir, model_camera_frames, prefix="eval_model", step=step)
+                saved_rollout_camera_frames = True
+            for camera, video_path in video_paths.items():
+                import cv2
+
+                frame = raw_camera_frames[camera]
+                if camera not in video_writers:
+                    height, width = frame.shape[:2]
+                    writer = cv2.VideoWriter(
+                        str(video_path),
+                        cv2.VideoWriter_fourcc(*"mp4v"),
+                        args.video_fps or args.hz,
+                        (width, height),
+                    )
+                    if not writer.isOpened():
+                        raise RuntimeError(f"failed to open video writer: {video_path}")
+                    video_writers[camera] = writer
+                video_writers[camera].write(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+
             action_queue_before = action_queue_len(policy)
             with torch.inference_mode():
+                if args.task is not None:
+                    obs_dict["task"] = args.task
                 obs_dict = preprocessor(obs_dict)
                 action_values = postprocessor(policy.select_action(obs_dict)).squeeze(0).cpu()
 
+            if args.action_space == "delta":
+                # Policy was trained on action = recorded_action - state, so the raw
+                # output is a per-joint offset; reconstruct the absolute command from
+                # the current observed state. Everything downstream stays absolute.
+                action_values = action_values + torch.as_tensor(state, dtype=action_values.dtype)
+
             action = {}
+            raw_action_np = action_values.numpy()
+            if previous_smoothed_action is None:
+                smoothed_action = raw_action_np.copy()
+            else:
+                alpha = args.action_smoothing_alpha
+                smoothed_action = previous_smoothed_action + alpha * (raw_action_np - previous_smoothed_action)
+            if args.warm_start_steps > 0 and step < args.warm_start_steps:
+                warm_alpha = (step + 1) / args.warm_start_steps
+                smoothed_action = state + warm_alpha * (smoothed_action - state)
+            previous_smoothed_action = smoothed_action.copy()
+
+            target_action = smoothed_action.copy()
             for i, name in enumerate(JOINT_NAMES):
-                value = action_values[i].item()
+                value = float(target_action[i])
                 if args.max_joint_delta > 0:
                     value = float(np.clip(value, state[i] - args.max_joint_delta, state[i] + args.max_joint_delta))
+                target_action[i] = value
                 action[f"{name}.pos"] = value
-            sent_action = follower.send_action(action)
+            interpolation_start = previous_sent_target if previous_sent_target is not None else state
+            sent_action = send_interpolated_action(
+                follower,
+                start=interpolation_start,
+                target=target_action,
+                steps=args.action_interpolation_steps,
+                command_hz=args.action_interpolation_hz,
+            )
+            previous_sent_target = target_action.copy()
             loop_dt = time.perf_counter() - loop_start
             loop_hz = 1.0 / loop_dt if loop_dt > 0 else float("inf")
             delta_values = {name: float(sent_action[f"{name}.pos"] - state[i]) for i, name in enumerate(JOINT_NAMES)}
@@ -588,6 +843,7 @@ def main() -> None:
                     "policy_replanned": action_queue_before == 0 if action_queue_before is not None else None,
                     "state": vector_by_joint(state),
                     "raw_action": vector_by_joint(action_values),
+                    "smoothed_action": vector_by_joint(smoothed_action),
                     "sent_action": {name: float(sent_action[f"{name}.pos"]) for name in JOINT_NAMES},
                     "delta": delta_values,
                 }
@@ -600,8 +856,9 @@ def main() -> None:
                     rr.log(f"joints/{name}/policy_action", rr.Scalars([float(action_values[i])]))
                     rr.log(f"joints/{name}/sent_action", rr.Scalars([float(sent_action[f'{name}.pos'])]))
                 rr.log("metrics/loop_hz", rr.Scalars([loop_hz]))
-                for camera, frame in camera_frames.items():
-                    rr.log(f"camera/{camera}", rr.Image(frame))
+                for camera in raw_camera_frames:
+                    rr.log(f"camera/{camera}/raw", rr.Image(raw_camera_frames[camera]))
+                    rr.log(f"camera/{camera}/model", rr.Image(model_camera_frames[camera]))
 
             if args.log_every > 0 and step % args.log_every == 0:
                 state_preview = "  |  ".join(f"{name}: {state[i]:7.2f}" for i, name in enumerate(JOINT_NAMES))
@@ -626,6 +883,9 @@ def main() -> None:
         exit_reason = "keyboard_interrupt"
     finally:
         safe_disconnect(follower)
+        for camera, writer in video_writers.items():
+            writer.release()
+            print(f"saved_camera_video={video_paths[camera]}", flush=True)
         write_rollout_log(log_path, metadata, rollout_entries, exit_reason)
 
 

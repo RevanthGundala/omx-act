@@ -1,18 +1,25 @@
 import torch
-from torch.utils.data import DataLoader, Dataset, random_split
+from torch.utils.data import DataLoader, Dataset
 
 from configs.act.base import ACTConfig
+from data.episode_split import resolve_train_holdout_episodes
 from lerobot.datasets import LeRobotDataset, LeRobotDatasetMetadata
 
 
 def make_dataloaders(cfg: ACTConfig):
-    dataset = ACTDataset(cfg)
-    train_size = int(len(dataset) * cfg.train_split)
-    train_size = min(max(train_size, 1), len(dataset))
-    val_size = len(dataset) - train_size
-    generator = torch.Generator().manual_seed(cfg.seed)
-    train_dataset, val_dataset = random_split(dataset, [train_size, val_size], generator=generator)
+    metadata = LeRobotDatasetMetadata(repo_id=cfg.dataset_repo_id, revision=cfg.dataset_revision)
+    train_episodes, holdout_episodes = resolve_train_holdout_episodes(
+        metadata.total_episodes, cfg.train_split, cfg.seed
+    )
+    print(
+        f"[make_dataloaders] {metadata.total_episodes} episodes total, holding out "
+        f"{holdout_episodes} ({len(holdout_episodes)}/{metadata.total_episodes} = "
+        f"{100 * len(holdout_episodes) / metadata.total_episodes:.1f}%), "
+        f"training on {len(train_episodes)} episodes.",
+        flush=True,
+    )
 
+    train_dataset = ACTDataset(cfg, episodes=train_episodes)
     train_loader = DataLoader(
         dataset=train_dataset,
         batch_size=cfg.batch_size,
@@ -20,18 +27,21 @@ def make_dataloaders(cfg: ACTConfig):
         num_workers=cfg.num_workers,
         pin_memory=torch.cuda.is_available(),
     )
-    val_loader = None if val_size == 0 else DataLoader(
-        dataset=val_dataset,
-        batch_size=cfg.batch_size,
-        shuffle=False,
-        num_workers=cfg.num_workers,
-        pin_memory=torch.cuda.is_available(),
-    )
+    val_loader = None
+    if holdout_episodes:
+        val_dataset = ACTDataset(cfg, episodes=holdout_episodes)
+        val_loader = DataLoader(
+            dataset=val_dataset,
+            batch_size=cfg.batch_size,
+            shuffle=False,
+            num_workers=cfg.num_workers,
+            pin_memory=torch.cuda.is_available(),
+        )
     return train_loader, val_loader
 
 
 class ACTDataset(Dataset):
-    def __init__(self, cfg: ACTConfig):
+    def __init__(self, cfg: ACTConfig, episodes: list[int] | None = None):
         self.camera_names = cfg.camera_names
         self.chunk_size = cfg.chunk_size
         self.image_mean = torch.tensor([0.485, 0.456, 0.406], dtype=torch.float32).view(3, 1, 1)
@@ -43,18 +53,19 @@ class ACTDataset(Dataset):
         self.action_mean = torch.as_tensor(metadata.stats["action"]["mean"], dtype=torch.float32)
         self.action_std = torch.as_tensor(metadata.stats["action"]["std"], dtype=torch.float32).clamp_min(1e-6)
 
-        temp_dataset = LeRobotDataset(repo_id=cfg.dataset_repo_id, revision=cfg.dataset_revision)
-        fps = getattr(temp_dataset, "fps", temp_dataset.meta.info["fps"])
+        fps = metadata.fps
 
         self.dataset = LeRobotDataset(
             repo_id=cfg.dataset_repo_id,
             revision=cfg.dataset_revision,
+            episodes=episodes,
             delta_timestamps={
                 "observation.state": [0.0],
                 "action": [i / fps for i in range(cfg.chunk_size)],
                 **{f"observation.images.{camera}": [0.0] for camera in cfg.camera_names},
             },
         )
+
 
     def __len__(self):
         return len(self.dataset)

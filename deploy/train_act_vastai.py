@@ -17,7 +17,7 @@ import argparse
 import ast
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import shlex
 import subprocess
@@ -34,6 +34,7 @@ SEARCH_LIMIT = 20
 SEARCH_ORDER = "dph+"
 MAX_LAUNCH_ATTEMPTS = 8
 MIN_RELIABILITY = 0.98
+DEFAULT_MAX_RUNTIME_MINUTES = 180
 REMOTE_WORKSPACE = "/workspace/act-sim"
 REMOTE_LOG = "/workspace/act-sim/train.log"
 DEFAULT_IMAGE = "nvidia/cuda:12.6.3-cudnn-runtime-ubuntu24.04"
@@ -65,6 +66,12 @@ def parse_args() -> argparse.Namespace:
         help="Override the LeRobot dataset repo used for training.",
     )
     parser.add_argument(
+        "--train-split",
+        type=float,
+        default=None,
+        help="Episode fraction used for training. Set to 1.0 to train on every episode.",
+    )
+    parser.add_argument(
         "--runner",
         choices=["custom", "lerobot", "diffusion"],
         default="custom",
@@ -77,12 +84,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--boot-timeout", type=int, default=BOOT_TIMEOUT)
     parser.add_argument("--image", default=os.environ.get("OMX_VAST_IMAGE", DEFAULT_IMAGE))
     parser.add_argument("--instance-label", default="act-sim-train")
+    parser.add_argument("--job-name", default=None, help="Override the remote training job/output name.")
     parser.add_argument("--remote-workspace", default=REMOTE_WORKSPACE)
     parser.add_argument("--output-dir", default="outputs/vastai")
     parser.add_argument("--exclude-host-id", action="append", default=[], help="Vast host_id to skip. Repeatable.")
     parser.add_argument("--exclude-machine-id", action="append", default=[], help="Vast machine_id to skip. Repeatable.")
-    parser.add_argument("--keep-instance", action="store_true", help="Do not destroy the instance after the run.")
+    parser.add_argument(
+        "--max-runtime-minutes",
+        type=int,
+        default=DEFAULT_MAX_RUNTIME_MINUTES,
+        help="Hard billing-safety limit for an instance, including setup and downloads (default: 180).",
+    )
     parser.add_argument("--no-download", action="store_true", help="Do not copy remote outputs back after completion.")
+    parser.add_argument(
+        "--final-checkpoint-only",
+        action="store_true",
+        help="Skip intermediate snapshots and download only the final checkpoint plus run metadata.",
+    )
     return parser.parse_args()
 
 
@@ -382,7 +400,7 @@ def remote_training_command(args: argparse.Namespace) -> str:
         "lerobot": "models.act.train_lerobot",
         "diffusion": "models.act.train_diffusion",
     }[args.runner]
-    job_name = f"act_{args.runner}_train_chunk{args.chunk_size}_steps{args.steps}"
+    job_name = args.job_name or f"act_{args.runner}_train_chunk{args.chunk_size}_steps{args.steps}"
     return f"""bash -lc 'set -euo pipefail
 cd {shlex.quote(args.remote_workspace)}
 . /opt/venv/bin/activate
@@ -390,14 +408,17 @@ export PYTHONUNBUFFERED=1
 export HF_TOKEN={json.dumps(hf_token)}
 export HUGGINGFACE_HUB_TOKEN={json.dumps(hf_token)}
 export ACT_DEVICE=cuda
+export ACT_DISABLE_MLFLOW=1
 export ACT_TRAIN_STEPS={int(args.steps)}
 export ACT_TRAIN_CHUNK_SIZE={json.dumps(str(args.chunk_size))}
 export ACT_TRAIN_SAVE_FREQ={int(args.save_freq or args.steps)}
 export ACT_TRAIN_JOB_NAME={json.dumps(job_name)}
 export ACT_TRAIN_DATASET_REPO_ID={json.dumps(args.dataset_repo_id or "")}
+export ACT_TRAIN_SPLIT={json.dumps("" if args.train_split is None else str(args.train_split))}
 export ACT_TRAIN_RESUME_CHECKPOINT={json.dumps(getattr(args, "remote_resume_checkpoint", "") or "")}
 python -m pip install --no-cache-dir -e .
 python -m pip install --no-cache-dir --no-deps --force-reinstall git+https://github.com/huggingface/lerobot.git@{LEROBOT_GIT_REF}
+python -m pip install --no-cache-dir "termcolor>=2.4.0,<4.0.0"
 python - <<PY
 import lerobot
 print("LeRobot:", getattr(lerobot, "__version__", "unknown"))
@@ -423,11 +444,87 @@ def run_remote_training(instance: dict, args: argparse.Namespace, local_output_d
             log_file.write(line)
             log_file.flush()
             if "Saved checkpoint:" in line:
-                print("Checkpoint saved remotely; syncing outputs snapshot...", flush=True)
-                download_outputs(instance, args, local_output_dir)
+                args.remote_latest_checkpoint = line.split("Saved checkpoint:", 1)[1].strip()
+                if not args.final_checkpoint_only:
+                    print("Checkpoint saved remotely; syncing outputs snapshot...", flush=True)
+                    download_outputs(instance, args, local_output_dir)
         return_code = process.wait()
     if return_code != 0:
         raise RuntimeError(f"Remote training failed with exit code {return_code}; see {live_log}")
+
+
+def _validated_checkpoint_path(value: str) -> PurePosixPath:
+    checkpoint = PurePosixPath(value)
+    if (
+        not value
+        or checkpoint.is_absolute()
+        or not checkpoint.parts
+        or checkpoint.parts[0] != "outputs"
+        or ".." in checkpoint.parts
+        or checkpoint.suffix != ".pt"
+    ):
+        raise ValueError(f"Unsafe or unexpected remote checkpoint path: {value!r}")
+    return checkpoint
+
+
+def _rsync_with_retries(command: list[str], *, attempts: int = 3) -> None:
+    last_return_code = None
+    for attempt in range(1, attempts + 1):
+        result = subprocess.run(command, check=False)
+        if result.returncode == 0:
+            return
+        last_return_code = result.returncode
+        print(f"rsync attempt {attempt}/{attempts} failed with exit code {result.returncode}.", flush=True)
+        if attempt < attempts:
+            time.sleep(5 * attempt)
+    raise RuntimeError(f"rsync failed after {attempts} attempts (exit code {last_return_code}).")
+
+
+def download_final_checkpoint(instance: dict, args: argparse.Namespace, local_output_dir: Path) -> None:
+    checkpoint = _validated_checkpoint_path(getattr(args, "remote_latest_checkpoint", ""))
+    run_dir = checkpoint.parent.parent
+    local_run_dir = local_output_dir.joinpath(*run_dir.parts)
+    local_checkpoint_dir = local_run_dir / "checkpoints"
+    local_checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
+    for remote_path, local_path in (
+        (run_dir / "config.json", local_run_dir / "config.json"),
+        (run_dir / "metrics.jsonl", local_run_dir / "metrics.jsonl"),
+        (checkpoint, local_checkpoint_dir / checkpoint.name),
+    ):
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        _rsync_with_retries(
+            [
+                "rsync",
+                "-az",
+                "--partial",
+                "-e",
+                rsync_ssh(instance),
+                f"root@{instance['ssh_host']}:{args.remote_workspace}/{remote_path}",
+                str(local_path),
+            ]
+        )
+
+    remote_checkpoint = f"{args.remote_workspace}/{checkpoint}"
+    remote_hash = subprocess.run(
+        [*ssh_base(instance), f"sha256sum {shlex.quote(remote_checkpoint)}"],
+        cwd=repo_root(),
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout.split()[0]
+    local_hash = subprocess.run(
+        ["shasum", "-a", "256", str(local_checkpoint_dir / checkpoint.name)],
+        cwd=repo_root(),
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout.split()[0]
+    if remote_hash != local_hash:
+        raise RuntimeError(
+            f"Final checkpoint hash mismatch: remote={remote_hash}, local={local_hash}."
+        )
+    print(f"Verified final checkpoint SHA-256: {local_hash}", flush=True)
 
 
 def download_outputs(instance: dict, args: argparse.Namespace, local_output_dir: Path) -> None:
@@ -435,7 +532,7 @@ def download_outputs(instance: dict, args: argparse.Namespace, local_output_dir:
         return
     local_output_dir.mkdir(parents=True, exist_ok=True)
     print(f"Downloading remote logs and outputs to {local_output_dir}")
-    subprocess.run(
+    _rsync_with_retries(
         [
             "rsync",
             "-az",
@@ -443,9 +540,11 @@ def download_outputs(instance: dict, args: argparse.Namespace, local_output_dir:
             rsync_ssh(instance),
             f"root@{instance['ssh_host']}:{REMOTE_LOG}",
             str(local_output_dir / "train.log"),
-        ],
-        check=False,
+        ]
     )
+    if args.final_checkpoint_only:
+        download_final_checkpoint(instance, args, local_output_dir)
+        return
     subprocess.run(
         [
             "rsync",
@@ -461,12 +560,62 @@ def download_outputs(instance: dict, args: argparse.Namespace, local_output_dir:
 
 def destroy_instance(vast: VastAI, instance_id: int) -> None:
     print(f"Destroying instance {instance_id}...")
-    try:
-        vast.destroy_instance(id=instance_id)
-    except Exception as exc:
-        print(f"WARNING: failed to destroy instance {instance_id}: {sanitize_error(exc)}")
-    else:
-        print(f"Destroyed instance {instance_id}")
+    last_error = None
+    for attempt in range(1, 4):
+        try:
+            vast.destroy_instance(id=instance_id)
+            print(f"Destroyed instance {instance_id}")
+            return
+        except Exception as exc:
+            last_error = exc
+            print(f"Destroy attempt {attempt}/3 failed: {sanitize_error(exc)}")
+            time.sleep(5)
+    raise RuntimeError(
+        f"CRITICAL: failed to destroy billable instance {instance_id}: {sanitize_error(last_error)}"
+    )
+
+
+def assert_no_managed_instances(vast: VastAI) -> None:
+    instances = coerce_result_data(vast.show_instances())
+    if not isinstance(instances, list):
+        raise RuntimeError(f"Unable to audit existing Vast instances: {instances}")
+    managed = [
+        instance
+        for instance in instances
+        if str(instance.get("label", "")).startswith("act-sim")
+    ]
+    if managed:
+        details = ", ".join(
+            f"{instance.get('id')} ({instance.get('label')}, {instance.get('actual_status')})"
+            for instance in managed
+        )
+        raise RuntimeError(
+            f"Refusing to launch while existing act-sim Vast instances are active: {details}"
+        )
+
+
+def start_instance_watchdog(instance_id: int, max_runtime_minutes: int) -> subprocess.Popen:
+    if max_runtime_minutes <= 0:
+        raise ValueError("--max-runtime-minutes must be positive.")
+    watchdog = repo_root() / "deploy" / "vastai_instance_watchdog.py"
+    log_dir = repo_root() / "outputs" / "vastai"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = (log_dir / f"watchdog-{instance_id}.log").open("a")
+    return subprocess.Popen(
+        [
+            sys.executable,
+            str(watchdog),
+            "--instance-id",
+            str(instance_id),
+            "--max-runtime-minutes",
+            str(max_runtime_minutes),
+        ],
+        cwd=repo_root(),
+        stdin=subprocess.DEVNULL,
+        stdout=log_file,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+    )
 
 
 def main() -> None:
@@ -476,12 +625,15 @@ def main() -> None:
         pass
 
     args = parse_args()
+    if args.train_split is not None and not 0 < args.train_split <= 1:
+        raise ValueError("--train-split must be in (0, 1].")
     api_key = os.environ.get("VASTAI_API_KEY") or os.environ.get("VAST_API_KEY") or read_local_vast_key()
     if not api_key:
         print("ERROR: VASTAI_API_KEY is not set.")
         sys.exit(1)
 
     vast = VastAI(api_key=api_key)
+    assert_no_managed_instances(vast)
     print(f"Searching for {args.gpu_name} offers...")
     candidates = search_candidate_offers(vast, args)
     if not candidates:
@@ -489,6 +641,7 @@ def main() -> None:
 
     instance_id = None
     instance = None
+    watchdog = None
     local_output_dir = None
     try:
         last_error = None
@@ -500,6 +653,11 @@ def main() -> None:
                 if not instance_id:
                     raise RuntimeError(f"Failed to parse instance ID from: {result}")
                 print(f"Instance {instance_id} launched")
+                watchdog = start_instance_watchdog(instance_id, args.max_runtime_minutes)
+                print(
+                    f"Billing watchdog armed for {args.max_runtime_minutes} minutes "
+                    f"(PID {watchdog.pid})."
+                )
                 attach_ssh_key(vast, instance_id)
                 instance = wait_for_instance_running(vast, instance_id, args.boot_timeout)
                 break
@@ -508,6 +666,10 @@ def main() -> None:
                 print(f"Launch failed for {format_offer(offer)}: {sanitize_error(exc)}")
                 if instance_id is not None:
                     destroy_instance(vast, instance_id)
+                    if watchdog is not None:
+                        watchdog.terminate()
+                        watchdog.wait(timeout=10)
+                        watchdog = None
                     instance_id = None
                     instance = None
         else:
@@ -522,13 +684,23 @@ def main() -> None:
         args.remote_resume_checkpoint = upload_resume_checkpoint(instance, args)
         run_remote_training(instance, args, local_output_dir)
     finally:
+        active_error = sys.exc_info()[1]
+        download_error = None
         if instance is not None and local_output_dir is not None:
-            download_outputs(instance, args, local_output_dir)
+            try:
+                download_outputs(instance, args, local_output_dir)
+            except Exception as exc:
+                download_error = exc
+                print(f"Final output download failed: {sanitize_error(exc)}", flush=True)
+        destroyed = False
         if instance_id is not None:
-            if args.keep_instance:
-                print(f"Instance {instance_id} left running because --keep-instance was set.")
-            else:
-                destroy_instance(vast, instance_id)
+            destroy_instance(vast, instance_id)
+            destroyed = True
+        if watchdog is not None and destroyed:
+            watchdog.terminate()
+            watchdog.wait(timeout=10)
+        if download_error is not None and active_error is None:
+            raise RuntimeError("Training completed but final output download failed.") from download_error
 
 
 if __name__ == "__main__":

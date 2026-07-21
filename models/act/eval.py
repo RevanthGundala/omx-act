@@ -175,6 +175,13 @@ def main():
         help="Maximum absolute per-joint command change from current observed state per step. Use <=0 to disable.",
     )
     parser.add_argument(
+        "--action-space",
+        choices=["absolute", "delta"],
+        default="absolute",
+        help="Interpretation of the policy output. 'delta' reconstructs the command as "
+        "current_qpos + policy_output (use for checkpoints trained on delta-action datasets).",
+    )
+    parser.add_argument(
         "--warm-start-steps",
         type=int,
         default=0,
@@ -219,6 +226,7 @@ def main():
         f"checkpoint={args.checkpoint} device={device} joint_dim={cfg.joint_dim} "
         f"chunk_size={cfg.chunk_size} cameras={cfg.camera_names} "
         f"temporal_ensemble={not args.no_temporal_ensemble} "
+        f"action_space={args.action_space} "
         f"zero_cameras={sorted(zero_cameras)} freeze_cameras={sorted(freeze_cameras)} "
         f"follower_port={args.follower_port} hz={args.hz:g} camera_fps={args.camera_fps} "
         f"capture_size={args.camera_width}x{args.camera_height} "
@@ -326,6 +334,11 @@ def main():
                 ).squeeze(0).cpu()
                 t_model = time.perf_counter()
                 action = (action_normalized * a_std + a_mean).numpy()
+                if args.action_space == "delta":
+                    # Checkpoint trained on action = recorded_action - qpos; reconstruct
+                    # the absolute command from the current observed qpos. Warm-start and
+                    # clamp below then operate in absolute space as usual.
+                    action = action + obs["qpos"]
                 if not np.isfinite(action).all():
                     raise FloatingPointError(f"non-finite action at step {step}: {action}")
                 unclipped_action = action.copy()

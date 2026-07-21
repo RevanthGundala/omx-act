@@ -1,0 +1,1791 @@
+DEBUG 2026-07-11 15:13:02 d_metavar.py:22 Metavar for type None: None
+DEBUG 2026-07-11 15:13:02 formatter.py:52 action type: None, Result: , nargs: 0, default metavar: None
+DEBUG 2026-07-11 15:13:02 d_metavar.py:22 Metavar for type <class 'str'>: str
+DEBUG 2026-07-11 15:13:02 formatter.py:52 action type: <class 'str'>, Result: str, nargs: None, default metavar: None
+DEBUG 2026-07-11 15:13:02 _wrapper.py:168 wrapped field at host has a default value of localhost
+DEBUG 2026-07-11 15:13:02 _wrapper.py:168 wrapped field at port has a default value of 8080
+DEBUG 2026-07-11 15:13:02 _wrapper.py:168 wrapped field at fps has a default value of 30
+DEBUG 2026-07-11 15:13:02 _wrapper.py:168 wrapped field at inference_latency has a default value of 0.03333333333333333
+DEBUG 2026-07-11 15:13:02 _wrapper.py:168 wrapped field at obs_queue_timeout has a default value of 2
+DEBUG 2026-07-11 15:13:02 _wrapper.py:309 Arg options for field 'host': {'required': False, 'dest': 'host', 'default': 'localhost', 'help': 'Networking configuration', 'type': <class 'str'>}
+DEBUG 2026-07-11 15:13:02 _wrapper.py:309 Arg options for field 'port': {'required': False, 'dest': 'port', 'default': 8080, 'help': ' ', 'type': <class 'int'>}
+DEBUG 2026-07-11 15:13:02 _wrapper.py:309 Arg options for field 'fps': {'required': False, 'dest': 'fps', 'default': 30, 'help': 'Timing configuration', 'type': <class 'int'>}
+DEBUG 2026-07-11 15:13:02 ocstring.py:253 Warning: Unable to parse attribute docstring:         default=DEFAULT_INFERENCE_LATENCY, metadata={"help": "Target inference latency in seconds"}
+DEBUG 2026-07-11 15:13:02 _wrapper.py:309 Arg options for field 'inference_latency': {'required': False, 'dest': 'inference_latency', 'default': 0.03333333333333333, 'help': ' ', 'type': <class 'float'>}
+DEBUG 2026-07-11 15:13:02 ocstring.py:253 Warning: Unable to parse attribute docstring:         default=DEFAULT_OBS_QUEUE_TIMEOUT, metadata={"help": "Timeout for observation queue in seconds"}
+DEBUG 2026-07-11 15:13:02 _wrapper.py:309 Arg options for field 'obs_queue_timeout': {'required': False, 'dest': 'obs_queue_timeout', 'default': 2, 'help': '\n', 'type': <class 'float'>}
+DEBUG 2026-07-11 15:13:02 gparsing.py:143 
+POST PROCESSING
+
+DEBUG 2026-07-11 15:13:02 gparsing.py:144 (raw) parsed args: Namespace(host='127.0.0.1', port='8080', fps='30')
+DEBUG 2026-07-11 15:13:02 decoding.py:112 from_dict for <class 'lerobot.async_inference.configs.PolicyServerConfig'>
+DEBUG 2026-07-11 15:13:02 decoding.py:132 Decode name = host, type = <class 'str'>
+DEBUG 2026-07-11 15:13:02 decoding.py:132 Decode name = port, type = <class 'int'>
+DEBUG 2026-07-11 15:13:02 decoding.py:132 Decode name = fps, type = <class 'int'>
+INFO 2026-07-11 15:13:02 y_server.py:420 {'fps': 30,
+ 'host': '127.0.0.1',
+ 'inference_latency': 0.03333333333333333,
+ 'obs_queue_timeout': 2,
+ 'port': 8080}
+INFO 2026-07-11 15:13:02 y_server.py:430 PolicyServer started on 127.0.0.1:8080
+INFO 2026-07-11 15:13:16 y_server.py:110 Client ipv4:127.0.0.1:56151 connected and ready
+INFO 2026-07-11 15:13:16 y_server.py:136 Receiving policy instructions from ipv4:127.0.0.1:56151 | Policy type: act | Pretrained name or path: /Users/revanthgundala/projects/copilot-worktrees/act-sim/revanthgundala-shiny-umbrella/outputs/vastai/instance-44537779/outputs/lerobot_official/lerobot_official_act_chunk30_steps20000/checkpoints/020000/pretrained_model | Actions per chunk: 30 | Device: mps
+DEBUG 2026-07-11 15:13:16 d_metavar.py:22 Metavar for type None: None
+DEBUG 2026-07-11 15:13:16 formatter.py:52 action type: None, Result: , nargs: 0, default metavar: None
+DEBUG 2026-07-11 15:13:16 d_metavar.py:22 Metavar for type <class 'str'>: str
+DEBUG 2026-07-11 15:13:16 formatter.py:52 action type: <class 'str'>, Result: str, nargs: None, default metavar: None
+DEBUG 2026-07-11 15:13:16 _wrapper.py:168 wrapped field at n_obs_steps has a default value of 1
+DEBUG 2026-07-11 15:13:16 _wrapper.py:201 wrapped field at input_features has a default value of {}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:201 wrapped field at output_features has a default value of {}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:201 wrapped field at device has a default value of None
+DEBUG 2026-07-11 15:13:16 _wrapper.py:168 wrapped field at use_amp has a default value of False
+DEBUG 2026-07-11 15:13:16 _wrapper.py:168 wrapped field at use_peft has a default value of False
+DEBUG 2026-07-11 15:13:16 _wrapper.py:168 wrapped field at push_to_hub has a default value of True
+DEBUG 2026-07-11 15:13:16 _wrapper.py:201 wrapped field at repo_id has a default value of None
+DEBUG 2026-07-11 15:13:16 _wrapper.py:201 wrapped field at private has a default value of None
+DEBUG 2026-07-11 15:13:16 _wrapper.py:201 wrapped field at tags has a default value of None
+DEBUG 2026-07-11 15:13:16 _wrapper.py:201 wrapped field at license has a default value of None
+DEBUG 2026-07-11 15:13:16 _wrapper.py:201 wrapped field at pretrained_path has a default value of None
+DEBUG 2026-07-11 15:13:16 ocstring.py:253 Warning: Unable to parse attribute docstring:             current step and additional steps going back).
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'n_obs_steps': {'required': False, 'dest': 'n_obs_steps', 'default': 1, 'help': ' ', 'type': <class 'int'>}
+DEBUG 2026-07-11 15:13:16 ocstring.py:253 Warning: Unable to parse attribute docstring:             the input data name, and the value is PolicyFeature, which consists of FeatureType and shape attributes.
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'input_features': {'required': False, 'dest': 'input_features', 'default': {}, 'help': ' ', 'type': typing.Optional[typing.Dict[str, lerobot.configs.types.PolicyFeature]]}
+DEBUG 2026-07-11 15:13:16 ocstring.py:253 Warning: Unable to parse attribute docstring:             the output data name, and the value is PolicyFeature, which consists of FeatureType and shape attributes.
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'output_features': {'required': False, 'dest': 'output_features', 'default': {}, 'help': ' ', 'type': typing.Optional[typing.Dict[str, lerobot.configs.types.PolicyFeature]]}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'device': {'required': False, 'dest': 'device', 'default': None, 'help': 'e.g. "cuda", "cuda:0", "cpu", or "mps"', 'type': typing.Optional[str]}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'use_amp': {'required': False, 'dest': 'use_amp', 'default': False, 'help': '`use_amp` determines whether to use Automatic Mixed Precision (AMP) for training and evaluation. With AMP,\nautomatic gradient scaling is used.', 'type': <class 'bool'>}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'use_peft': {'required': False, 'dest': 'use_peft', 'default': False, 'help': 'Whether the policy employed PEFT for training.', 'type': <class 'bool'>}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'push_to_hub': {'required': False, 'dest': 'push_to_hub', 'default': True, 'help': 'type: ignore[assignment] # TODO: use a different name to avoid override', 'type': <class 'bool'>}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'repo_id': {'required': False, 'dest': 'repo_id', 'default': None, 'type': typing.Optional[str]}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'private': {'required': False, 'dest': 'private', 'default': None, 'help': 'Upload on private repository on the Hugging Face hub.', 'type': typing.Optional[bool]}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'tags': {'required': False, 'dest': 'tags', 'default': None, 'help': 'Add tags to your policy on the hub.', 'type': typing.Optional[typing.List[str]]}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'license': {'required': False, 'dest': 'license', 'default': None, 'help': 'Add tags to your policy on the hub.', 'type': typing.Optional[str]}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'pretrained_path': {'required': False, 'dest': 'pretrained_path', 'default': None, 'help': 'Either the repo ID of a model hosted on the Hub or a path to a directory containing weights\nsaved using `Policy.save_pretrained`. If not provided, the policy is initialized from scratch.', 'type': typing.Optional[pathlib.Path]}
+DEBUG 2026-07-11 15:13:16 gparsing.py:143 
+POST PROCESSING
+
+DEBUG 2026-07-11 15:13:16 gparsing.py:144 (raw) parsed args: Namespace()
+DEBUG 2026-07-11 15:13:16 decoding.py:112 from_dict for <class 'lerobot.policies.act.configuration_act.ACTConfig'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = n_obs_steps, type = <class 'int'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = input_features, type = typing.Optional[dict[str, lerobot.configs.types.PolicyFeature]]
+DEBUG 2026-07-11 15:13:16 decoding.py:293 Decoding a Union field: typing.Optional[dict[str, lerobot.configs.types.PolicyFeature]]
+DEBUG 2026-07-11 15:13:16 decoding.py:261 Decoding a Dict field: dict[str, lerobot.configs.types.PolicyFeature]
+DEBUG 2026-07-11 15:13:16 decoding.py:112 from_dict for <class 'lerobot.configs.types.PolicyFeature'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = type, type = <enum 'FeatureType'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = shape, type = tuple[int, ...]
+DEBUG 2026-07-11 15:13:16 decoding.py:275 Decoding a Tuple field: tuple[int, ...]
+DEBUG 2026-07-11 15:13:16 decoding.py:112 from_dict for <class 'lerobot.configs.types.PolicyFeature'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = type, type = <enum 'FeatureType'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = shape, type = tuple[int, ...]
+DEBUG 2026-07-11 15:13:16 decoding.py:112 from_dict for <class 'lerobot.configs.types.PolicyFeature'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = type, type = <enum 'FeatureType'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = shape, type = tuple[int, ...]
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = output_features, type = typing.Optional[dict[str, lerobot.configs.types.PolicyFeature]]
+DEBUG 2026-07-11 15:13:16 decoding.py:112 from_dict for <class 'lerobot.configs.types.PolicyFeature'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = type, type = <enum 'FeatureType'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = shape, type = tuple[int, ...]
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = device, type = typing.Optional[str]
+DEBUG 2026-07-11 15:13:16 decoding.py:293 Decoding a Union field: typing.Optional[str]
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = use_amp, type = <class 'bool'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = use_peft, type = <class 'bool'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = push_to_hub, type = <class 'bool'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = repo_id, type = typing.Optional[str]
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = private, type = typing.Optional[bool]
+DEBUG 2026-07-11 15:13:16 decoding.py:293 Decoding a Union field: typing.Optional[bool]
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = tags, type = typing.Optional[list[str]]
+DEBUG 2026-07-11 15:13:16 decoding.py:293 Decoding a Union field: typing.Optional[list[str]]
+DEBUG 2026-07-11 15:13:16 decoding.py:282 Decoding a List field: list[str]
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = license, type = typing.Optional[str]
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = pretrained_path, type = typing.Optional[pathlib.Path]
+DEBUG 2026-07-11 15:13:16 decoding.py:293 Decoding a Union field: typing.Optional[pathlib.Path]
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = chunk_size, type = <class 'int'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = n_action_steps, type = <class 'int'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = normalization_mapping, type = dict[str, lerobot.configs.types.NormalizationMode]
+DEBUG 2026-07-11 15:13:16 decoding.py:261 Decoding a Dict field: dict[str, lerobot.configs.types.NormalizationMode]
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = vision_backbone, type = <class 'str'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = pretrained_backbone_weights, type = typing.Optional[str]
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = replace_final_stride_with_dilation, type = <class 'int'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = pre_norm, type = <class 'bool'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = dim_model, type = <class 'int'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = n_heads, type = <class 'int'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = dim_feedforward, type = <class 'int'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = feedforward_activation, type = <class 'str'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = n_encoder_layers, type = <class 'int'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = n_decoder_layers, type = <class 'int'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = use_vae, type = <class 'bool'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = latent_dim, type = <class 'int'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = n_vae_encoder_layers, type = <class 'int'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = temporal_ensemble_coeff, type = typing.Optional[float]
+DEBUG 2026-07-11 15:13:16 decoding.py:293 Decoding a Union field: typing.Optional[float]
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = dropout, type = <class 'float'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = kl_weight, type = <class 'float'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = optimizer_lr, type = <class 'float'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = optimizer_weight_decay, type = <class 'float'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = optimizer_lr_backbone, type = <class 'float'>
+INFO 2026-07-11 15:13:16 ice_utils.py:28 Metal backend detected, using mps.
+WARNING 2026-07-11 15:13:16 /policies.py:86 Device 'cuda' is not available. Switching to 'mps'.
+DEBUG 2026-07-11 15:13:16 d_metavar.py:22 Metavar for type None: None
+DEBUG 2026-07-11 15:13:16 formatter.py:52 action type: None, Result: , nargs: 0, default metavar: None
+DEBUG 2026-07-11 15:13:16 d_metavar.py:22 Metavar for type <class 'str'>: str
+DEBUG 2026-07-11 15:13:16 formatter.py:52 action type: <class 'str'>, Result: str, nargs: None, default metavar: None
+DEBUG 2026-07-11 15:13:16 _wrapper.py:168 wrapped field at n_obs_steps has a default value of 1
+DEBUG 2026-07-11 15:13:16 _wrapper.py:201 wrapped field at input_features has a default value of {}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:201 wrapped field at output_features has a default value of {}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:201 wrapped field at device has a default value of None
+DEBUG 2026-07-11 15:13:16 _wrapper.py:168 wrapped field at use_amp has a default value of False
+DEBUG 2026-07-11 15:13:16 _wrapper.py:168 wrapped field at use_peft has a default value of False
+DEBUG 2026-07-11 15:13:16 _wrapper.py:168 wrapped field at push_to_hub has a default value of True
+DEBUG 2026-07-11 15:13:16 _wrapper.py:201 wrapped field at repo_id has a default value of None
+DEBUG 2026-07-11 15:13:16 _wrapper.py:201 wrapped field at private has a default value of None
+DEBUG 2026-07-11 15:13:16 _wrapper.py:201 wrapped field at tags has a default value of None
+DEBUG 2026-07-11 15:13:16 _wrapper.py:201 wrapped field at license has a default value of None
+DEBUG 2026-07-11 15:13:16 _wrapper.py:201 wrapped field at pretrained_path has a default value of None
+DEBUG 2026-07-11 15:13:16 _wrapper.py:168 wrapped field at chunk_size has a default value of 100
+DEBUG 2026-07-11 15:13:16 _wrapper.py:168 wrapped field at n_action_steps has a default value of 100
+DEBUG 2026-07-11 15:13:16 _wrapper.py:201 wrapped field at normalization_mapping has a default value of {'VISUAL': <NormalizationMode.MEAN_STD: 'MEAN_STD'>, 'STATE': <NormalizationMode.MEAN_STD: 'MEAN_STD'>, 'ACTION': <NormalizationMode.MEAN_STD: 'MEAN_STD'>}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:168 wrapped field at vision_backbone has a default value of resnet18
+DEBUG 2026-07-11 15:13:16 _wrapper.py:201 wrapped field at pretrained_backbone_weights has a default value of ResNet18_Weights.IMAGENET1K_V1
+DEBUG 2026-07-11 15:13:16 _wrapper.py:168 wrapped field at replace_final_stride_with_dilation has a default value of False
+DEBUG 2026-07-11 15:13:16 _wrapper.py:168 wrapped field at pre_norm has a default value of False
+DEBUG 2026-07-11 15:13:16 _wrapper.py:168 wrapped field at dim_model has a default value of 512
+DEBUG 2026-07-11 15:13:16 _wrapper.py:168 wrapped field at n_heads has a default value of 8
+DEBUG 2026-07-11 15:13:16 _wrapper.py:168 wrapped field at dim_feedforward has a default value of 3200
+DEBUG 2026-07-11 15:13:16 _wrapper.py:168 wrapped field at feedforward_activation has a default value of relu
+DEBUG 2026-07-11 15:13:16 _wrapper.py:168 wrapped field at n_encoder_layers has a default value of 4
+DEBUG 2026-07-11 15:13:16 _wrapper.py:168 wrapped field at n_decoder_layers has a default value of 1
+DEBUG 2026-07-11 15:13:16 _wrapper.py:168 wrapped field at use_vae has a default value of True
+DEBUG 2026-07-11 15:13:16 _wrapper.py:168 wrapped field at latent_dim has a default value of 32
+DEBUG 2026-07-11 15:13:16 _wrapper.py:168 wrapped field at n_vae_encoder_layers has a default value of 4
+DEBUG 2026-07-11 15:13:16 _wrapper.py:201 wrapped field at temporal_ensemble_coeff has a default value of None
+DEBUG 2026-07-11 15:13:16 _wrapper.py:168 wrapped field at dropout has a default value of 0.1
+DEBUG 2026-07-11 15:13:16 _wrapper.py:168 wrapped field at kl_weight has a default value of 10.0
+DEBUG 2026-07-11 15:13:16 _wrapper.py:168 wrapped field at optimizer_lr has a default value of 1e-05
+DEBUG 2026-07-11 15:13:16 _wrapper.py:168 wrapped field at optimizer_weight_decay has a default value of 0.0001
+DEBUG 2026-07-11 15:13:16 _wrapper.py:168 wrapped field at optimizer_lr_backbone has a default value of 1e-05
+DEBUG 2026-07-11 15:13:16 ocstring.py:253 Warning: Unable to parse attribute docstring:             current step and additional steps going back).
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'n_obs_steps': {'required': False, 'dest': 'n_obs_steps', 'default': 1, 'help': ' ', 'type': <class 'int'>}
+DEBUG 2026-07-11 15:13:16 ocstring.py:253 Warning: Unable to parse attribute docstring:             the input data name, and the value is PolicyFeature, which consists of FeatureType and shape attributes.
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'input_features': {'required': False, 'dest': 'input_features', 'default': {}, 'help': '\n\n', 'type': typing.Optional[typing.Dict[str, lerobot.configs.types.PolicyFeature]]}
+DEBUG 2026-07-11 15:13:16 ocstring.py:253 Warning: Unable to parse attribute docstring:             the output data name, and the value is PolicyFeature, which consists of FeatureType and shape attributes.
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'output_features': {'required': False, 'dest': 'output_features', 'default': {}, 'help': ' ', 'type': typing.Optional[typing.Dict[str, lerobot.configs.types.PolicyFeature]]}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'device': {'required': False, 'dest': 'device', 'default': None, 'help': 'e.g. "cuda", "cuda:0", "cpu", or "mps"', 'type': typing.Optional[str]}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'use_amp': {'required': False, 'dest': 'use_amp', 'default': False, 'help': '`use_amp` determines whether to use Automatic Mixed Precision (AMP) for training and evaluation. With AMP,\nautomatic gradient scaling is used.', 'type': <class 'bool'>}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'use_peft': {'required': False, 'dest': 'use_peft', 'default': False, 'help': 'Whether the policy employed PEFT for training.', 'type': <class 'bool'>}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'push_to_hub': {'required': False, 'dest': 'push_to_hub', 'default': True, 'help': 'type: ignore[assignment] # TODO: use a different name to avoid override', 'type': <class 'bool'>}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'repo_id': {'required': False, 'dest': 'repo_id', 'default': None, 'type': typing.Optional[str]}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'private': {'required': False, 'dest': 'private', 'default': None, 'help': 'Upload on private repository on the Hugging Face hub.', 'type': typing.Optional[bool]}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'tags': {'required': False, 'dest': 'tags', 'default': None, 'help': 'Add tags to your policy on the hub.', 'type': typing.Optional[typing.List[str]]}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'license': {'required': False, 'dest': 'license', 'default': None, 'help': 'Add tags to your policy on the hub.', 'type': typing.Optional[str]}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'pretrained_path': {'required': False, 'dest': 'pretrained_path', 'default': None, 'help': 'Either the repo ID of a model hosted on the Hub or a path to a directory containing weights\nsaved using `Policy.save_pretrained`. If not provided, the policy is initialized from scratch.', 'type': typing.Optional[pathlib.Path]}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'chunk_size': {'required': False, 'dest': 'chunk_size', 'default': 100, 'help': ' ', 'type': <class 'int'>}
+DEBUG 2026-07-11 15:13:16 ocstring.py:253 Warning: Unable to parse attribute docstring:             This should be no greater than the chunk size. For example, if the chunk size size 100, you may
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'n_action_steps': {'required': False, 'dest': 'n_action_steps', 'default': 100, 'help': ' ', 'type': <class 'int'>}
+DEBUG 2026-07-11 15:13:16 ocstring.py:253 Warning: Unable to parse attribute docstring:             a corresponding NormalizationMode (e.g., NormalizationMode.MIN_MAX)
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'normalization_mapping': {'required': False, 'dest': 'normalization_mapping', 'default': {'VISUAL': <NormalizationMode.MEAN_STD: 'MEAN_STD'>, 'STATE': <NormalizationMode.MEAN_STD: 'MEAN_STD'>, 'ACTION': <NormalizationMode.MEAN_STD: 'MEAN_STD'>}, 'help': ' ', 'type': typing.Dict[str, lerobot.configs.types.NormalizationMode]}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'vision_backbone': {'required': False, 'dest': 'vision_backbone', 'default': 'resnet18', 'help': ' ', 'type': <class 'str'>}
+DEBUG 2026-07-11 15:13:16 ocstring.py:253 Warning: Unable to parse attribute docstring:             `None` means no pretrained weights.
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'pretrained_backbone_weights': {'required': False, 'dest': 'pretrained_backbone_weights', 'default': 'ResNet18_Weights.IMAGENET1K_V1', 'help': ' ', 'type': typing.Optional[str]}
+DEBUG 2026-07-11 15:13:16 ocstring.py:253 Warning: Unable to parse attribute docstring:             convolution.
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'replace_final_stride_with_dilation': {'required': False, 'dest': 'replace_final_stride_with_dilation', 'default': False, 'help': ' ', 'type': <class 'int'>}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'pre_norm': {'required': False, 'dest': 'pre_norm', 'default': False, 'help': ' ', 'type': <class 'bool'>}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'dim_model': {'required': False, 'dest': 'dim_model', 'default': 512, 'help': ' ', 'type': <class 'int'>}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'n_heads': {'required': False, 'dest': 'n_heads', 'default': 8, 'help': ' ', 'type': <class 'int'>}
+DEBUG 2026-07-11 15:13:16 ocstring.py:253 Warning: Unable to parse attribute docstring:             layers.
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'dim_feedforward': {'required': False, 'dest': 'dim_feedforward', 'default': 3200, 'help': ' ', 'type': <class 'int'>}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'feedforward_activation': {'required': False, 'dest': 'feedforward_activation', 'default': 'relu', 'help': ' ', 'type': <class 'str'>}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'n_encoder_layers': {'required': False, 'dest': 'n_encoder_layers', 'default': 4, 'help': ' ', 'type': <class 'int'>}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'n_decoder_layers': {'required': False, 'dest': 'n_decoder_layers', 'default': 1, 'help': ' ', 'type': <class 'int'>}
+DEBUG 2026-07-11 15:13:16 ocstring.py:253 Warning: Unable to parse attribute docstring:             which is used as the VAE's encoder (not to be confused with the transformer encoder - see
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'use_vae': {'required': False, 'dest': 'use_vae', 'default': True, 'help': ' ', 'type': <class 'bool'>}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'latent_dim': {'required': False, 'dest': 'latent_dim', 'default': 32, 'help': '\n', 'type': <class 'int'>}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'n_vae_encoder_layers': {'required': False, 'dest': 'n_vae_encoder_layers', 'default': 4, 'help': ' ', 'type': <class 'int'>}
+DEBUG 2026-07-11 15:13:16 ocstring.py:253 Warning: Unable to parse attribute docstring:             ensembling. Defaults to None which means temporal ensembling is not used. `n_action_steps` must be
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'temporal_ensemble_coeff': {'required': False, 'dest': 'temporal_ensemble_coeff', 'default': None, 'type': typing.Optional[float]}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'dropout': {'required': False, 'dest': 'dropout', 'default': 0.1, 'help': '\n\n', 'type': <class 'float'>}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'kl_weight': {'required': False, 'dest': 'kl_weight', 'default': 10.0, 'help': ' ', 'type': <class 'float'>}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'optimizer_lr': {'required': False, 'dest': 'optimizer_lr', 'default': 1e-05, 'help': 'Training preset', 'type': <class 'float'>}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'optimizer_weight_decay': {'required': False, 'dest': 'optimizer_weight_decay', 'default': 0.0001, 'help': ' ', 'type': <class 'float'>}
+DEBUG 2026-07-11 15:13:16 _wrapper.py:309 Arg options for field 'optimizer_lr_backbone': {'required': False, 'dest': 'optimizer_lr_backbone', 'default': 1e-05, 'help': ' ', 'type': <class 'float'>}
+DEBUG 2026-07-11 15:13:16 gparsing.py:143 
+POST PROCESSING
+
+DEBUG 2026-07-11 15:13:16 gparsing.py:144 (raw) parsed args: Namespace()
+DEBUG 2026-07-11 15:13:16 decoding.py:112 from_dict for <class 'lerobot.policies.act.configuration_act.ACTConfig'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = n_obs_steps, type = <class 'int'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = input_features, type = typing.Optional[dict[str, lerobot.configs.types.PolicyFeature]]
+DEBUG 2026-07-11 15:13:16 decoding.py:112 from_dict for <class 'lerobot.configs.types.PolicyFeature'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = type, type = <enum 'FeatureType'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = shape, type = tuple[int, ...]
+DEBUG 2026-07-11 15:13:16 decoding.py:112 from_dict for <class 'lerobot.configs.types.PolicyFeature'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = type, type = <enum 'FeatureType'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = shape, type = tuple[int, ...]
+DEBUG 2026-07-11 15:13:16 decoding.py:112 from_dict for <class 'lerobot.configs.types.PolicyFeature'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = type, type = <enum 'FeatureType'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = shape, type = tuple[int, ...]
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = output_features, type = typing.Optional[dict[str, lerobot.configs.types.PolicyFeature]]
+DEBUG 2026-07-11 15:13:16 decoding.py:112 from_dict for <class 'lerobot.configs.types.PolicyFeature'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = type, type = <enum 'FeatureType'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = shape, type = tuple[int, ...]
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = device, type = typing.Optional[str]
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = use_amp, type = <class 'bool'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = use_peft, type = <class 'bool'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = push_to_hub, type = <class 'bool'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = repo_id, type = typing.Optional[str]
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = private, type = typing.Optional[bool]
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = tags, type = typing.Optional[list[str]]
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = license, type = typing.Optional[str]
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = pretrained_path, type = typing.Optional[pathlib.Path]
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = chunk_size, type = <class 'int'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = n_action_steps, type = <class 'int'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = normalization_mapping, type = dict[str, lerobot.configs.types.NormalizationMode]
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = vision_backbone, type = <class 'str'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = pretrained_backbone_weights, type = typing.Optional[str]
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = replace_final_stride_with_dilation, type = <class 'int'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = pre_norm, type = <class 'bool'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = dim_model, type = <class 'int'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = n_heads, type = <class 'int'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = dim_feedforward, type = <class 'int'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = feedforward_activation, type = <class 'str'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = n_encoder_layers, type = <class 'int'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = n_decoder_layers, type = <class 'int'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = use_vae, type = <class 'bool'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = latent_dim, type = <class 'int'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = n_vae_encoder_layers, type = <class 'int'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = temporal_ensemble_coeff, type = typing.Optional[float]
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = dropout, type = <class 'float'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = kl_weight, type = <class 'float'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = optimizer_lr, type = <class 'float'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = optimizer_weight_decay, type = <class 'float'>
+DEBUG 2026-07-11 15:13:16 decoding.py:132 Decode name = optimizer_lr_backbone, type = <class 'float'>
+INFO 2026-07-11 15:13:16 ice_utils.py:28 Metal backend detected, using mps.
+WARNING 2026-07-11 15:13:16 /policies.py:86 Device 'cuda' is not available. Switching to 'mps'.
+INFO 2026-07-11 15:13:17 y_server.py:169 Time taken to put policy on mps: 1.2720 seconds
+DEBUG 2026-07-11 15:13:17 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+DEBUG 2026-07-11 15:13:17 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:17 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:17 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:17 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:17 y_server.py:186 Received observation #0
+DEBUG 2026-07-11 15:13:17 y_server.py:194 Received observation #0 | Avg FPS: 0.00 | Target: 30.00 | One-way latency: 1.97ms
+DEBUG 2026-07-11 15:13:17 y_server.py:201 Server timestamp: 1783807997.418281 | Client timestamp: 1783807997.416307 | Deserialization time: 0.003544s
+DEBUG 2026-07-11 15:13:17 y_server.py:296 Enqueuing observation. Must go: True | Last processed obs: None
+INFO 2026-07-11 15:13:17 y_server.py:224 Running inference for observation #0 (must_go: True)
+DEBUG 2026-07-11 15:13:17 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:17 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:17 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:17 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:17 y_server.py:186 Received observation #0
+DEBUG 2026-07-11 15:13:17 y_server.py:194 Received observation #0 | Avg FPS: 30.77 | Target: 30.00 | One-way latency: 0.88ms
+DEBUG 2026-07-11 15:13:17 y_server.py:201 Server timestamp: 1783807997.449687 | Client timestamp: 1783807997.448809 | Deserialization time: 0.001442s
+DEBUG 2026-07-11 15:13:17 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: None
+DEBUG 2026-07-11 15:13:17 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:17 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:17 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:17 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:17 y_server.py:186 Received observation #0
+DEBUG 2026-07-11 15:13:17 y_server.py:194 Received observation #0 | Avg FPS: 28.43 | Target: 30.00 | One-way latency: 0.71ms
+DEBUG 2026-07-11 15:13:17 y_server.py:201 Server timestamp: 1783807997.487360 | Client timestamp: 1783807997.486648 | Deserialization time: 0.001381s
+DEBUG 2026-07-11 15:13:17 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: None
+DEBUG 2026-07-11 15:13:17 y_server.py:304 Observation queue was full, removed oldest observation
+DEBUG 2026-07-11 15:13:17 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:17 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:17 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:17 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:17 y_server.py:186 Received observation #0
+DEBUG 2026-07-11 15:13:17 y_server.py:194 Received observation #0 | Avg FPS: 27.60 | Target: 30.00 | One-way latency: 0.74ms
+DEBUG 2026-07-11 15:13:17 y_server.py:201 Server timestamp: 1783807997.525749 | Client timestamp: 1783807997.525006 | Deserialization time: 0.001117s
+DEBUG 2026-07-11 15:13:17 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: None
+DEBUG 2026-07-11 15:13:17 y_server.py:304 Observation queue was full, removed oldest observation
+DEBUG 2026-07-11 15:13:17 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:17 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:17 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:17 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:17 y_server.py:186 Received observation #0
+DEBUG 2026-07-11 15:13:17 y_server.py:194 Received observation #0 | Avg FPS: 27.20 | Target: 30.00 | One-way latency: 4.62ms
+DEBUG 2026-07-11 15:13:17 y_server.py:201 Server timestamp: 1783807997.567956 | Client timestamp: 1783807997.563340 | Deserialization time: 0.001170s
+DEBUG 2026-07-11 15:13:17 y_server.py:274 Skipping observation #0 - Timestep predicted already!
+DEBUG 2026-07-11 15:13:17 y_server.py:210 Observation #0 has been filtered out
+DEBUG 2026-07-11 15:13:17 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:17 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:17 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:17 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:17 y_server.py:186 Received observation #0
+DEBUG 2026-07-11 15:13:17 y_server.py:194 Received observation #0 | Avg FPS: 27.65 | Target: 30.00 | One-way latency: 1.81ms
+DEBUG 2026-07-11 15:13:17 y_server.py:201 Server timestamp: 1783807997.598969 | Client timestamp: 1783807997.597156 | Deserialization time: 0.006860s
+DEBUG 2026-07-11 15:13:17 y_server.py:274 Skipping observation #0 - Timestep predicted already!
+DEBUG 2026-07-11 15:13:17 y_server.py:210 Observation #0 has been filtered out
+DEBUG 2026-07-11 15:13:17 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:17 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:17 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:17 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:17 y_server.py:186 Received observation #0
+DEBUG 2026-07-11 15:13:17 y_server.py:194 Received observation #0 | Avg FPS: 27.48 | Target: 30.00 | One-way latency: 0.74ms
+DEBUG 2026-07-11 15:13:17 y_server.py:201 Server timestamp: 1783807997.635372 | Client timestamp: 1783807997.634630 | Deserialization time: 0.001677s
+DEBUG 2026-07-11 15:13:17 y_server.py:274 Skipping observation #0 - Timestep predicted already!
+DEBUG 2026-07-11 15:13:17 y_server.py:210 Observation #0 has been filtered out
+DEBUG 2026-07-11 15:13:17 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:17 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:17 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:17 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:17 y_server.py:186 Received observation #0
+DEBUG 2026-07-11 15:13:17 y_server.py:194 Received observation #0 | Avg FPS: 27.29 | Target: 30.00 | One-way latency: 0.78ms
+DEBUG 2026-07-11 15:13:17 y_server.py:201 Server timestamp: 1783807997.673546 | Client timestamp: 1783807997.672771 | Deserialization time: 0.001281s
+DEBUG 2026-07-11 15:13:17 y_server.py:274 Skipping observation #0 - Timestep predicted already!
+DEBUG 2026-07-11 15:13:17 y_server.py:210 Observation #0 has been filtered out
+DEBUG 2026-07-11 15:13:17 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:17 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:17 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:17 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:17 y_server.py:186 Received observation #0
+DEBUG 2026-07-11 15:13:17 y_server.py:194 Received observation #0 | Avg FPS: 27.14 | Target: 30.00 | One-way latency: 0.66ms
+DEBUG 2026-07-11 15:13:17 y_server.py:201 Server timestamp: 1783807997.711706 | Client timestamp: 1783807997.711048 | Deserialization time: 0.001133s
+DEBUG 2026-07-11 15:13:17 y_server.py:274 Skipping observation #0 - Timestep predicted already!
+DEBUG 2026-07-11 15:13:17 y_server.py:210 Observation #0 has been filtered out
+DEBUG 2026-07-11 15:13:17 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:17 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:17 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:17 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:17 y_server.py:186 Received observation #0
+DEBUG 2026-07-11 15:13:17 y_server.py:194 Received observation #0 | Avg FPS: 27.39 | Target: 30.00 | One-way latency: 0.74ms
+DEBUG 2026-07-11 15:13:17 y_server.py:201 Server timestamp: 1783807997.745633 | Client timestamp: 1783807997.744892 | Deserialization time: 0.001285s
+DEBUG 2026-07-11 15:13:17 y_server.py:274 Skipping observation #0 - Timestep predicted already!
+DEBUG 2026-07-11 15:13:17 y_server.py:210 Observation #0 has been filtered out
+DEBUG 2026-07-11 15:13:17 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:17 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:17 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:17 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:17 y_server.py:186 Received observation #0
+DEBUG 2026-07-11 15:13:17 y_server.py:194 Received observation #0 | Avg FPS: 27.34 | Target: 30.00 | One-way latency: 11.77ms
+DEBUG 2026-07-11 15:13:17 y_server.py:201 Server timestamp: 1783807997.793814 | Client timestamp: 1783807997.782041 | Deserialization time: 0.011240s
+DEBUG 2026-07-11 15:13:17 y_server.py:274 Skipping observation #0 - Timestep predicted already!
+DEBUG 2026-07-11 15:13:17 y_server.py:210 Observation #0 has been filtered out
+DEBUG 2026-07-11 15:13:17 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:17 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:17 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:17 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:17 y_server.py:186 Received observation #0
+DEBUG 2026-07-11 15:13:17 y_server.py:194 Received observation #0 | Avg FPS: 27.51 | Target: 30.00 | One-way latency: 6.85ms
+DEBUG 2026-07-11 15:13:17 y_server.py:201 Server timestamp: 1783807997.822963 | Client timestamp: 1783807997.816111 | Deserialization time: 0.006139s
+DEBUG 2026-07-11 15:13:17 y_server.py:274 Skipping observation #0 - Timestep predicted already!
+DEBUG 2026-07-11 15:13:17 y_server.py:210 Observation #0 has been filtered out
+DEBUG 2026-07-11 15:13:17 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:17 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:17 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:17 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:17 y_server.py:186 Received observation #0
+DEBUG 2026-07-11 15:13:17 y_server.py:194 Received observation #0 | Avg FPS: 27.49 | Target: 30.00 | One-way latency: 2.03ms
+DEBUG 2026-07-11 15:13:17 y_server.py:201 Server timestamp: 1783807997.854856 | Client timestamp: 1783807997.852831 | Deserialization time: 0.005549s
+DEBUG 2026-07-11 15:13:17 y_server.py:274 Skipping observation #0 - Timestep predicted already!
+DEBUG 2026-07-11 15:13:17 y_server.py:210 Observation #0 has been filtered out
+DEBUG 2026-07-11 15:13:17 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:17 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:17 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:17 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:17 y_server.py:186 Received observation #0
+DEBUG 2026-07-11 15:13:17 y_server.py:194 Received observation #0 | Avg FPS: 27.57 | Target: 30.00 | One-way latency: 1.00ms
+DEBUG 2026-07-11 15:13:17 y_server.py:201 Server timestamp: 1783807997.888747 | Client timestamp: 1783807997.887752 | Deserialization time: 0.003513s
+DEBUG 2026-07-11 15:13:17 y_server.py:274 Skipping observation #0 - Timestep predicted already!
+DEBUG 2026-07-11 15:13:17 y_server.py:210 Observation #0 has been filtered out
+DEBUG 2026-07-11 15:13:17 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:17 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:17 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:17 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:17 y_server.py:186 Received observation #0
+DEBUG 2026-07-11 15:13:17 y_server.py:194 Received observation #0 | Avg FPS: 27.41 | Target: 30.00 | One-way latency: 20.54ms
+DEBUG 2026-07-11 15:13:17 y_server.py:201 Server timestamp: 1783807997.947548 | Client timestamp: 1783807997.927012 | Deserialization time: 0.002782s
+DEBUG 2026-07-11 15:13:17 y_server.py:274 Skipping observation #0 - Timestep predicted already!
+DEBUG 2026-07-11 15:13:17 y_server.py:210 Observation #0 has been filtered out
+DEBUG 2026-07-11 15:13:17 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:17 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:17 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:17 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:17 y_server.py:186 Received observation #0
+DEBUG 2026-07-11 15:13:17 y_server.py:194 Received observation #0 | Avg FPS: 27.87 | Target: 30.00 | One-way latency: 0.97ms
+DEBUG 2026-07-11 15:13:17 y_server.py:201 Server timestamp: 1783807997.955545 | Client timestamp: 1783807997.954572 | Deserialization time: 0.001269s
+DEBUG 2026-07-11 15:13:17 y_server.py:274 Skipping observation #0 - Timestep predicted already!
+DEBUG 2026-07-11 15:13:17 y_server.py:210 Observation #0 has been filtered out
+DEBUG 2026-07-11 15:13:17 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:17 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:17 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:17 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:17 y_server.py:186 Received observation #0
+DEBUG 2026-07-11 15:13:17 y_server.py:194 Received observation #0 | Avg FPS: 27.75 | Target: 30.00 | One-way latency: 1.11ms
+DEBUG 2026-07-11 15:13:17 y_server.py:201 Server timestamp: 1783807997.993993 | Client timestamp: 1783807997.992886 | Deserialization time: 0.001302s
+DEBUG 2026-07-11 15:13:17 y_server.py:274 Skipping observation #0 - Timestep predicted already!
+DEBUG 2026-07-11 15:13:17 y_server.py:210 Observation #0 has been filtered out
+DEBUG 2026-07-11 15:13:18 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:18 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:18 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:18 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:18 y_server.py:186 Received observation #0
+DEBUG 2026-07-11 15:13:18 y_server.py:194 Received observation #0 | Avg FPS: 27.86 | Target: 30.00 | One-way latency: 0.66ms
+DEBUG 2026-07-11 15:13:18 y_server.py:201 Server timestamp: 1783807998.027205 | Client timestamp: 1783807998.026547 | Deserialization time: 0.001679s
+DEBUG 2026-07-11 15:13:18 y_server.py:274 Skipping observation #0 - Timestep predicted already!
+DEBUG 2026-07-11 15:13:18 y_server.py:210 Observation #0 has been filtered out
+DEBUG 2026-07-11 15:13:18 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:18 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:18 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:18 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:18 y_server.py:186 Received observation #0
+DEBUG 2026-07-11 15:13:18 y_server.py:194 Received observation #0 | Avg FPS: 27.75 | Target: 30.00 | One-way latency: 1.03ms
+DEBUG 2026-07-11 15:13:18 y_server.py:201 Server timestamp: 1783807998.065914 | Client timestamp: 1783807998.064883 | Deserialization time: 0.001132s
+DEBUG 2026-07-11 15:13:18 y_server.py:274 Skipping observation #0 - Timestep predicted already!
+DEBUG 2026-07-11 15:13:18 y_server.py:210 Observation #0 has been filtered out
+DEBUG 2026-07-11 15:13:18 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:18 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:18 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:18 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:18 y_server.py:186 Received observation #0
+DEBUG 2026-07-11 15:13:18 y_server.py:194 Received observation #0 | Avg FPS: 27.66 | Target: 30.00 | One-way latency: 0.94ms
+DEBUG 2026-07-11 15:13:18 y_server.py:201 Server timestamp: 1783807998.104078 | Client timestamp: 1783807998.103135 | Deserialization time: 0.001306s
+DEBUG 2026-07-11 15:13:18 y_server.py:274 Skipping observation #0 - Timestep predicted already!
+DEBUG 2026-07-11 15:13:18 y_server.py:210 Observation #0 has been filtered out
+DEBUG 2026-07-11 15:13:18 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:18 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:18 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:18 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:18 y_server.py:186 Received observation #0
+DEBUG 2026-07-11 15:13:18 y_server.py:194 Received observation #0 | Avg FPS: 27.58 | Target: 30.00 | One-way latency: 0.69ms
+DEBUG 2026-07-11 15:13:18 y_server.py:201 Server timestamp: 1783807998.142158 | Client timestamp: 1783807998.141463 | Deserialization time: 0.000895s
+DEBUG 2026-07-11 15:13:18 y_server.py:274 Skipping observation #0 - Timestep predicted already!
+DEBUG 2026-07-11 15:13:18 y_server.py:210 Observation #0 has been filtered out
+DEBUG 2026-07-11 15:13:18 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:18 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:18 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:18 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:18 y_server.py:186 Received observation #0
+DEBUG 2026-07-11 15:13:18 y_server.py:194 Received observation #0 | Avg FPS: 27.67 | Target: 30.00 | One-way latency: 1.14ms
+DEBUG 2026-07-11 15:13:18 y_server.py:201 Server timestamp: 1783807998.176522 | Client timestamp: 1783807998.175378 | Deserialization time: 0.002215s
+DEBUG 2026-07-11 15:13:18 y_server.py:274 Skipping observation #0 - Timestep predicted already!
+DEBUG 2026-07-11 15:13:18 y_server.py:210 Observation #0 has been filtered out
+INFO 2026-07-11 15:13:18 y_server.py:359 Preprocessing and inference took 0.6564s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:18 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:18 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:18 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:18 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:18 y_server.py:186 Received observation #0
+DEBUG 2026-07-11 15:13:18 y_server.py:194 Received observation #0 | Avg FPS: 27.59 | Target: 30.00 | One-way latency: 0.64ms
+DEBUG 2026-07-11 15:13:18 y_server.py:201 Server timestamp: 1783807998.214200 | Client timestamp: 1783807998.213559 | Deserialization time: 0.000948s
+DEBUG 2026-07-11 15:13:18 y_server.py:274 Skipping observation #0 - Timestep predicted already!
+DEBUG 2026-07-11 15:13:18 y_server.py:210 Observation #0 has been filtered out
+DEBUG 2026-07-11 15:13:18 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+INFO 2026-07-11 15:13:18 y_server.py:391 Observation 0 | Total time: 810.21ms
+DEBUG 2026-07-11 15:13:18 y_server.py:396 Observation 0 | Prepare time: 3.50ms | Preprocessing time: 129.89ms | Inference time: 656.35ms | Postprocessing time: 20.32ms | Total time: 810.21ms
+INFO 2026-07-11 15:13:18 y_server.py:242 Action chunk #0 generated | Total time: 812.12ms
+DEBUG 2026-07-11 15:13:18 y_server.py:247 Action chunk #0 generated | Inference time: 0.81s |Serialize time: 0.00s |Total time: 0.81s
+DEBUG 2026-07-11 15:13:18 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+INFO 2026-07-11 15:13:18 y_server.py:224 Running inference for observation #0 (must_go: False)
+INFO 2026-07-11 15:13:18 y_server.py:359 Preprocessing and inference took 0.0157s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:18 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+INFO 2026-07-11 15:13:18 y_server.py:391 Observation 0 | Total time: 86.61ms
+DEBUG 2026-07-11 15:13:18 y_server.py:396 Observation 0 | Prepare time: 1.52ms | Preprocessing time: 1.61ms | Inference time: 15.74ms | Postprocessing time: 67.56ms | Total time: 86.61ms
+INFO 2026-07-11 15:13:18 y_server.py:242 Action chunk #0 generated | Total time: 88.01ms
+DEBUG 2026-07-11 15:13:18 y_server.py:247 Action chunk #0 generated | Inference time: 0.09s |Serialize time: 0.00s |Total time: 0.09s
+DEBUG 2026-07-11 15:13:18 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+DEBUG 2026-07-11 15:13:18 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:18 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:18 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:18 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:18 y_server.py:186 Received observation #17
+DEBUG 2026-07-11 15:13:18 y_server.py:194 Received observation #17 | Avg FPS: 15.69 | Target: 30.00 | One-way latency: 2.08ms
+DEBUG 2026-07-11 15:13:18 y_server.py:201 Server timestamp: 1783807998.884588 | Client timestamp: 1783807998.882504 | Deserialization time: 0.001713s
+DEBUG 2026-07-11 15:13:18 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 0
+INFO 2026-07-11 15:13:18 y_server.py:224 Running inference for observation #17 (must_go: False)
+DEBUG 2026-07-11 15:13:18 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:18 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:18 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:18 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:18 y_server.py:186 Received observation #18
+DEBUG 2026-07-11 15:13:18 y_server.py:194 Received observation #18 | Avg FPS: 15.96 | Target: 30.00 | One-way latency: 1.82ms
+DEBUG 2026-07-11 15:13:18 y_server.py:201 Server timestamp: 1783807998.921982 | Client timestamp: 1783807998.920160 | Deserialization time: 0.001804s
+DEBUG 2026-07-11 15:13:18 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 17
+INFO 2026-07-11 15:13:18 y_server.py:359 Preprocessing and inference took 0.0284s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:18 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+DEBUG 2026-07-11 15:13:18 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:18 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:18 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:18 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:18 y_server.py:186 Received observation #19
+DEBUG 2026-07-11 15:13:18 y_server.py:194 Received observation #19 | Avg FPS: 16.25 | Target: 30.00 | One-way latency: 1.07ms
+DEBUG 2026-07-11 15:13:18 y_server.py:201 Server timestamp: 1783807998.956228 | Client timestamp: 1783807998.955162 | Deserialization time: 0.001391s
+DEBUG 2026-07-11 15:13:18 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 17
+DEBUG 2026-07-11 15:13:18 y_server.py:304 Observation queue was full, removed oldest observation
+DEBUG 2026-07-11 15:13:18 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:18 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:18 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:18 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:18 y_server.py:186 Received observation #20
+DEBUG 2026-07-11 15:13:18 y_server.py:194 Received observation #20 | Avg FPS: 16.52 | Target: 30.00 | One-way latency: 1.17ms
+DEBUG 2026-07-11 15:13:18 y_server.py:201 Server timestamp: 1783807998.991730 | Client timestamp: 1783807998.990560 | Deserialization time: 0.002161s
+DEBUG 2026-07-11 15:13:18 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 17
+DEBUG 2026-07-11 15:13:18 y_server.py:304 Observation queue was full, removed oldest observation
+INFO 2026-07-11 15:13:18 y_server.py:391 Observation 17 | Total time: 105.75ms
+DEBUG 2026-07-11 15:13:18 y_server.py:396 Observation 17 | Prepare time: 6.71ms | Preprocessing time: 2.41ms | Inference time: 28.40ms | Postprocessing time: 68.09ms | Total time: 105.75ms
+INFO 2026-07-11 15:13:18 y_server.py:242 Action chunk #17 generated | Total time: 107.12ms
+DEBUG 2026-07-11 15:13:18 y_server.py:247 Action chunk #17 generated | Inference time: 0.11s |Serialize time: 0.00s |Total time: 0.11s
+DEBUG 2026-07-11 15:13:18 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+INFO 2026-07-11 15:13:18 y_server.py:224 Running inference for observation #20 (must_go: False)
+INFO 2026-07-11 15:13:19 y_server.py:359 Preprocessing and inference took 0.0163s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:19 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+INFO 2026-07-11 15:13:19 y_server.py:391 Observation 20 | Total time: 84.31ms
+DEBUG 2026-07-11 15:13:19 y_server.py:396 Observation 20 | Prepare time: 1.17ms | Preprocessing time: 1.91ms | Inference time: 16.32ms | Postprocessing time: 64.78ms | Total time: 84.31ms
+INFO 2026-07-11 15:13:19 y_server.py:242 Action chunk #20 generated | Total time: 85.61ms
+DEBUG 2026-07-11 15:13:19 y_server.py:247 Action chunk #20 generated | Inference time: 0.08s |Serialize time: 0.00s |Total time: 0.09s
+DEBUG 2026-07-11 15:13:19 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+DEBUG 2026-07-11 15:13:19 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:19 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:19 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:19 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:19 y_server.py:186 Received observation #37
+DEBUG 2026-07-11 15:13:19 y_server.py:194 Received observation #37 | Avg FPS: 12.27 | Target: 30.00 | One-way latency: 1.60ms
+DEBUG 2026-07-11 15:13:19 y_server.py:201 Server timestamp: 1783807999.618650 | Client timestamp: 1783807999.617055 | Deserialization time: 0.002096s
+DEBUG 2026-07-11 15:13:19 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 20
+INFO 2026-07-11 15:13:19 y_server.py:224 Running inference for observation #37 (must_go: False)
+DEBUG 2026-07-11 15:13:19 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:19 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:19 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:19 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:19 y_server.py:186 Received observation #38
+DEBUG 2026-07-11 15:13:19 y_server.py:194 Received observation #38 | Avg FPS: 12.51 | Target: 30.00 | One-way latency: 1.08ms
+DEBUG 2026-07-11 15:13:19 y_server.py:201 Server timestamp: 1783807999.655017 | Client timestamp: 1783807999.653933 | Deserialization time: 0.001667s
+DEBUG 2026-07-11 15:13:19 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 37
+INFO 2026-07-11 15:13:19 y_server.py:359 Preprocessing and inference took 0.0319s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:19 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+DEBUG 2026-07-11 15:13:19 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:19 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:19 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:19 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:19 y_server.py:186 Received observation #39
+DEBUG 2026-07-11 15:13:19 y_server.py:194 Received observation #39 | Avg FPS: 12.74 | Target: 30.00 | One-way latency: 1.03ms
+DEBUG 2026-07-11 15:13:19 y_server.py:201 Server timestamp: 1783807999.693039 | Client timestamp: 1783807999.692007 | Deserialization time: 0.002074s
+DEBUG 2026-07-11 15:13:19 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 37
+DEBUG 2026-07-11 15:13:19 y_server.py:304 Observation queue was full, removed oldest observation
+INFO 2026-07-11 15:13:19 y_server.py:391 Observation 37 | Total time: 101.39ms
+DEBUG 2026-07-11 15:13:19 y_server.py:396 Observation 37 | Prepare time: 2.32ms | Preprocessing time: 3.13ms | Inference time: 31.88ms | Postprocessing time: 63.96ms | Total time: 101.39ms
+INFO 2026-07-11 15:13:19 y_server.py:242 Action chunk #37 generated | Total time: 103.16ms
+DEBUG 2026-07-11 15:13:19 y_server.py:247 Action chunk #37 generated | Inference time: 0.10s |Serialize time: 0.00s |Total time: 0.10s
+DEBUG 2026-07-11 15:13:19 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+INFO 2026-07-11 15:13:19 y_server.py:224 Running inference for observation #39 (must_go: False)
+INFO 2026-07-11 15:13:19 y_server.py:359 Preprocessing and inference took 0.0188s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:19 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+INFO 2026-07-11 15:13:19 y_server.py:391 Observation 39 | Total time: 86.07ms
+DEBUG 2026-07-11 15:13:19 y_server.py:396 Observation 39 | Prepare time: 1.45ms | Preprocessing time: 2.29ms | Inference time: 18.77ms | Postprocessing time: 63.38ms | Total time: 86.07ms
+INFO 2026-07-11 15:13:19 y_server.py:242 Action chunk #39 generated | Total time: 87.65ms
+DEBUG 2026-07-11 15:13:19 y_server.py:247 Action chunk #39 generated | Inference time: 0.09s |Serialize time: 0.00s |Total time: 0.09s
+DEBUG 2026-07-11 15:13:19 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+DEBUG 2026-07-11 15:13:20 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:20 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:20 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:20 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:20 y_server.py:186 Received observation #56
+DEBUG 2026-07-11 15:13:20 y_server.py:194 Received observation #56 | Avg FPS: 10.18 | Target: 30.00 | One-way latency: 1.82ms
+DEBUG 2026-07-11 15:13:20 y_server.py:201 Server timestamp: 1783808000.363984 | Client timestamp: 1783808000.362166 | Deserialization time: 0.000866s
+DEBUG 2026-07-11 15:13:20 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 39
+INFO 2026-07-11 15:13:20 y_server.py:224 Running inference for observation #56 (must_go: False)
+INFO 2026-07-11 15:13:20 y_server.py:359 Preprocessing and inference took 0.0206s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:20 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+DEBUG 2026-07-11 15:13:20 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:20 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:20 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:20 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:20 y_server.py:186 Received observation #57
+DEBUG 2026-07-11 15:13:20 y_server.py:194 Received observation #57 | Avg FPS: 10.39 | Target: 30.00 | One-way latency: 2.43ms
+DEBUG 2026-07-11 15:13:20 y_server.py:201 Server timestamp: 1783808000.403062 | Client timestamp: 1783808000.400628 | Deserialization time: 0.001492s
+DEBUG 2026-07-11 15:13:20 y_server.py:278 Skipping observation #57 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:20 y_server.py:210 Observation #57 has been filtered out
+DEBUG 2026-07-11 15:13:20 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:20 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:20 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:20 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:20 y_server.py:186 Received observation #58
+DEBUG 2026-07-11 15:13:20 y_server.py:194 Received observation #58 | Avg FPS: 10.59 | Target: 30.00 | One-way latency: 0.93ms
+DEBUG 2026-07-11 15:13:20 y_server.py:201 Server timestamp: 1783808000.439886 | Client timestamp: 1783808000.438952 | Deserialization time: 0.001233s
+DEBUG 2026-07-11 15:13:20 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 56
+INFO 2026-07-11 15:13:20 y_server.py:391 Observation 56 | Total time: 100.32ms
+DEBUG 2026-07-11 15:13:20 y_server.py:396 Observation 56 | Prepare time: 2.35ms | Preprocessing time: 2.47ms | Inference time: 20.57ms | Postprocessing time: 74.76ms | Total time: 100.32ms
+INFO 2026-07-11 15:13:20 y_server.py:242 Action chunk #56 generated | Total time: 101.69ms
+DEBUG 2026-07-11 15:13:20 y_server.py:247 Action chunk #56 generated | Inference time: 0.10s |Serialize time: 0.00s |Total time: 0.10s
+DEBUG 2026-07-11 15:13:20 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+INFO 2026-07-11 15:13:20 y_server.py:224 Running inference for observation #58 (must_go: False)
+INFO 2026-07-11 15:13:20 y_server.py:359 Preprocessing and inference took 0.0137s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:20 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+INFO 2026-07-11 15:13:20 y_server.py:391 Observation 58 | Total time: 88.70ms
+DEBUG 2026-07-11 15:13:20 y_server.py:396 Observation 58 | Prepare time: 5.56ms | Preprocessing time: 1.55ms | Inference time: 13.69ms | Postprocessing time: 67.78ms | Total time: 88.70ms
+INFO 2026-07-11 15:13:20 y_server.py:242 Action chunk #58 generated | Total time: 89.95ms
+DEBUG 2026-07-11 15:13:20 y_server.py:247 Action chunk #58 generated | Inference time: 0.09s |Serialize time: 0.00s |Total time: 0.09s
+DEBUG 2026-07-11 15:13:20 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+DEBUG 2026-07-11 15:13:21 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:21 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:21 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:21 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:21 y_server.py:186 Received observation #75
+DEBUG 2026-07-11 15:13:21 y_server.py:194 Received observation #75 | Avg FPS: 9.02 | Target: 30.00 | One-way latency: 1.99ms
+DEBUG 2026-07-11 15:13:21 y_server.py:201 Server timestamp: 1783808001.076105 | Client timestamp: 1783808001.074115 | Deserialization time: 0.001888s
+DEBUG 2026-07-11 15:13:21 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 58
+INFO 2026-07-11 15:13:21 y_server.py:224 Running inference for observation #75 (must_go: False)
+DEBUG 2026-07-11 15:13:21 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:21 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:21 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:21 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:21 y_server.py:186 Received observation #76
+DEBUG 2026-07-11 15:13:21 y_server.py:194 Received observation #76 | Avg FPS: 9.20 | Target: 30.00 | One-way latency: 1.21ms
+DEBUG 2026-07-11 15:13:21 y_server.py:201 Server timestamp: 1783808001.113423 | Client timestamp: 1783808001.112215 | Deserialization time: 0.001729s
+DEBUG 2026-07-11 15:13:21 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 75
+INFO 2026-07-11 15:13:21 y_server.py:359 Preprocessing and inference took 0.0322s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:21 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+DEBUG 2026-07-11 15:13:21 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:21 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:21 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:21 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:21 y_server.py:186 Received observation #77
+DEBUG 2026-07-11 15:13:21 y_server.py:194 Received observation #77 | Avg FPS: 9.38 | Target: 30.00 | One-way latency: 1.09ms
+DEBUG 2026-07-11 15:13:21 y_server.py:201 Server timestamp: 1783808001.148874 | Client timestamp: 1783808001.147785 | Deserialization time: 0.001299s
+DEBUG 2026-07-11 15:13:21 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 75
+DEBUG 2026-07-11 15:13:21 y_server.py:304 Observation queue was full, removed oldest observation
+INFO 2026-07-11 15:13:21 y_server.py:391 Observation 75 | Total time: 106.37ms
+DEBUG 2026-07-11 15:13:21 y_server.py:396 Observation 75 | Prepare time: 5.12ms | Preprocessing time: 2.48ms | Inference time: 32.15ms | Postprocessing time: 66.51ms | Total time: 106.37ms
+INFO 2026-07-11 15:13:21 y_server.py:242 Action chunk #75 generated | Total time: 108.06ms
+DEBUG 2026-07-11 15:13:21 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+DEBUG 2026-07-11 15:13:21 y_server.py:247 Action chunk #75 generated | Inference time: 0.11s |Serialize time: 0.00s |Total time: 0.11s
+INFO 2026-07-11 15:13:21 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:21 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:21 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:21 y_server.py:186 Received observation #78
+DEBUG 2026-07-11 15:13:21 y_server.py:194 Received observation #78 | Avg FPS: 9.55 | Target: 30.00 | One-way latency: 1.40ms
+DEBUG 2026-07-11 15:13:21 y_server.py:201 Server timestamp: 1783808001.187628 | Client timestamp: 1783808001.186231 | Deserialization time: 0.000896s
+DEBUG 2026-07-11 15:13:21 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 75
+DEBUG 2026-07-11 15:13:21 y_server.py:304 Observation queue was full, removed oldest observation
+DEBUG 2026-07-11 15:13:21 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+INFO 2026-07-11 15:13:21 y_server.py:224 Running inference for observation #78 (must_go: False)
+INFO 2026-07-11 15:13:21 y_server.py:359 Preprocessing and inference took 0.0176s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:21 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+INFO 2026-07-11 15:13:21 y_server.py:391 Observation 78 | Total time: 85.28ms
+DEBUG 2026-07-11 15:13:21 y_server.py:396 Observation 78 | Prepare time: 1.34ms | Preprocessing time: 1.99ms | Inference time: 17.61ms | Postprocessing time: 64.12ms | Total time: 85.28ms
+INFO 2026-07-11 15:13:21 y_server.py:242 Action chunk #78 generated | Total time: 86.92ms
+DEBUG 2026-07-11 15:13:21 y_server.py:247 Action chunk #78 generated | Inference time: 0.09s |Serialize time: 0.00s |Total time: 0.09s
+DEBUG 2026-07-11 15:13:21 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+DEBUG 2026-07-11 15:13:21 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:21 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:21 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:21 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:21 y_server.py:186 Received observation #95
+DEBUG 2026-07-11 15:13:21 y_server.py:194 Received observation #95 | Avg FPS: 8.40 | Target: 30.00 | One-way latency: 1.35ms
+DEBUG 2026-07-11 15:13:21 y_server.py:201 Server timestamp: 1783808001.823402 | Client timestamp: 1783808001.822053 | Deserialization time: 0.001847s
+DEBUG 2026-07-11 15:13:21 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 78
+INFO 2026-07-11 15:13:21 y_server.py:224 Running inference for observation #95 (must_go: False)
+INFO 2026-07-11 15:13:21 y_server.py:359 Preprocessing and inference took 0.0268s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:21 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+DEBUG 2026-07-11 15:13:21 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:21 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:21 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:21 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:21 y_server.py:186 Received observation #96
+DEBUG 2026-07-11 15:13:21 y_server.py:194 Received observation #96 | Avg FPS: 8.55 | Target: 30.00 | One-way latency: 0.78ms
+DEBUG 2026-07-11 15:13:21 y_server.py:201 Server timestamp: 1783808001.861037 | Client timestamp: 1783808001.860259 | Deserialization time: 0.001635s
+DEBUG 2026-07-11 15:13:21 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 95
+DEBUG 2026-07-11 15:13:21 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:21 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:21 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:21 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:21 y_server.py:186 Received observation #97
+DEBUG 2026-07-11 15:13:21 y_server.py:194 Received observation #97 | Avg FPS: 8.70 | Target: 30.00 | One-way latency: 1.19ms
+DEBUG 2026-07-11 15:13:21 y_server.py:201 Server timestamp: 1783808001.899963 | Client timestamp: 1783808001.898774 | Deserialization time: 0.001423s
+DEBUG 2026-07-11 15:13:21 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 95
+DEBUG 2026-07-11 15:13:21 y_server.py:304 Observation queue was full, removed oldest observation
+INFO 2026-07-11 15:13:21 y_server.py:391 Observation 95 | Total time: 102.48ms
+DEBUG 2026-07-11 15:13:21 y_server.py:396 Observation 95 | Prepare time: 2.52ms | Preprocessing time: 2.22ms | Inference time: 26.81ms | Postprocessing time: 70.75ms | Total time: 102.48ms
+INFO 2026-07-11 15:13:21 y_server.py:242 Action chunk #95 generated | Total time: 104.82ms
+DEBUG 2026-07-11 15:13:21 y_server.py:247 Action chunk #95 generated | Inference time: 0.10s |Serialize time: 0.00s |Total time: 0.10s
+DEBUG 2026-07-11 15:13:21 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:21 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:21 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:21 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:21 y_server.py:186 Received observation #98
+DEBUG 2026-07-11 15:13:21 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+DEBUG 2026-07-11 15:13:21 y_server.py:194 Received observation #98 | Avg FPS: 8.85 | Target: 30.00 | One-way latency: 0.63ms
+INFO 2026-07-11 15:13:21 y_server.py:224 Running inference for observation #97 (must_go: False)
+DEBUG 2026-07-11 15:13:21 y_server.py:201 Server timestamp: 1783808001.934351 | Client timestamp: 1783808001.933723 | Deserialization time: 0.002077s
+DEBUG 2026-07-11 15:13:21 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 95
+INFO 2026-07-11 15:13:21 y_server.py:359 Preprocessing and inference took 0.0199s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:21 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+INFO 2026-07-11 15:13:22 y_server.py:391 Observation 97 | Total time: 91.84ms
+DEBUG 2026-07-11 15:13:22 y_server.py:396 Observation 97 | Prepare time: 1.62ms | Preprocessing time: 2.59ms | Inference time: 19.86ms | Postprocessing time: 67.61ms | Total time: 91.84ms
+INFO 2026-07-11 15:13:22 y_server.py:242 Action chunk #97 generated | Total time: 93.55ms
+DEBUG 2026-07-11 15:13:22 y_server.py:247 Action chunk #97 generated | Inference time: 0.09s |Serialize time: 0.00s |Total time: 0.09s
+DEBUG 2026-07-11 15:13:22 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+INFO 2026-07-11 15:13:22 y_server.py:224 Running inference for observation #98 (must_go: False)
+INFO 2026-07-11 15:13:22 y_server.py:359 Preprocessing and inference took 0.0163s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:22 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+INFO 2026-07-11 15:13:22 y_server.py:391 Observation 98 | Total time: 83.90ms
+DEBUG 2026-07-11 15:13:22 y_server.py:396 Observation 98 | Prepare time: 1.34ms | Preprocessing time: 1.98ms | Inference time: 16.35ms | Postprocessing time: 64.07ms | Total time: 83.90ms
+INFO 2026-07-11 15:13:22 y_server.py:242 Action chunk #98 generated | Total time: 85.39ms
+DEBUG 2026-07-11 15:13:22 y_server.py:247 Action chunk #98 generated | Inference time: 0.08s |Serialize time: 0.00s |Total time: 0.09s
+DEBUG 2026-07-11 15:13:22 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+DEBUG 2026-07-11 15:13:22 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:22 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:22 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:22 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:22 y_server.py:186 Received observation #115
+DEBUG 2026-07-11 15:13:22 y_server.py:194 Received observation #115 | Avg FPS: 7.98 | Target: 30.00 | One-way latency: 0.98ms
+DEBUG 2026-07-11 15:13:22 y_server.py:201 Server timestamp: 1783808002.556806 | Client timestamp: 1783808002.555821 | Deserialization time: 0.000866s
+DEBUG 2026-07-11 15:13:22 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 98
+INFO 2026-07-11 15:13:22 y_server.py:224 Running inference for observation #115 (must_go: False)
+INFO 2026-07-11 15:13:22 y_server.py:359 Preprocessing and inference took 0.0165s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:22 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+DEBUG 2026-07-11 15:13:22 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:22 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:22 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:22 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:22 y_server.py:186 Received observation #116
+DEBUG 2026-07-11 15:13:22 y_server.py:194 Received observation #116 | Avg FPS: 8.11 | Target: 30.00 | One-way latency: 0.80ms
+DEBUG 2026-07-11 15:13:22 y_server.py:201 Server timestamp: 1783808002.594770 | Client timestamp: 1783808002.593970 | Deserialization time: 0.001326s
+DEBUG 2026-07-11 15:13:22 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 115
+DEBUG 2026-07-11 15:13:22 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:22 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:22 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:22 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:22 y_server.py:186 Received observation #117
+DEBUG 2026-07-11 15:13:22 y_server.py:194 Received observation #117 | Avg FPS: 8.25 | Target: 30.00 | One-way latency: 0.99ms
+DEBUG 2026-07-11 15:13:22 y_server.py:201 Server timestamp: 1783808002.632330 | Client timestamp: 1783808002.631345 | Deserialization time: 0.001676s
+DEBUG 2026-07-11 15:13:22 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 115
+DEBUG 2026-07-11 15:13:22 y_server.py:304 Observation queue was full, removed oldest observation
+INFO 2026-07-11 15:13:22 y_server.py:391 Observation 115 | Total time: 95.04ms
+DEBUG 2026-07-11 15:13:22 y_server.py:396 Observation 115 | Prepare time: 1.38ms | Preprocessing time: 1.46ms | Inference time: 16.52ms | Postprocessing time: 75.54ms | Total time: 95.04ms
+INFO 2026-07-11 15:13:22 y_server.py:242 Action chunk #115 generated | Total time: 96.20ms
+DEBUG 2026-07-11 15:13:22 y_server.py:247 Action chunk #115 generated | Inference time: 0.10s |Serialize time: 0.00s |Total time: 0.10s
+DEBUG 2026-07-11 15:13:22 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+INFO 2026-07-11 15:13:22 y_server.py:224 Running inference for observation #117 (must_go: False)
+INFO 2026-07-11 15:13:22 y_server.py:359 Preprocessing and inference took 0.0146s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:22 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+INFO 2026-07-11 15:13:22 y_server.py:391 Observation 117 | Total time: 83.31ms
+DEBUG 2026-07-11 15:13:22 y_server.py:396 Observation 117 | Prepare time: 1.13ms | Preprocessing time: 1.71ms | Inference time: 14.56ms | Postprocessing time: 65.74ms | Total time: 83.31ms
+INFO 2026-07-11 15:13:22 y_server.py:242 Action chunk #117 generated | Total time: 84.57ms
+DEBUG 2026-07-11 15:13:22 y_server.py:247 Action chunk #117 generated | Inference time: 0.08s |Serialize time: 0.00s |Total time: 0.08s
+DEBUG 2026-07-11 15:13:22 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+DEBUG 2026-07-11 15:13:23 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:23 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:23 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:23 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:23 y_server.py:186 Received observation #134
+DEBUG 2026-07-11 15:13:23 y_server.py:194 Received observation #134 | Avg FPS: 7.52 | Target: 30.00 | One-way latency: 1.58ms
+DEBUG 2026-07-11 15:13:23 y_server.py:201 Server timestamp: 1783808003.267063 | Client timestamp: 1783808003.265481 | Deserialization time: 0.002470s
+DEBUG 2026-07-11 15:13:23 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 117
+INFO 2026-07-11 15:13:23 y_server.py:224 Running inference for observation #134 (must_go: False)
+DEBUG 2026-07-11 15:13:23 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:23 y_server.py:359 Preprocessing and inference took 0.0295s, action shape: torch.Size([1, 30, 6])
+INFO 2026-07-11 15:13:23 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:23 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:23 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+DEBUG 2026-07-11 15:13:23 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:23 y_server.py:186 Received observation #135
+DEBUG 2026-07-11 15:13:23 y_server.py:194 Received observation #135 | Avg FPS: 7.64 | Target: 30.00 | One-way latency: 4.66ms
+DEBUG 2026-07-11 15:13:23 y_server.py:201 Server timestamp: 1783808003.308142 | Client timestamp: 1783808003.303484 | Deserialization time: 0.005508s
+DEBUG 2026-07-11 15:13:23 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 134
+DEBUG 2026-07-11 15:13:23 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:23 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:23 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:23 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:23 y_server.py:186 Received observation #136
+DEBUG 2026-07-11 15:13:23 y_server.py:194 Received observation #136 | Avg FPS: 7.76 | Target: 30.00 | One-way latency: 1.00ms
+DEBUG 2026-07-11 15:13:23 y_server.py:201 Server timestamp: 1783808003.342486 | Client timestamp: 1783808003.341490 | Deserialization time: 0.001776s
+DEBUG 2026-07-11 15:13:23 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 134
+DEBUG 2026-07-11 15:13:23 y_server.py:304 Observation queue was full, removed oldest observation
+INFO 2026-07-11 15:13:23 y_server.py:391 Observation 134 | Total time: 102.40ms
+DEBUG 2026-07-11 15:13:23 y_server.py:396 Observation 134 | Prepare time: 2.29ms | Preprocessing time: 3.64ms | Inference time: 29.50ms | Postprocessing time: 64.46ms | Total time: 102.40ms
+INFO 2026-07-11 15:13:23 y_server.py:242 Action chunk #134 generated | Total time: 104.12ms
+DEBUG 2026-07-11 15:13:23 y_server.py:247 Action chunk #134 generated | Inference time: 0.10s |Serialize time: 0.00s |Total time: 0.10s
+DEBUG 2026-07-11 15:13:23 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+INFO 2026-07-11 15:13:23 y_server.py:224 Running inference for observation #136 (must_go: False)
+INFO 2026-07-11 15:13:23 y_server.py:359 Preprocessing and inference took 0.0195s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:23 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+INFO 2026-07-11 15:13:23 y_server.py:391 Observation 136 | Total time: 86.03ms
+DEBUG 2026-07-11 15:13:23 y_server.py:396 Observation 136 | Prepare time: 1.80ms | Preprocessing time: 1.94ms | Inference time: 19.50ms | Postprocessing time: 62.62ms | Total time: 86.03ms
+INFO 2026-07-11 15:13:23 y_server.py:242 Action chunk #136 generated | Total time: 87.63ms
+DEBUG 2026-07-11 15:13:23 y_server.py:247 Action chunk #136 generated | Inference time: 0.09s |Serialize time: 0.00s |Total time: 0.09s
+DEBUG 2026-07-11 15:13:23 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+DEBUG 2026-07-11 15:13:24 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:24 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:24 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:24 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:24 y_server.py:186 Received observation #153
+DEBUG 2026-07-11 15:13:24 y_server.py:194 Received observation #153 | Avg FPS: 7.04 | Target: 30.00 | One-way latency: 71.79ms
+DEBUG 2026-07-11 15:13:24 y_server.py:201 Server timestamp: 1783808004.168374 | Client timestamp: 1783808004.096583 | Deserialization time: 0.015050s
+DEBUG 2026-07-11 15:13:24 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 136
+INFO 2026-07-11 15:13:24 y_server.py:224 Running inference for observation #153 (must_go: False)
+DEBUG 2026-07-11 15:13:24 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:24 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:24 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:24 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:24 y_server.py:186 Received observation #154
+DEBUG 2026-07-11 15:13:24 y_server.py:194 Received observation #154 | Avg FPS: 7.08 | Target: 30.00 | One-way latency: 6.80ms
+DEBUG 2026-07-11 15:13:24 y_server.py:201 Server timestamp: 1783808004.198273 | Client timestamp: 1783808004.191477 | Deserialization time: 0.014667s
+DEBUG 2026-07-11 15:13:24 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 136
+DEBUG 2026-07-11 15:13:24 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:24 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:24 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:24 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:24 y_server.py:186 Received observation #155
+DEBUG 2026-07-11 15:13:24 y_server.py:194 Received observation #155 | Avg FPS: 7.20 | Target: 30.00 | One-way latency: 1.38ms
+DEBUG 2026-07-11 15:13:24 y_server.py:201 Server timestamp: 1783808004.227244 | Client timestamp: 1783808004.225866 | Deserialization time: 0.001237s
+DEBUG 2026-07-11 15:13:24 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 153
+DEBUG 2026-07-11 15:13:24 y_server.py:304 Observation queue was full, removed oldest observation
+DEBUG 2026-07-11 15:13:24 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:24 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:24 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:24 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:24 y_server.py:186 Received observation #156
+DEBUG 2026-07-11 15:13:24 y_server.py:194 Received observation #156 | Avg FPS: 7.30 | Target: 30.00 | One-way latency: 3.65ms
+DEBUG 2026-07-11 15:13:24 y_server.py:201 Server timestamp: 1783808004.271325 | Client timestamp: 1783808004.267675 | Deserialization time: 0.003673s
+DEBUG 2026-07-11 15:13:24 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 153
+DEBUG 2026-07-11 15:13:24 y_server.py:304 Observation queue was full, removed oldest observation
+DEBUG 2026-07-11 15:13:24 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:24 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+INFO 2026-07-11 15:13:24 y_server.py:359 Preprocessing and inference took 0.0807s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:24 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:24 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:24 y_server.py:186 Received observation #157
+DEBUG 2026-07-11 15:13:24 y_server.py:194 Received observation #157 | Avg FPS: 7.41 | Target: 30.00 | One-way latency: 1.32ms
+DEBUG 2026-07-11 15:13:24 y_server.py:201 Server timestamp: 1783808004.300628 | Client timestamp: 1783808004.299311 | Deserialization time: 0.002428s
+DEBUG 2026-07-11 15:13:24 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 153
+DEBUG 2026-07-11 15:13:24 y_server.py:304 Observation queue was full, removed oldest observation
+DEBUG 2026-07-11 15:13:24 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+DEBUG 2026-07-11 15:13:24 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:24 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:24 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:24 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:24 y_server.py:186 Received observation #158
+DEBUG 2026-07-11 15:13:24 y_server.py:194 Received observation #158 | Avg FPS: 7.52 | Target: 30.00 | One-way latency: 1.78ms
+DEBUG 2026-07-11 15:13:24 y_server.py:201 Server timestamp: 1783808004.336004 | Client timestamp: 1783808004.334227 | Deserialization time: 0.002426s
+DEBUG 2026-07-11 15:13:24 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 153
+DEBUG 2026-07-11 15:13:24 y_server.py:304 Observation queue was full, removed oldest observation
+INFO 2026-07-11 15:13:24 y_server.py:391 Observation 153 | Total time: 157.49ms
+DEBUG 2026-07-11 15:13:24 y_server.py:396 Observation 153 | Prepare time: 29.35ms | Preprocessing time: 5.36ms | Inference time: 80.73ms | Postprocessing time: 41.82ms | Total time: 157.49ms
+INFO 2026-07-11 15:13:24 y_server.py:242 Action chunk #153 generated | Total time: 159.03ms
+DEBUG 2026-07-11 15:13:24 y_server.py:247 Action chunk #153 generated | Inference time: 0.16s |Serialize time: 0.00s |Total time: 0.16s
+DEBUG 2026-07-11 15:13:24 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+INFO 2026-07-11 15:13:24 y_server.py:224 Running inference for observation #158 (must_go: False)
+INFO 2026-07-11 15:13:24 y_server.py:359 Preprocessing and inference took 0.0150s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:24 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+INFO 2026-07-11 15:13:24 y_server.py:391 Observation 158 | Total time: 91.50ms
+DEBUG 2026-07-11 15:13:24 y_server.py:396 Observation 158 | Prepare time: 5.18ms | Preprocessing time: 1.57ms | Inference time: 15.03ms | Postprocessing time: 69.58ms | Total time: 91.50ms
+INFO 2026-07-11 15:13:24 y_server.py:242 Action chunk #158 generated | Total time: 92.56ms
+DEBUG 2026-07-11 15:13:24 y_server.py:247 Action chunk #158 generated | Inference time: 0.09s |Serialize time: 0.00s |Total time: 0.09s
+DEBUG 2026-07-11 15:13:24 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+DEBUG 2026-07-11 15:13:24 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:24 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:24 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:24 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:24 y_server.py:186 Received observation #175
+DEBUG 2026-07-11 15:13:24 y_server.py:194 Received observation #175 | Avg FPS: 7.02 | Target: 30.00 | One-way latency: 2.27ms
+DEBUG 2026-07-11 15:13:24 y_server.py:201 Server timestamp: 1783808004.965867 | Client timestamp: 1783808004.963592 | Deserialization time: 0.001330s
+DEBUG 2026-07-11 15:13:24 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 158
+INFO 2026-07-11 15:13:24 y_server.py:224 Running inference for observation #175 (must_go: False)
+INFO 2026-07-11 15:13:24 y_server.py:359 Preprocessing and inference took 0.0228s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:25 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:25 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:25 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:25 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:25 y_server.py:186 Received observation #176
+DEBUG 2026-07-11 15:13:25 y_server.py:194 Received observation #176 | Avg FPS: 7.12 | Target: 30.00 | One-way latency: 1.07ms
+DEBUG 2026-07-11 15:13:25 y_server.py:201 Server timestamp: 1783808005.000294 | Client timestamp: 1783808004.999227 | Deserialization time: 0.001616s
+DEBUG 2026-07-11 15:13:25 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 175
+DEBUG 2026-07-11 15:13:25 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+DEBUG 2026-07-11 15:13:25 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:25 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:25 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:25 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:25 y_server.py:186 Received observation #177
+DEBUG 2026-07-11 15:13:25 y_server.py:194 Received observation #177 | Avg FPS: 7.22 | Target: 30.00 | One-way latency: 1.04ms
+DEBUG 2026-07-11 15:13:25 y_server.py:201 Server timestamp: 1783808005.038292 | Client timestamp: 1783808005.037251 | Deserialization time: 0.001524s
+DEBUG 2026-07-11 15:13:25 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 175
+DEBUG 2026-07-11 15:13:25 y_server.py:304 Observation queue was full, removed oldest observation
+INFO 2026-07-11 15:13:25 y_server.py:391 Observation 175 | Total time: 102.48ms
+DEBUG 2026-07-11 15:13:25 y_server.py:396 Observation 175 | Prepare time: 7.21ms | Preprocessing time: 1.88ms | Inference time: 22.85ms | Postprocessing time: 70.34ms | Total time: 102.48ms
+INFO 2026-07-11 15:13:25 y_server.py:242 Action chunk #175 generated | Total time: 104.42ms
+DEBUG 2026-07-11 15:13:25 y_server.py:247 Action chunk #175 generated | Inference time: 0.10s |Serialize time: 0.00s |Total time: 0.10s
+DEBUG 2026-07-11 15:13:25 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+INFO 2026-07-11 15:13:25 y_server.py:224 Running inference for observation #177 (must_go: False)
+DEBUG 2026-07-11 15:13:25 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:25 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:25 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:25 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:25 y_server.py:186 Received observation #178
+DEBUG 2026-07-11 15:13:25 y_server.py:194 Received observation #178 | Avg FPS: 7.31 | Target: 30.00 | One-way latency: 0.68ms
+DEBUG 2026-07-11 15:13:25 y_server.py:201 Server timestamp: 1783808005.077360 | Client timestamp: 1783808005.076679 | Deserialization time: 0.002342s
+DEBUG 2026-07-11 15:13:25 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 175
+INFO 2026-07-11 15:13:25 y_server.py:359 Preprocessing and inference took 0.0187s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:25 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+INFO 2026-07-11 15:13:25 y_server.py:391 Observation 177 | Total time: 89.03ms
+DEBUG 2026-07-11 15:13:25 y_server.py:396 Observation 177 | Prepare time: 4.37ms | Preprocessing time: 1.96ms | Inference time: 18.73ms | Postprocessing time: 63.81ms | Total time: 89.03ms
+INFO 2026-07-11 15:13:25 y_server.py:242 Action chunk #177 generated | Total time: 90.66ms
+DEBUG 2026-07-11 15:13:25 y_server.py:247 Action chunk #177 generated | Inference time: 0.09s |Serialize time: 0.00s |Total time: 0.09s
+DEBUG 2026-07-11 15:13:25 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+INFO 2026-07-11 15:13:25 y_server.py:224 Running inference for observation #178 (must_go: False)
+INFO 2026-07-11 15:13:25 y_server.py:359 Preprocessing and inference took 0.0178s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:25 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+INFO 2026-07-11 15:13:25 y_server.py:391 Observation 178 | Total time: 85.22ms
+DEBUG 2026-07-11 15:13:25 y_server.py:396 Observation 178 | Prepare time: 1.29ms | Preprocessing time: 1.96ms | Inference time: 17.84ms | Postprocessing time: 64.00ms | Total time: 85.22ms
+INFO 2026-07-11 15:13:25 y_server.py:242 Action chunk #178 generated | Total time: 86.73ms
+DEBUG 2026-07-11 15:13:25 y_server.py:247 Action chunk #178 generated | Inference time: 0.09s |Serialize time: 0.00s |Total time: 0.09s
+DEBUG 2026-07-11 15:13:25 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+DEBUG 2026-07-11 15:13:25 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:25 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:25 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:25 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:25 y_server.py:186 Received observation #195
+DEBUG 2026-07-11 15:13:25 y_server.py:194 Received observation #195 | Avg FPS: 6.87 | Target: 30.00 | One-way latency: 1.30ms
+DEBUG 2026-07-11 15:13:25 y_server.py:201 Server timestamp: 1783808005.710850 | Client timestamp: 1783808005.709549 | Deserialization time: 0.002637s
+DEBUG 2026-07-11 15:13:25 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 178
+INFO 2026-07-11 15:13:25 y_server.py:224 Running inference for observation #195 (must_go: False)
+DEBUG 2026-07-11 15:13:25 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:25 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+INFO 2026-07-11 15:13:25 y_server.py:359 Preprocessing and inference took 0.0300s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:25 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:25 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:25 y_server.py:186 Received observation #196
+DEBUG 2026-07-11 15:13:25 y_server.py:194 Received observation #196 | Avg FPS: 6.96 | Target: 30.00 | One-way latency: 1.17ms
+DEBUG 2026-07-11 15:13:25 y_server.py:201 Server timestamp: 1783808005.748947 | Client timestamp: 1783808005.747780 | Deserialization time: 0.001502s
+DEBUG 2026-07-11 15:13:25 y_server.py:278 Skipping observation #196 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:25 y_server.py:210 Observation #196 has been filtered out
+DEBUG 2026-07-11 15:13:25 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+DEBUG 2026-07-11 15:13:25 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:25 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:25 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:25 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:25 y_server.py:186 Received observation #197
+DEBUG 2026-07-11 15:13:25 y_server.py:194 Received observation #197 | Avg FPS: 7.05 | Target: 30.00 | One-way latency: 1.30ms
+DEBUG 2026-07-11 15:13:25 y_server.py:201 Server timestamp: 1783808005.785262 | Client timestamp: 1783808005.783962 | Deserialization time: 0.001916s
+DEBUG 2026-07-11 15:13:25 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 195
+INFO 2026-07-11 15:13:25 y_server.py:391 Observation 195 | Total time: 101.53ms
+DEBUG 2026-07-11 15:13:25 y_server.py:396 Observation 195 | Prepare time: 2.63ms | Preprocessing time: 2.57ms | Inference time: 30.02ms | Postprocessing time: 66.07ms | Total time: 101.53ms
+INFO 2026-07-11 15:13:25 y_server.py:242 Action chunk #195 generated | Total time: 103.54ms
+DEBUG 2026-07-11 15:13:25 y_server.py:247 Action chunk #195 generated | Inference time: 0.10s |Serialize time: 0.00s |Total time: 0.10s
+DEBUG 2026-07-11 15:13:25 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:25 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:25 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:25 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+DEBUG 2026-07-11 15:13:25 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:25 y_server.py:186 Received observation #198
+DEBUG 2026-07-11 15:13:25 y_server.py:194 Received observation #198 | Avg FPS: 7.14 | Target: 30.00 | One-way latency: 0.74ms
+DEBUG 2026-07-11 15:13:25 y_server.py:201 Server timestamp: 1783808005.821757 | Client timestamp: 1783808005.821013 | Deserialization time: 0.002143s
+INFO 2026-07-11 15:13:25 y_server.py:224 Running inference for observation #197 (must_go: False)
+DEBUG 2026-07-11 15:13:25 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 195
+INFO 2026-07-11 15:13:25 y_server.py:359 Preprocessing and inference took 0.0181s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:25 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+INFO 2026-07-11 15:13:25 y_server.py:391 Observation 197 | Total time: 89.37ms
+DEBUG 2026-07-11 15:13:25 y_server.py:396 Observation 197 | Prepare time: 1.51ms | Preprocessing time: 2.15ms | Inference time: 18.08ms | Postprocessing time: 67.45ms | Total time: 89.37ms
+INFO 2026-07-11 15:13:25 y_server.py:242 Action chunk #197 generated | Total time: 90.96ms
+DEBUG 2026-07-11 15:13:25 y_server.py:247 Action chunk #197 generated | Inference time: 0.09s |Serialize time: 0.00s |Total time: 0.09s
+DEBUG 2026-07-11 15:13:25 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+INFO 2026-07-11 15:13:25 y_server.py:224 Running inference for observation #198 (must_go: False)
+INFO 2026-07-11 15:13:25 y_server.py:359 Preprocessing and inference took 0.0187s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:25 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+INFO 2026-07-11 15:13:26 y_server.py:391 Observation 198 | Total time: 85.98ms
+DEBUG 2026-07-11 15:13:26 y_server.py:396 Observation 198 | Prepare time: 1.51ms | Preprocessing time: 2.25ms | Inference time: 18.69ms | Postprocessing time: 63.35ms | Total time: 85.98ms
+INFO 2026-07-11 15:13:26 y_server.py:242 Action chunk #198 generated | Total time: 87.38ms
+DEBUG 2026-07-11 15:13:26 y_server.py:247 Action chunk #198 generated | Inference time: 0.09s |Serialize time: 0.00s |Total time: 0.09s
+DEBUG 2026-07-11 15:13:26 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+DEBUG 2026-07-11 15:13:26 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:26 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:26 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:26 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:26 y_server.py:186 Received observation #215
+DEBUG 2026-07-11 15:13:26 y_server.py:194 Received observation #215 | Avg FPS: 6.75 | Target: 30.00 | One-way latency: 1.34ms
+DEBUG 2026-07-11 15:13:26 y_server.py:201 Server timestamp: 1783808006.452185 | Client timestamp: 1783808006.450850 | Deserialization time: 0.002659s
+DEBUG 2026-07-11 15:13:26 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 198
+INFO 2026-07-11 15:13:26 y_server.py:224 Running inference for observation #215 (must_go: False)
+DEBUG 2026-07-11 15:13:26 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:26 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:26 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:26 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:26 y_server.py:186 Received observation #216
+DEBUG 2026-07-11 15:13:26 y_server.py:194 Received observation #216 | Avg FPS: 6.83 | Target: 30.00 | One-way latency: 1.07ms
+DEBUG 2026-07-11 15:13:26 y_server.py:201 Server timestamp: 1783808006.489964 | Client timestamp: 1783808006.488899 | Deserialization time: 0.001603s
+DEBUG 2026-07-11 15:13:26 y_server.py:278 Skipping observation #216 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:26 y_server.py:210 Observation #216 has been filtered out
+INFO 2026-07-11 15:13:26 y_server.py:359 Preprocessing and inference took 0.0282s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:26 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+DEBUG 2026-07-11 15:13:26 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:26 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:26 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:26 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:26 y_server.py:186 Received observation #217
+DEBUG 2026-07-11 15:13:26 y_server.py:194 Received observation #217 | Avg FPS: 6.91 | Target: 30.00 | One-way latency: 0.97ms
+DEBUG 2026-07-11 15:13:26 y_server.py:201 Server timestamp: 1783808006.528289 | Client timestamp: 1783808006.527322 | Deserialization time: 0.001890s
+DEBUG 2026-07-11 15:13:26 y_server.py:278 Skipping observation #217 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:26 y_server.py:210 Observation #217 has been filtered out
+INFO 2026-07-11 15:13:26 y_server.py:391 Observation 215 | Total time: 104.53ms
+DEBUG 2026-07-11 15:13:26 y_server.py:396 Observation 215 | Prepare time: 4.66ms | Preprocessing time: 3.57ms | Inference time: 28.18ms | Postprocessing time: 67.93ms | Total time: 104.53ms
+INFO 2026-07-11 15:13:26 y_server.py:242 Action chunk #215 generated | Total time: 106.40ms
+DEBUG 2026-07-11 15:13:26 y_server.py:247 Action chunk #215 generated | Inference time: 0.10s |Serialize time: 0.00s |Total time: 0.11s
+DEBUG 2026-07-11 15:13:26 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+DEBUG 2026-07-11 15:13:26 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:26 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:26 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:26 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:26 y_server.py:186 Received observation #218
+DEBUG 2026-07-11 15:13:26 y_server.py:194 Received observation #218 | Avg FPS: 6.99 | Target: 30.00 | One-way latency: 0.67ms
+DEBUG 2026-07-11 15:13:26 y_server.py:201 Server timestamp: 1783808006.567533 | Client timestamp: 1783808006.566865 | Deserialization time: 0.001457s
+DEBUG 2026-07-11 15:13:26 y_server.py:278 Skipping observation #218 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:26 y_server.py:210 Observation #218 has been filtered out
+DEBUG 2026-07-11 15:13:27 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:27 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:27 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:27 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:27 y_server.py:186 Received observation #232
+DEBUG 2026-07-11 15:13:27 y_server.py:194 Received observation #232 | Avg FPS: 6.70 | Target: 30.00 | One-way latency: 1.30ms
+DEBUG 2026-07-11 15:13:27 y_server.py:201 Server timestamp: 1783808007.123731 | Client timestamp: 1783808007.122431 | Deserialization time: 0.002015s
+DEBUG 2026-07-11 15:13:27 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 215
+INFO 2026-07-11 15:13:27 y_server.py:224 Running inference for observation #232 (must_go: False)
+INFO 2026-07-11 15:13:27 y_server.py:359 Preprocessing and inference took 0.0277s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:27 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:27 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:27 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:27 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:27 y_server.py:186 Received observation #233
+DEBUG 2026-07-11 15:13:27 y_server.py:194 Received observation #233 | Avg FPS: 6.77 | Target: 30.00 | One-way latency: 1.46ms
+DEBUG 2026-07-11 15:13:27 y_server.py:201 Server timestamp: 1783808007.162362 | Client timestamp: 1783808007.160898 | Deserialization time: 0.001766s
+DEBUG 2026-07-11 15:13:27 y_server.py:278 Skipping observation #233 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:27 y_server.py:210 Observation #233 has been filtered out
+DEBUG 2026-07-11 15:13:27 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+DEBUG 2026-07-11 15:13:27 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:27 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:27 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:27 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:27 y_server.py:186 Received observation #234
+DEBUG 2026-07-11 15:13:27 y_server.py:194 Received observation #234 | Avg FPS: 6.85 | Target: 30.00 | One-way latency: 0.99ms
+DEBUG 2026-07-11 15:13:27 y_server.py:201 Server timestamp: 1783808007.200065 | Client timestamp: 1783808007.199073 | Deserialization time: 0.001678s
+DEBUG 2026-07-11 15:13:27 y_server.py:278 Skipping observation #234 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:27 y_server.py:210 Observation #234 has been filtered out
+INFO 2026-07-11 15:13:27 y_server.py:391 Observation 232 | Total time: 103.15ms
+DEBUG 2026-07-11 15:13:27 y_server.py:396 Observation 232 | Prepare time: 5.10ms | Preprocessing time: 2.45ms | Inference time: 27.67ms | Postprocessing time: 67.43ms | Total time: 103.15ms
+INFO 2026-07-11 15:13:27 y_server.py:242 Action chunk #232 generated | Total time: 104.75ms
+DEBUG 2026-07-11 15:13:27 y_server.py:247 Action chunk #232 generated | Inference time: 0.10s |Serialize time: 0.00s |Total time: 0.10s
+DEBUG 2026-07-11 15:13:27 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+DEBUG 2026-07-11 15:13:27 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:27 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:27 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:27 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:27 y_server.py:186 Received observation #235
+DEBUG 2026-07-11 15:13:27 y_server.py:194 Received observation #235 | Avg FPS: 6.93 | Target: 30.00 | One-way latency: 0.49ms
+DEBUG 2026-07-11 15:13:27 y_server.py:201 Server timestamp: 1783808007.235889 | Client timestamp: 1783808007.235394 | Deserialization time: 0.001360s
+DEBUG 2026-07-11 15:13:27 y_server.py:278 Skipping observation #235 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:27 y_server.py:210 Observation #235 has been filtered out
+DEBUG 2026-07-11 15:13:27 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:27 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:27 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:27 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:27 y_server.py:186 Received observation #249
+DEBUG 2026-07-11 15:13:27 y_server.py:194 Received observation #249 | Avg FPS: 6.67 | Target: 30.00 | One-way latency: 3.57ms
+DEBUG 2026-07-11 15:13:27 y_server.py:201 Server timestamp: 1783808007.761943 | Client timestamp: 1783808007.758378 | Deserialization time: 0.001947s
+DEBUG 2026-07-11 15:13:27 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 232
+INFO 2026-07-11 15:13:27 y_server.py:224 Running inference for observation #249 (must_go: False)
+DEBUG 2026-07-11 15:13:27 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:27 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:27 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:27 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:27 y_server.py:186 Received observation #250
+DEBUG 2026-07-11 15:13:27 y_server.py:194 Received observation #250 | Avg FPS: 6.75 | Target: 30.00 | One-way latency: 1.25ms
+DEBUG 2026-07-11 15:13:27 y_server.py:201 Server timestamp: 1783808007.791445 | Client timestamp: 1783808007.790198 | Deserialization time: 0.001843s
+DEBUG 2026-07-11 15:13:27 y_server.py:278 Skipping observation #250 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:27 y_server.py:210 Observation #250 has been filtered out
+INFO 2026-07-11 15:13:27 y_server.py:359 Preprocessing and inference took 0.0314s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:27 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+DEBUG 2026-07-11 15:13:27 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:27 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:27 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:27 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:27 y_server.py:186 Received observation #251
+DEBUG 2026-07-11 15:13:27 y_server.py:194 Received observation #251 | Avg FPS: 6.82 | Target: 30.00 | One-way latency: 1.06ms
+DEBUG 2026-07-11 15:13:27 y_server.py:201 Server timestamp: 1783808007.826525 | Client timestamp: 1783808007.825465 | Deserialization time: 0.002087s
+DEBUG 2026-07-11 15:13:27 y_server.py:278 Skipping observation #251 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:27 y_server.py:210 Observation #251 has been filtered out
+DEBUG 2026-07-11 15:13:27 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:27 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:27 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:27 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843750
+DEBUG 2026-07-11 15:13:27 y_server.py:186 Received observation #252
+DEBUG 2026-07-11 15:13:27 y_server.py:194 Received observation #252 | Avg FPS: 6.89 | Target: 30.00 | One-way latency: 1.02ms
+DEBUG 2026-07-11 15:13:27 y_server.py:201 Server timestamp: 1783808007.864356 | Client timestamp: 1783808007.863340 | Deserialization time: 0.002024s
+DEBUG 2026-07-11 15:13:27 y_server.py:278 Skipping observation #252 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:27 y_server.py:210 Observation #252 has been filtered out
+INFO 2026-07-11 15:13:27 y_server.py:391 Observation 249 | Total time: 107.20ms
+DEBUG 2026-07-11 15:13:27 y_server.py:396 Observation 249 | Prepare time: 4.97ms | Preprocessing time: 2.50ms | Inference time: 31.42ms | Postprocessing time: 68.13ms | Total time: 107.20ms
+INFO 2026-07-11 15:13:27 y_server.py:242 Action chunk #249 generated | Total time: 109.63ms
+DEBUG 2026-07-11 15:13:27 y_server.py:247 Action chunk #249 generated | Inference time: 0.11s |Serialize time: 0.00s |Total time: 0.11s
+DEBUG 2026-07-11 15:13:27 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+DEBUG 2026-07-11 15:13:28 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:28 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:28 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:28 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:28 y_server.py:186 Received observation #266
+DEBUG 2026-07-11 15:13:28 y_server.py:194 Received observation #266 | Avg FPS: 6.66 | Target: 30.00 | One-way latency: 1.90ms
+DEBUG 2026-07-11 15:13:28 y_server.py:201 Server timestamp: 1783808008.378568 | Client timestamp: 1783808008.376666 | Deserialization time: 0.002833s
+DEBUG 2026-07-11 15:13:28 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 249
+INFO 2026-07-11 15:13:28 y_server.py:224 Running inference for observation #266 (must_go: False)
+DEBUG 2026-07-11 15:13:28 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:28 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:28 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:28 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:28 y_server.py:186 Received observation #267
+DEBUG 2026-07-11 15:13:28 y_server.py:194 Received observation #267 | Avg FPS: 6.73 | Target: 30.00 | One-way latency: 1.34ms
+DEBUG 2026-07-11 15:13:28 y_server.py:201 Server timestamp: 1783808008.414670 | Client timestamp: 1783808008.413328 | Deserialization time: 0.002636s
+DEBUG 2026-07-11 15:13:28 y_server.py:278 Skipping observation #267 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:28 y_server.py:210 Observation #267 has been filtered out
+INFO 2026-07-11 15:13:28 y_server.py:359 Preprocessing and inference took 0.0306s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:28 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+DEBUG 2026-07-11 15:13:28 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:28 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:28 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:28 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:28 y_server.py:186 Received observation #268
+DEBUG 2026-07-11 15:13:28 y_server.py:194 Received observation #268 | Avg FPS: 6.80 | Target: 30.00 | One-way latency: 0.99ms
+DEBUG 2026-07-11 15:13:28 y_server.py:201 Server timestamp: 1783808008.452157 | Client timestamp: 1783808008.451171 | Deserialization time: 0.001658s
+DEBUG 2026-07-11 15:13:28 y_server.py:278 Skipping observation #268 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:28 y_server.py:210 Observation #268 has been filtered out
+DEBUG 2026-07-11 15:13:28 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:28 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:28 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:28 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+INFO 2026-07-11 15:13:28 y_server.py:391 Observation 266 | Total time: 109.49ms
+DEBUG 2026-07-11 15:13:28 y_server.py:186 Received observation #269
+DEBUG 2026-07-11 15:13:28 y_server.py:396 Observation 266 | Prepare time: 7.23ms | Preprocessing time: 4.50ms | Inference time: 30.58ms | Postprocessing time: 67.02ms | Total time: 109.49ms
+DEBUG 2026-07-11 15:13:28 y_server.py:194 Received observation #269 | Avg FPS: 6.86 | Target: 30.00 | One-way latency: 1.07ms
+DEBUG 2026-07-11 15:13:28 y_server.py:201 Server timestamp: 1783808008.490631 | Client timestamp: 1783808008.489563 | Deserialization time: 0.001873s
+INFO 2026-07-11 15:13:28 y_server.py:242 Action chunk #266 generated | Total time: 111.89ms
+DEBUG 2026-07-11 15:13:28 y_server.py:247 Action chunk #266 generated | Inference time: 0.11s |Serialize time: 0.00s |Total time: 0.11s
+DEBUG 2026-07-11 15:13:28 y_server.py:278 Skipping observation #269 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:28 y_server.py:210 Observation #269 has been filtered out
+DEBUG 2026-07-11 15:13:28 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+DEBUG 2026-07-11 15:13:29 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:29 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:29 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:29 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:29 y_server.py:186 Received observation #283
+DEBUG 2026-07-11 15:13:29 y_server.py:194 Received observation #283 | Avg FPS: 6.64 | Target: 30.00 | One-way latency: 1.12ms
+DEBUG 2026-07-11 15:13:29 y_server.py:201 Server timestamp: 1783808009.008753 | Client timestamp: 1783808009.007630 | Deserialization time: 0.001657s
+DEBUG 2026-07-11 15:13:29 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 266
+INFO 2026-07-11 15:13:29 y_server.py:224 Running inference for observation #283 (must_go: False)
+INFO 2026-07-11 15:13:29 y_server.py:359 Preprocessing and inference took 0.0199s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:29 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+DEBUG 2026-07-11 15:13:29 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:29 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:29 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:29 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:29 y_server.py:186 Received observation #284
+DEBUG 2026-07-11 15:13:29 y_server.py:194 Received observation #284 | Avg FPS: 6.71 | Target: 30.00 | One-way latency: 0.82ms
+DEBUG 2026-07-11 15:13:29 y_server.py:201 Server timestamp: 1783808009.041987 | Client timestamp: 1783808009.041171 | Deserialization time: 0.001815s
+DEBUG 2026-07-11 15:13:29 y_server.py:278 Skipping observation #284 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:29 y_server.py:210 Observation #284 has been filtered out
+DEBUG 2026-07-11 15:13:29 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:29 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:29 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:29 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:29 y_server.py:186 Received observation #285
+DEBUG 2026-07-11 15:13:29 y_server.py:194 Received observation #285 | Avg FPS: 6.77 | Target: 30.00 | One-way latency: 1.21ms
+DEBUG 2026-07-11 15:13:29 y_server.py:201 Server timestamp: 1783808009.079410 | Client timestamp: 1783808009.078196 | Deserialization time: 0.002038s
+DEBUG 2026-07-11 15:13:29 y_server.py:278 Skipping observation #285 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:29 y_server.py:210 Observation #285 has been filtered out
+INFO 2026-07-11 15:13:29 y_server.py:391 Observation 283 | Total time: 103.49ms
+DEBUG 2026-07-11 15:13:29 y_server.py:396 Observation 283 | Prepare time: 6.31ms | Preprocessing time: 2.19ms | Inference time: 19.90ms | Postprocessing time: 74.92ms | Total time: 103.49ms
+INFO 2026-07-11 15:13:29 y_server.py:242 Action chunk #283 generated | Total time: 105.18ms
+DEBUG 2026-07-11 15:13:29 y_server.py:247 Action chunk #283 generated | Inference time: 0.10s |Serialize time: 0.00s |Total time: 0.11s
+DEBUG 2026-07-11 15:13:29 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:29 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:29 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:29 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:29 y_server.py:186 Received observation #286
+DEBUG 2026-07-11 15:13:29 y_server.py:194 Received observation #286 | Avg FPS: 6.84 | Target: 30.00 | One-way latency: 2.07ms
+DEBUG 2026-07-11 15:13:29 y_server.py:201 Server timestamp: 1783808009.117785 | Client timestamp: 1783808009.115713 | Deserialization time: 0.001028s
+DEBUG 2026-07-11 15:13:29 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 283
+DEBUG 2026-07-11 15:13:29 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+INFO 2026-07-11 15:13:29 y_server.py:224 Running inference for observation #286 (must_go: False)
+INFO 2026-07-11 15:13:29 y_server.py:359 Preprocessing and inference took 0.0212s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:29 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+INFO 2026-07-11 15:13:29 y_server.py:391 Observation 286 | Total time: 92.16ms
+DEBUG 2026-07-11 15:13:29 y_server.py:396 Observation 286 | Prepare time: 3.25ms | Preprocessing time: 1.66ms | Inference time: 21.23ms | Postprocessing time: 65.87ms | Total time: 92.16ms
+INFO 2026-07-11 15:13:29 y_server.py:242 Action chunk #286 generated | Total time: 93.78ms
+DEBUG 2026-07-11 15:13:29 y_server.py:247 Action chunk #286 generated | Inference time: 0.09s |Serialize time: 0.00s |Total time: 0.09s
+DEBUG 2026-07-11 15:13:29 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+DEBUG 2026-07-11 15:13:29 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:29 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:29 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:29 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:29 y_server.py:186 Received observation #303
+DEBUG 2026-07-11 15:13:29 y_server.py:194 Received observation #303 | Avg FPS: 6.56 | Target: 30.00 | One-way latency: 8.75ms
+DEBUG 2026-07-11 15:13:29 y_server.py:201 Server timestamp: 1783808009.766638 | Client timestamp: 1783808009.757892 | Deserialization time: 0.001523s
+DEBUG 2026-07-11 15:13:29 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 286
+INFO 2026-07-11 15:13:29 y_server.py:224 Running inference for observation #303 (must_go: False)
+DEBUG 2026-07-11 15:13:29 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:29 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:29 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:29 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:29 y_server.py:186 Received observation #304
+DEBUG 2026-07-11 15:13:29 y_server.py:194 Received observation #304 | Avg FPS: 6.63 | Target: 30.00 | One-way latency: 0.87ms
+DEBUG 2026-07-11 15:13:29 y_server.py:201 Server timestamp: 1783808009.792417 | Client timestamp: 1783808009.791548 | Deserialization time: 0.001505s
+DEBUG 2026-07-11 15:13:29 y_server.py:278 Skipping observation #304 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:29 y_server.py:210 Observation #304 has been filtered out
+INFO 2026-07-11 15:13:29 y_server.py:359 Preprocessing and inference took 0.0216s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:29 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+DEBUG 2026-07-11 15:13:29 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:29 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:29 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:29 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:29 y_server.py:186 Received observation #305
+DEBUG 2026-07-11 15:13:29 y_server.py:194 Received observation #305 | Avg FPS: 6.69 | Target: 30.00 | One-way latency: 1.24ms
+DEBUG 2026-07-11 15:13:29 y_server.py:201 Server timestamp: 1783808009.828027 | Client timestamp: 1783808009.826786 | Deserialization time: 0.001903s
+DEBUG 2026-07-11 15:13:29 y_server.py:278 Skipping observation #305 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:29 y_server.py:210 Observation #305 has been filtered out
+DEBUG 2026-07-11 15:13:29 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:29 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:29 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:29 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:29 y_server.py:186 Received observation #306
+DEBUG 2026-07-11 15:13:29 y_server.py:194 Received observation #306 | Avg FPS: 6.75 | Target: 30.00 | One-way latency: 1.41ms
+DEBUG 2026-07-11 15:13:29 y_server.py:201 Server timestamp: 1783808009.865903 | Client timestamp: 1783808009.864492 | Deserialization time: 0.002216s
+DEBUG 2026-07-11 15:13:29 y_server.py:278 Skipping observation #306 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:29 y_server.py:210 Observation #306 has been filtered out
+INFO 2026-07-11 15:13:29 y_server.py:391 Observation 303 | Total time: 108.06ms
+DEBUG 2026-07-11 15:13:29 y_server.py:396 Observation 303 | Prepare time: 6.70ms | Preprocessing time: 1.86ms | Inference time: 21.61ms | Postprocessing time: 77.67ms | Total time: 108.06ms
+INFO 2026-07-11 15:13:29 y_server.py:242 Action chunk #303 generated | Total time: 109.45ms
+DEBUG 2026-07-11 15:13:29 y_server.py:247 Action chunk #303 generated | Inference time: 0.11s |Serialize time: 0.00s |Total time: 0.11s
+DEBUG 2026-07-11 15:13:29 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+DEBUG 2026-07-11 15:13:30 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:30 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:30 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:30 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:30 y_server.py:186 Received observation #320
+DEBUG 2026-07-11 15:13:30 y_server.py:194 Received observation #320 | Avg FPS: 6.56 | Target: 30.00 | One-way latency: 1.58ms
+DEBUG 2026-07-11 15:13:30 y_server.py:201 Server timestamp: 1783808010.380186 | Client timestamp: 1783808010.378607 | Deserialization time: 0.002011s
+DEBUG 2026-07-11 15:13:30 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 303
+INFO 2026-07-11 15:13:30 y_server.py:224 Running inference for observation #320 (must_go: False)
+DEBUG 2026-07-11 15:13:30 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:30 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:30 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:30 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:30 y_server.py:186 Received observation #321
+DEBUG 2026-07-11 15:13:30 y_server.py:194 Received observation #321 | Avg FPS: 6.62 | Target: 30.00 | One-way latency: 1.09ms
+DEBUG 2026-07-11 15:13:30 y_server.py:201 Server timestamp: 1783808010.417306 | Client timestamp: 1783808010.416219 | Deserialization time: 0.001605s
+DEBUG 2026-07-11 15:13:30 y_server.py:278 Skipping observation #321 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:30 y_server.py:210 Observation #321 has been filtered out
+INFO 2026-07-11 15:13:30 y_server.py:359 Preprocessing and inference took 0.0296s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:30 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+DEBUG 2026-07-11 15:13:30 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:30 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:30 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:30 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:30 y_server.py:186 Received observation #322
+DEBUG 2026-07-11 15:13:30 y_server.py:194 Received observation #322 | Avg FPS: 6.67 | Target: 30.00 | One-way latency: 0.92ms
+DEBUG 2026-07-11 15:13:30 y_server.py:201 Server timestamp: 1783808010.454461 | Client timestamp: 1783808010.453544 | Deserialization time: 0.001419s
+DEBUG 2026-07-11 15:13:30 y_server.py:278 Skipping observation #322 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:30 y_server.py:210 Observation #322 has been filtered out
+INFO 2026-07-11 15:13:30 y_server.py:391 Observation 320 | Total time: 107.57ms
+DEBUG 2026-07-11 15:13:30 y_server.py:396 Observation 320 | Prepare time: 5.00ms | Preprocessing time: 4.04ms | Inference time: 29.61ms | Postprocessing time: 68.80ms | Total time: 107.57ms
+INFO 2026-07-11 15:13:30 y_server.py:242 Action chunk #320 generated | Total time: 109.54ms
+DEBUG 2026-07-11 15:13:30 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+DEBUG 2026-07-11 15:13:30 y_server.py:247 Action chunk #320 generated | Inference time: 0.11s |Serialize time: 0.00s |Total time: 0.11s
+INFO 2026-07-11 15:13:30 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:30 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:30 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:30 y_server.py:186 Received observation #323
+DEBUG 2026-07-11 15:13:30 y_server.py:194 Received observation #323 | Avg FPS: 6.73 | Target: 30.00 | One-way latency: 1.61ms
+DEBUG 2026-07-11 15:13:30 y_server.py:201 Server timestamp: 1783808010.493022 | Client timestamp: 1783808010.491411 | Deserialization time: 0.001101s
+DEBUG 2026-07-11 15:13:30 y_server.py:278 Skipping observation #323 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:30 y_server.py:210 Observation #323 has been filtered out
+DEBUG 2026-07-11 15:13:30 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+DEBUG 2026-07-11 15:13:31 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:31 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:31 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:31 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:31 y_server.py:186 Received observation #337
+DEBUG 2026-07-11 15:13:31 y_server.py:194 Received observation #337 | Avg FPS: 6.55 | Target: 30.00 | One-way latency: 1.45ms
+DEBUG 2026-07-11 15:13:31 y_server.py:201 Server timestamp: 1783808011.011415 | Client timestamp: 1783808011.009963 | Deserialization time: 0.002746s
+DEBUG 2026-07-11 15:13:31 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 320
+INFO 2026-07-11 15:13:31 y_server.py:224 Running inference for observation #337 (must_go: False)
+DEBUG 2026-07-11 15:13:31 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:31 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:31 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:31 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:31 y_server.py:186 Received observation #338
+DEBUG 2026-07-11 15:13:31 y_server.py:194 Received observation #338 | Avg FPS: 6.60 | Target: 30.00 | One-way latency: 1.12ms
+DEBUG 2026-07-11 15:13:31 y_server.py:201 Server timestamp: 1783808011.047020 | Client timestamp: 1783808011.045897 | Deserialization time: 0.001595s
+DEBUG 2026-07-11 15:13:31 y_server.py:278 Skipping observation #338 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:31 y_server.py:210 Observation #338 has been filtered out
+INFO 2026-07-11 15:13:31 y_server.py:359 Preprocessing and inference took 0.0309s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:31 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+DEBUG 2026-07-11 15:13:31 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:31 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:31 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:31 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:31 y_server.py:186 Received observation #339
+DEBUG 2026-07-11 15:13:31 y_server.py:194 Received observation #339 | Avg FPS: 6.66 | Target: 30.00 | One-way latency: 1.03ms
+DEBUG 2026-07-11 15:13:31 y_server.py:201 Server timestamp: 1783808011.081990 | Client timestamp: 1783808011.080964 | Deserialization time: 0.001457s
+DEBUG 2026-07-11 15:13:31 y_server.py:278 Skipping observation #339 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:31 y_server.py:210 Observation #339 has been filtered out
+INFO 2026-07-11 15:13:31 y_server.py:391 Observation 337 | Total time: 104.36ms
+DEBUG 2026-07-11 15:13:31 y_server.py:396 Observation 337 | Prepare time: 4.43ms | Preprocessing time: 2.46ms | Inference time: 30.91ms | Postprocessing time: 66.46ms | Total time: 104.36ms
+INFO 2026-07-11 15:13:31 y_server.py:242 Action chunk #337 generated | Total time: 106.08ms
+DEBUG 2026-07-11 15:13:31 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+DEBUG 2026-07-11 15:13:31 y_server.py:247 Action chunk #337 generated | Inference time: 0.10s |Serialize time: 0.00s |Total time: 0.11s
+INFO 2026-07-11 15:13:31 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:31 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:31 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:31 y_server.py:186 Received observation #340
+DEBUG 2026-07-11 15:13:31 y_server.py:194 Received observation #340 | Avg FPS: 6.71 | Target: 30.00 | One-way latency: 2.25ms
+DEBUG 2026-07-11 15:13:31 y_server.py:201 Server timestamp: 1783808011.121443 | Client timestamp: 1783808011.119190 | Deserialization time: 0.001488s
+DEBUG 2026-07-11 15:13:31 y_server.py:278 Skipping observation #340 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:31 y_server.py:210 Observation #340 has been filtered out
+DEBUG 2026-07-11 15:13:31 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+DEBUG 2026-07-11 15:13:31 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:31 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:31 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:31 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:31 y_server.py:186 Received observation #354
+DEBUG 2026-07-11 15:13:31 y_server.py:194 Received observation #354 | Avg FPS: 6.53 | Target: 30.00 | One-way latency: 1.42ms
+DEBUG 2026-07-11 15:13:31 y_server.py:201 Server timestamp: 1783808011.665164 | Client timestamp: 1783808011.663748 | Deserialization time: 0.005487s
+DEBUG 2026-07-11 15:13:31 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 337
+INFO 2026-07-11 15:13:31 y_server.py:224 Running inference for observation #354 (must_go: False)
+INFO 2026-07-11 15:13:31 y_server.py:359 Preprocessing and inference took 0.0161s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:31 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+DEBUG 2026-07-11 15:13:31 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:31 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:31 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:31 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:31 y_server.py:186 Received observation #355
+DEBUG 2026-07-11 15:13:31 y_server.py:194 Received observation #355 | Avg FPS: 6.58 | Target: 30.00 | One-way latency: 1.21ms
+DEBUG 2026-07-11 15:13:31 y_server.py:201 Server timestamp: 1783808011.702857 | Client timestamp: 1783808011.701642 | Deserialization time: 0.001600s
+DEBUG 2026-07-11 15:13:31 y_server.py:278 Skipping observation #355 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:31 y_server.py:210 Observation #355 has been filtered out
+DEBUG 2026-07-11 15:13:31 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:31 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:31 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:31 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:31 y_server.py:186 Received observation #356
+DEBUG 2026-07-11 15:13:31 y_server.py:194 Received observation #356 | Avg FPS: 6.63 | Target: 30.00 | One-way latency: 1.19ms
+DEBUG 2026-07-11 15:13:31 y_server.py:201 Server timestamp: 1783808011.741152 | Client timestamp: 1783808011.739964 | Deserialization time: 0.002003s
+DEBUG 2026-07-11 15:13:31 y_server.py:278 Skipping observation #356 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:31 y_server.py:210 Observation #356 has been filtered out
+INFO 2026-07-11 15:13:31 y_server.py:391 Observation 354 | Total time: 102.78ms
+DEBUG 2026-07-11 15:13:31 y_server.py:396 Observation 354 | Prepare time: 4.83ms | Preprocessing time: 1.83ms | Inference time: 16.06ms | Postprocessing time: 79.90ms | Total time: 102.78ms
+INFO 2026-07-11 15:13:31 y_server.py:242 Action chunk #354 generated | Total time: 105.17ms
+DEBUG 2026-07-11 15:13:31 y_server.py:247 Action chunk #354 generated | Inference time: 0.10s |Serialize time: 0.00s |Total time: 0.11s
+DEBUG 2026-07-11 15:13:31 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:31 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:31 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:31 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:31 y_server.py:186 Received observation #357
+DEBUG 2026-07-11 15:13:31 y_server.py:194 Received observation #357 | Avg FPS: 6.68 | Target: 30.00 | One-way latency: 0.96ms
+DEBUG 2026-07-11 15:13:31 y_server.py:201 Server timestamp: 1783808011.781180 | Client timestamp: 1783808011.780216 | Deserialization time: 0.001591s
+DEBUG 2026-07-11 15:13:31 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+DEBUG 2026-07-11 15:13:31 y_server.py:278 Skipping observation #357 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:31 y_server.py:210 Observation #357 has been filtered out
+DEBUG 2026-07-11 15:13:32 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:32 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:32 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:32 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:32 y_server.py:186 Received observation #371
+DEBUG 2026-07-11 15:13:32 y_server.py:194 Received observation #371 | Avg FPS: 6.52 | Target: 30.00 | One-way latency: 1.52ms
+DEBUG 2026-07-11 15:13:32 y_server.py:201 Server timestamp: 1783808012.303051 | Client timestamp: 1783808012.301529 | Deserialization time: 0.001876s
+DEBUG 2026-07-11 15:13:32 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 354
+INFO 2026-07-11 15:13:32 y_server.py:224 Running inference for observation #371 (must_go: False)
+DEBUG 2026-07-11 15:13:32 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:32 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:32 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:32 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:32 y_server.py:186 Received observation #372
+DEBUG 2026-07-11 15:13:32 y_server.py:194 Received observation #372 | Avg FPS: 6.57 | Target: 30.00 | One-way latency: 1.23ms
+DEBUG 2026-07-11 15:13:32 y_server.py:201 Server timestamp: 1783808012.337439 | Client timestamp: 1783808012.336205 | Deserialization time: 0.001934s
+DEBUG 2026-07-11 15:13:32 y_server.py:278 Skipping observation #372 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:32 y_server.py:210 Observation #372 has been filtered out
+INFO 2026-07-11 15:13:32 y_server.py:359 Preprocessing and inference took 0.0289s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:32 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+DEBUG 2026-07-11 15:13:32 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:32 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:32 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:32 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:32 y_server.py:186 Received observation #373
+DEBUG 2026-07-11 15:13:32 y_server.py:194 Received observation #373 | Avg FPS: 6.62 | Target: 30.00 | One-way latency: 1.08ms
+DEBUG 2026-07-11 15:13:32 y_server.py:201 Server timestamp: 1783808012.372633 | Client timestamp: 1783808012.371553 | Deserialization time: 0.001653s
+DEBUG 2026-07-11 15:13:32 y_server.py:278 Skipping observation #373 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:32 y_server.py:210 Observation #373 has been filtered out
+DEBUG 2026-07-11 15:13:32 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:32 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:32 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:32 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:32 y_server.py:186 Received observation #374
+DEBUG 2026-07-11 15:13:32 y_server.py:194 Received observation #374 | Avg FPS: 6.67 | Target: 30.00 | One-way latency: 1.14ms
+DEBUG 2026-07-11 15:13:32 y_server.py:201 Server timestamp: 1783808012.408125 | Client timestamp: 1783808012.406989 | Deserialization time: 0.001947s
+DEBUG 2026-07-11 15:13:32 y_server.py:278 Skipping observation #374 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:32 y_server.py:210 Observation #374 has been filtered out
+INFO 2026-07-11 15:13:32 y_server.py:391 Observation 371 | Total time: 108.43ms
+DEBUG 2026-07-11 15:13:32 y_server.py:396 Observation 371 | Prepare time: 7.72ms | Preprocessing time: 2.55ms | Inference time: 28.88ms | Postprocessing time: 69.10ms | Total time: 108.43ms
+INFO 2026-07-11 15:13:32 y_server.py:242 Action chunk #371 generated | Total time: 109.95ms
+DEBUG 2026-07-11 15:13:32 y_server.py:247 Action chunk #371 generated | Inference time: 0.11s |Serialize time: 0.00s |Total time: 0.11s
+DEBUG 2026-07-11 15:13:32 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+DEBUG 2026-07-11 15:13:32 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:32 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:32 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:32 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:32 y_server.py:186 Received observation #388
+DEBUG 2026-07-11 15:13:32 y_server.py:194 Received observation #388 | Avg FPS: 6.51 | Target: 30.00 | One-way latency: 1.41ms
+DEBUG 2026-07-11 15:13:32 y_server.py:201 Server timestamp: 1783808012.929675 | Client timestamp: 1783808012.928265 | Deserialization time: 0.002112s
+DEBUG 2026-07-11 15:13:32 y_server.py:278 Skipping observation #388 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:32 y_server.py:210 Observation #388 has been filtered out
+DEBUG 2026-07-11 15:13:32 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:32 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:32 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:32 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:32 y_server.py:186 Received observation #389
+DEBUG 2026-07-11 15:13:32 y_server.py:194 Received observation #389 | Avg FPS: 6.56 | Target: 30.00 | One-way latency: 1.27ms
+DEBUG 2026-07-11 15:13:32 y_server.py:201 Server timestamp: 1783808012.964506 | Client timestamp: 1783808012.963241 | Deserialization time: 0.001847s
+DEBUG 2026-07-11 15:13:32 y_server.py:278 Skipping observation #389 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:32 y_server.py:210 Observation #389 has been filtered out
+DEBUG 2026-07-11 15:13:33 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:33 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:33 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:33 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:33 y_server.py:186 Received observation #390
+DEBUG 2026-07-11 15:13:33 y_server.py:194 Received observation #390 | Avg FPS: 6.61 | Target: 30.00 | One-way latency: 1.35ms
+DEBUG 2026-07-11 15:13:33 y_server.py:201 Server timestamp: 1783808013.002263 | Client timestamp: 1783808013.000913 | Deserialization time: 0.002199s
+DEBUG 2026-07-11 15:13:33 y_server.py:278 Skipping observation #390 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:33 y_server.py:210 Observation #390 has been filtered out
+DEBUG 2026-07-11 15:13:33 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:33 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:33 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:33 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:33 y_server.py:186 Received observation #391
+DEBUG 2026-07-11 15:13:33 y_server.py:194 Received observation #391 | Avg FPS: 6.66 | Target: 30.00 | One-way latency: 1.31ms
+DEBUG 2026-07-11 15:13:33 y_server.py:201 Server timestamp: 1783808013.040563 | Client timestamp: 1783808013.039252 | Deserialization time: 0.001752s
+DEBUG 2026-07-11 15:13:33 y_server.py:278 Skipping observation #391 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:33 y_server.py:210 Observation #391 has been filtered out
+DEBUG 2026-07-11 15:13:33 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:33 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:33 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:33 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:33 y_server.py:186 Received observation #392
+DEBUG 2026-07-11 15:13:33 y_server.py:194 Received observation #392 | Avg FPS: 6.70 | Target: 30.00 | One-way latency: 2.99ms
+DEBUG 2026-07-11 15:13:33 y_server.py:201 Server timestamp: 1783808013.080912 | Client timestamp: 1783808013.077921 | Deserialization time: 0.000861s
+DEBUG 2026-07-11 15:13:33 y_server.py:278 Skipping observation #392 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:33 y_server.py:210 Observation #392 has been filtered out
+DEBUG 2026-07-11 15:13:33 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:33 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:33 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:33 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:33 y_server.py:186 Received observation #393
+DEBUG 2026-07-11 15:13:33 y_server.py:194 Received observation #393 | Avg FPS: 6.75 | Target: 30.00 | One-way latency: 0.95ms
+DEBUG 2026-07-11 15:13:33 y_server.py:201 Server timestamp: 1783808013.111021 | Client timestamp: 1783808013.110076 | Deserialization time: 0.001391s
+DEBUG 2026-07-11 15:13:33 y_server.py:278 Skipping observation #393 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:33 y_server.py:210 Observation #393 has been filtered out
+DEBUG 2026-07-11 15:13:33 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:33 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:33 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:33 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:33 y_server.py:186 Received observation #394
+DEBUG 2026-07-11 15:13:33 y_server.py:194 Received observation #394 | Avg FPS: 6.80 | Target: 30.00 | One-way latency: 0.99ms
+DEBUG 2026-07-11 15:13:33 y_server.py:201 Server timestamp: 1783808013.146807 | Client timestamp: 1783808013.145814 | Deserialization time: 0.001427s
+DEBUG 2026-07-11 15:13:33 y_server.py:278 Skipping observation #394 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:33 y_server.py:210 Observation #394 has been filtered out
+DEBUG 2026-07-11 15:13:33 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:33 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:33 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:33 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:33 y_server.py:186 Received observation #395
+DEBUG 2026-07-11 15:13:33 y_server.py:194 Received observation #395 | Avg FPS: 6.85 | Target: 30.00 | One-way latency: 0.77ms
+DEBUG 2026-07-11 15:13:33 y_server.py:201 Server timestamp: 1783808013.183148 | Client timestamp: 1783808013.182377 | Deserialization time: 0.001072s
+DEBUG 2026-07-11 15:13:33 y_server.py:278 Skipping observation #395 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:33 y_server.py:210 Observation #395 has been filtered out
+DEBUG 2026-07-11 15:13:33 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:33 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:33 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:33 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:33 y_server.py:186 Received observation #396
+DEBUG 2026-07-11 15:13:33 y_server.py:194 Received observation #396 | Avg FPS: 6.90 | Target: 30.00 | One-way latency: 0.89ms
+DEBUG 2026-07-11 15:13:33 y_server.py:201 Server timestamp: 1783808013.220541 | Client timestamp: 1783808013.219652 | Deserialization time: 0.001308s
+DEBUG 2026-07-11 15:13:33 y_server.py:278 Skipping observation #396 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:33 y_server.py:210 Observation #396 has been filtered out
+DEBUG 2026-07-11 15:13:33 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:33 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:33 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:33 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:33 y_server.py:186 Received observation #397
+DEBUG 2026-07-11 15:13:33 y_server.py:194 Received observation #397 | Avg FPS: 6.95 | Target: 30.00 | One-way latency: 0.93ms
+DEBUG 2026-07-11 15:13:33 y_server.py:201 Server timestamp: 1783808013.255022 | Client timestamp: 1783808013.254093 | Deserialization time: 0.001377s
+DEBUG 2026-07-11 15:13:33 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 371
+INFO 2026-07-11 15:13:33 y_server.py:224 Running inference for observation #397 (must_go: False)
+INFO 2026-07-11 15:13:33 y_server.py:359 Preprocessing and inference took 0.0228s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:33 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+DEBUG 2026-07-11 15:13:33 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:33 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:33 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:33 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:33 y_server.py:186 Received observation #398
+DEBUG 2026-07-11 15:13:33 y_server.py:194 Received observation #398 | Avg FPS: 6.99 | Target: 30.00 | One-way latency: 0.88ms
+DEBUG 2026-07-11 15:13:33 y_server.py:201 Server timestamp: 1783808013.291970 | Client timestamp: 1783808013.291088 | Deserialization time: 0.001256s
+DEBUG 2026-07-11 15:13:33 y_server.py:278 Skipping observation #398 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:33 y_server.py:210 Observation #398 has been filtered out
+DEBUG 2026-07-11 15:13:33 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:33 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:33 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:33 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:33 y_server.py:186 Received observation #399
+DEBUG 2026-07-11 15:13:33 y_server.py:194 Received observation #399 | Avg FPS: 7.04 | Target: 30.00 | One-way latency: 0.94ms
+DEBUG 2026-07-11 15:13:33 y_server.py:201 Server timestamp: 1783808013.327736 | Client timestamp: 1783808013.326794 | Deserialization time: 0.001826s
+DEBUG 2026-07-11 15:13:33 y_server.py:278 Skipping observation #399 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:33 y_server.py:210 Observation #399 has been filtered out
+INFO 2026-07-11 15:13:33 y_server.py:391 Observation 397 | Total time: 100.51ms
+DEBUG 2026-07-11 15:13:33 y_server.py:396 Observation 397 | Prepare time: 3.88ms | Preprocessing time: 2.28ms | Inference time: 22.80ms | Postprocessing time: 71.37ms | Total time: 100.51ms
+INFO 2026-07-11 15:13:33 y_server.py:242 Action chunk #397 generated | Total time: 102.31ms
+DEBUG 2026-07-11 15:13:33 y_server.py:247 Action chunk #397 generated | Inference time: 0.10s |Serialize time: 0.00s |Total time: 0.10s
+DEBUG 2026-07-11 15:13:33 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+DEBUG 2026-07-11 15:13:33 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:33 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:33 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:33 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:33 y_server.py:186 Received observation #414
+DEBUG 2026-07-11 15:13:33 y_server.py:194 Received observation #414 | Avg FPS: 6.85 | Target: 30.00 | One-way latency: 1.56ms
+DEBUG 2026-07-11 15:13:33 y_server.py:201 Server timestamp: 1783808013.917318 | Client timestamp: 1783808013.915753 | Deserialization time: 0.001115s
+DEBUG 2026-07-11 15:13:33 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 397
+INFO 2026-07-11 15:13:33 y_server.py:224 Running inference for observation #414 (must_go: False)
+INFO 2026-07-11 15:13:33 y_server.py:359 Preprocessing and inference took 0.0202s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:33 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+DEBUG 2026-07-11 15:13:33 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:33 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:33 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:33 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:33 y_server.py:186 Received observation #415
+DEBUG 2026-07-11 15:13:33 y_server.py:194 Received observation #415 | Avg FPS: 6.89 | Target: 30.00 | One-way latency: 0.85ms
+DEBUG 2026-07-11 15:13:33 y_server.py:201 Server timestamp: 1783808013.952522 | Client timestamp: 1783808013.951675 | Deserialization time: 0.001629s
+DEBUG 2026-07-11 15:13:33 y_server.py:278 Skipping observation #415 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:33 y_server.py:210 Observation #415 has been filtered out
+DEBUG 2026-07-11 15:13:33 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:33 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:33 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:33 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:33 y_server.py:186 Received observation #416
+DEBUG 2026-07-11 15:13:33 y_server.py:194 Received observation #416 | Avg FPS: 6.94 | Target: 30.00 | One-way latency: 0.86ms
+DEBUG 2026-07-11 15:13:33 y_server.py:201 Server timestamp: 1783808013.989536 | Client timestamp: 1783808013.988675 | Deserialization time: 0.001535s
+DEBUG 2026-07-11 15:13:33 y_server.py:278 Skipping observation #416 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:33 y_server.py:210 Observation #416 has been filtered out
+INFO 2026-07-11 15:13:34 y_server.py:391 Observation 414 | Total time: 101.48ms
+DEBUG 2026-07-11 15:13:34 y_server.py:396 Observation 414 | Prepare time: 2.46ms | Preprocessing time: 1.72ms | Inference time: 20.20ms | Postprocessing time: 76.97ms | Total time: 101.48ms
+INFO 2026-07-11 15:13:34 y_server.py:242 Action chunk #414 generated | Total time: 102.69ms
+DEBUG 2026-07-11 15:13:34 y_server.py:247 Action chunk #414 generated | Inference time: 0.10s |Serialize time: 0.00s |Total time: 0.10s
+DEBUG 2026-07-11 15:13:34 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+DEBUG 2026-07-11 15:13:34 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:34 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:34 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:34 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:34 y_server.py:186 Received observation #431
+DEBUG 2026-07-11 15:13:34 y_server.py:194 Received observation #431 | Avg FPS: 6.76 | Target: 30.00 | One-way latency: 1.36ms
+DEBUG 2026-07-11 15:13:34 y_server.py:201 Server timestamp: 1783808014.581484 | Client timestamp: 1783808014.580126 | Deserialization time: 0.002099s
+DEBUG 2026-07-11 15:13:34 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 414
+INFO 2026-07-11 15:13:34 y_server.py:224 Running inference for observation #431 (must_go: False)
+DEBUG 2026-07-11 15:13:34 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:34 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:34 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:34 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:34 y_server.py:186 Received observation #432
+DEBUG 2026-07-11 15:13:34 y_server.py:194 Received observation #432 | Avg FPS: 6.80 | Target: 30.00 | One-way latency: 1.12ms
+DEBUG 2026-07-11 15:13:34 y_server.py:201 Server timestamp: 1783808014.618008 | Client timestamp: 1783808014.616885 | Deserialization time: 0.002456s
+DEBUG 2026-07-11 15:13:34 y_server.py:278 Skipping observation #432 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:34 y_server.py:210 Observation #432 has been filtered out
+INFO 2026-07-11 15:13:34 y_server.py:359 Preprocessing and inference took 0.0298s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:34 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+DEBUG 2026-07-11 15:13:34 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:34 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:34 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:34 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:34 y_server.py:186 Received observation #433
+DEBUG 2026-07-11 15:13:34 y_server.py:194 Received observation #433 | Avg FPS: 6.85 | Target: 30.00 | One-way latency: 1.05ms
+DEBUG 2026-07-11 15:13:34 y_server.py:201 Server timestamp: 1783808014.652377 | Client timestamp: 1783808014.651325 | Deserialization time: 0.001507s
+DEBUG 2026-07-11 15:13:34 y_server.py:278 Skipping observation #433 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:34 y_server.py:210 Observation #433 has been filtered out
+INFO 2026-07-11 15:13:34 y_server.py:391 Observation 431 | Total time: 102.06ms
+DEBUG 2026-07-11 15:13:34 y_server.py:396 Observation 431 | Prepare time: 4.32ms | Preprocessing time: 4.01ms | Inference time: 29.83ms | Postprocessing time: 63.75ms | Total time: 102.06ms
+INFO 2026-07-11 15:13:34 y_server.py:242 Action chunk #431 generated | Total time: 103.76ms
+DEBUG 2026-07-11 15:13:34 y_server.py:247 Action chunk #431 generated | Inference time: 0.10s |Serialize time: 0.00s |Total time: 0.10s
+DEBUG 2026-07-11 15:13:34 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:34 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:34 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:34 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:34 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+DEBUG 2026-07-11 15:13:34 y_server.py:186 Received observation #434
+DEBUG 2026-07-11 15:13:34 y_server.py:194 Received observation #434 | Avg FPS: 6.89 | Target: 30.00 | One-way latency: 0.69ms
+DEBUG 2026-07-11 15:13:34 y_server.py:201 Server timestamp: 1783808014.689292 | Client timestamp: 1783808014.688597 | Deserialization time: 0.003315s
+DEBUG 2026-07-11 15:13:34 y_server.py:278 Skipping observation #434 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:34 y_server.py:210 Observation #434 has been filtered out
+DEBUG 2026-07-11 15:13:35 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:35 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:35 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:35 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:35 y_server.py:186 Received observation #448
+DEBUG 2026-07-11 15:13:35 y_server.py:194 Received observation #448 | Avg FPS: 6.74 | Target: 30.00 | One-way latency: 1.96ms
+DEBUG 2026-07-11 15:13:35 y_server.py:201 Server timestamp: 1783808015.210762 | Client timestamp: 1783808015.208805 | Deserialization time: 0.001769s
+DEBUG 2026-07-11 15:13:35 y_server.py:278 Skipping observation #448 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:35 y_server.py:210 Observation #448 has been filtered out
+DEBUG 2026-07-11 15:13:35 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:35 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:35 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:35 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:35 y_server.py:186 Received observation #449
+DEBUG 2026-07-11 15:13:35 y_server.py:194 Received observation #449 | Avg FPS: 6.79 | Target: 30.00 | One-way latency: 1.31ms
+DEBUG 2026-07-11 15:13:35 y_server.py:201 Server timestamp: 1783808015.244966 | Client timestamp: 1783808015.243660 | Deserialization time: 0.002330s
+DEBUG 2026-07-11 15:13:35 y_server.py:278 Skipping observation #449 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:35 y_server.py:210 Observation #449 has been filtered out
+DEBUG 2026-07-11 15:13:35 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:35 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:35 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:35 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:35 y_server.py:186 Received observation #450
+DEBUG 2026-07-11 15:13:35 y_server.py:194 Received observation #450 | Avg FPS: 6.83 | Target: 30.00 | One-way latency: 1.24ms
+DEBUG 2026-07-11 15:13:35 y_server.py:201 Server timestamp: 1783808015.283649 | Client timestamp: 1783808015.282408 | Deserialization time: 0.002337s
+DEBUG 2026-07-11 15:13:35 y_server.py:278 Skipping observation #450 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:35 y_server.py:210 Observation #450 has been filtered out
+DEBUG 2026-07-11 15:13:35 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:35 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:35 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:35 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:35 y_server.py:186 Received observation #451
+DEBUG 2026-07-11 15:13:35 y_server.py:194 Received observation #451 | Avg FPS: 6.87 | Target: 30.00 | One-way latency: 1.21ms
+DEBUG 2026-07-11 15:13:35 y_server.py:201 Server timestamp: 1783808015.317279 | Client timestamp: 1783808015.316068 | Deserialization time: 0.001723s
+DEBUG 2026-07-11 15:13:35 y_server.py:278 Skipping observation #451 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:35 y_server.py:210 Observation #451 has been filtered out
+DEBUG 2026-07-11 15:13:35 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:35 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:35 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:35 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:35 y_server.py:186 Received observation #452
+DEBUG 2026-07-11 15:13:35 y_server.py:194 Received observation #452 | Avg FPS: 6.91 | Target: 30.00 | One-way latency: 1.30ms
+DEBUG 2026-07-11 15:13:35 y_server.py:201 Server timestamp: 1783808015.350657 | Client timestamp: 1783808015.349355 | Deserialization time: 0.001710s
+DEBUG 2026-07-11 15:13:35 y_server.py:278 Skipping observation #452 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:35 y_server.py:210 Observation #452 has been filtered out
+DEBUG 2026-07-11 15:13:35 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:35 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:35 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:35 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:35 y_server.py:186 Received observation #453
+DEBUG 2026-07-11 15:13:35 y_server.py:194 Received observation #453 | Avg FPS: 6.96 | Target: 30.00 | One-way latency: 1.63ms
+DEBUG 2026-07-11 15:13:35 y_server.py:201 Server timestamp: 1783808015.386641 | Client timestamp: 1783808015.385015 | Deserialization time: 0.001846s
+DEBUG 2026-07-11 15:13:35 y_server.py:278 Skipping observation #453 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:35 y_server.py:210 Observation #453 has been filtered out
+DEBUG 2026-07-11 15:13:35 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:35 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:35 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:35 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:35 y_server.py:186 Received observation #454
+DEBUG 2026-07-11 15:13:35 y_server.py:194 Received observation #454 | Avg FPS: 7.00 | Target: 30.00 | One-way latency: 1.21ms
+DEBUG 2026-07-11 15:13:35 y_server.py:201 Server timestamp: 1783808015.425003 | Client timestamp: 1783808015.423792 | Deserialization time: 0.001422s
+DEBUG 2026-07-11 15:13:35 y_server.py:278 Skipping observation #454 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:35 y_server.py:210 Observation #454 has been filtered out
+DEBUG 2026-07-11 15:13:35 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:35 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:35 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:35 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:35 y_server.py:186 Received observation #455
+DEBUG 2026-07-11 15:13:35 y_server.py:194 Received observation #455 | Avg FPS: 7.04 | Target: 30.00 | One-way latency: 1.07ms
+DEBUG 2026-07-11 15:13:35 y_server.py:201 Server timestamp: 1783808015.461808 | Client timestamp: 1783808015.460742 | Deserialization time: 0.006716s
+DEBUG 2026-07-11 15:13:35 y_server.py:278 Skipping observation #455 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:35 y_server.py:210 Observation #455 has been filtered out
+DEBUG 2026-07-11 15:13:35 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:35 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:35 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:35 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:35 y_server.py:186 Received observation #456
+DEBUG 2026-07-11 15:13:35 y_server.py:194 Received observation #456 | Avg FPS: 7.08 | Target: 30.00 | One-way latency: 0.80ms
+DEBUG 2026-07-11 15:13:35 y_server.py:201 Server timestamp: 1783808015.497712 | Client timestamp: 1783808015.496910 | Deserialization time: 0.001133s
+DEBUG 2026-07-11 15:13:35 y_server.py:278 Skipping observation #456 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:35 y_server.py:210 Observation #456 has been filtered out
+DEBUG 2026-07-11 15:13:35 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:35 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:35 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:35 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:35 y_server.py:186 Received observation #457
+DEBUG 2026-07-11 15:13:35 y_server.py:194 Received observation #457 | Avg FPS: 7.12 | Target: 30.00 | One-way latency: 0.70ms
+DEBUG 2026-07-11 15:13:35 y_server.py:201 Server timestamp: 1783808015.532790 | Client timestamp: 1783808015.532088 | Deserialization time: 0.001017s
+DEBUG 2026-07-11 15:13:35 y_server.py:278 Skipping observation #457 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:35 y_server.py:210 Observation #457 has been filtered out
+DEBUG 2026-07-11 15:13:35 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:35 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:35 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:35 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:35 y_server.py:186 Received observation #458
+DEBUG 2026-07-11 15:13:35 y_server.py:194 Received observation #458 | Avg FPS: 7.16 | Target: 30.00 | One-way latency: 0.71ms
+DEBUG 2026-07-11 15:13:35 y_server.py:201 Server timestamp: 1783808015.567779 | Client timestamp: 1783808015.567069 | Deserialization time: 0.000978s
+DEBUG 2026-07-11 15:13:35 y_server.py:278 Skipping observation #458 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:35 y_server.py:210 Observation #458 has been filtered out
+DEBUG 2026-07-11 15:13:35 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:35 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:35 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:35 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:35 y_server.py:186 Received observation #459
+DEBUG 2026-07-11 15:13:35 y_server.py:194 Received observation #459 | Avg FPS: 7.20 | Target: 30.00 | One-way latency: 0.74ms
+DEBUG 2026-07-11 15:13:35 y_server.py:201 Server timestamp: 1783808015.601552 | Client timestamp: 1783808015.600812 | Deserialization time: 0.000911s
+DEBUG 2026-07-11 15:13:35 y_server.py:278 Skipping observation #459 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:35 y_server.py:210 Observation #459 has been filtered out
+DEBUG 2026-07-11 15:13:35 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:35 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:35 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:35 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:35 y_server.py:186 Received observation #460
+DEBUG 2026-07-11 15:13:35 y_server.py:194 Received observation #460 | Avg FPS: 7.24 | Target: 30.00 | One-way latency: 0.74ms
+DEBUG 2026-07-11 15:13:35 y_server.py:201 Server timestamp: 1783808015.639795 | Client timestamp: 1783808015.639053 | Deserialization time: 0.001079s
+DEBUG 2026-07-11 15:13:35 y_server.py:296 Enqueuing observation. Must go: True | Last processed obs: 431
+INFO 2026-07-11 15:13:35 y_server.py:224 Running inference for observation #460 (must_go: True)
+INFO 2026-07-11 15:13:35 y_server.py:359 Preprocessing and inference took 0.0254s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:35 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+DEBUG 2026-07-11 15:13:35 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:35 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:35 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:35 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:35 y_server.py:186 Received observation #460
+DEBUG 2026-07-11 15:13:35 y_server.py:194 Received observation #460 | Avg FPS: 7.29 | Target: 30.00 | One-way latency: 1.00ms
+DEBUG 2026-07-11 15:13:35 y_server.py:201 Server timestamp: 1783808015.673230 | Client timestamp: 1783808015.672228 | Deserialization time: 0.001971s
+DEBUG 2026-07-11 15:13:35 y_server.py:274 Skipping observation #460 - Timestep predicted already!
+DEBUG 2026-07-11 15:13:35 y_server.py:210 Observation #460 has been filtered out
+DEBUG 2026-07-11 15:13:35 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:35 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:35 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:35 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:35 y_server.py:186 Received observation #460
+DEBUG 2026-07-11 15:13:35 y_server.py:194 Received observation #460 | Avg FPS: 7.33 | Target: 30.00 | One-way latency: 1.03ms
+DEBUG 2026-07-11 15:13:35 y_server.py:201 Server timestamp: 1783808015.707700 | Client timestamp: 1783808015.706674 | Deserialization time: 0.001847s
+DEBUG 2026-07-11 15:13:35 y_server.py:274 Skipping observation #460 - Timestep predicted already!
+DEBUG 2026-07-11 15:13:35 y_server.py:210 Observation #460 has been filtered out
+DEBUG 2026-07-11 15:13:35 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:35 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:35 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:35 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:35 y_server.py:186 Received observation #460
+DEBUG 2026-07-11 15:13:35 y_server.py:194 Received observation #460 | Avg FPS: 7.37 | Target: 30.00 | One-way latency: 2.05ms
+DEBUG 2026-07-11 15:13:35 y_server.py:201 Server timestamp: 1783808015.743821 | Client timestamp: 1783808015.741770 | Deserialization time: 0.001714s
+DEBUG 2026-07-11 15:13:35 y_server.py:274 Skipping observation #460 - Timestep predicted already!
+DEBUG 2026-07-11 15:13:35 y_server.py:210 Observation #460 has been filtered out
+INFO 2026-07-11 15:13:35 y_server.py:391 Observation 460 | Total time: 105.07ms
+DEBUG 2026-07-11 15:13:35 y_server.py:396 Observation 460 | Prepare time: 2.90ms | Preprocessing time: 1.76ms | Inference time: 25.41ms | Postprocessing time: 74.79ms | Total time: 105.07ms
+INFO 2026-07-11 15:13:35 y_server.py:242 Action chunk #460 generated | Total time: 108.48ms
+DEBUG 2026-07-11 15:13:35 y_server.py:247 Action chunk #460 generated | Inference time: 0.11s |Serialize time: 0.00s |Total time: 0.11s
+DEBUG 2026-07-11 15:13:35 y_server.py:218 Client ipv4:127.0.0.1:56151 connected for action streaming
+DEBUG 2026-07-11 15:13:36 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:36 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:36 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:36 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:36 y_server.py:186 Received observation #477
+DEBUG 2026-07-11 15:13:36 y_server.py:194 Received observation #477 | Avg FPS: 7.17 | Target: 30.00 | One-way latency: 1.50ms
+DEBUG 2026-07-11 15:13:36 y_server.py:201 Server timestamp: 1783808016.379168 | Client timestamp: 1783808016.377672 | Deserialization time: 0.002286s
+DEBUG 2026-07-11 15:13:36 y_server.py:296 Enqueuing observation. Must go: False | Last processed obs: 460
+INFO 2026-07-11 15:13:36 y_server.py:224 Running inference for observation #477 (must_go: False)
+DEBUG 2026-07-11 15:13:36 y_server.py:176 Receiving observations from ipv4:127.0.0.1:56151
+INFO 2026-07-11 15:13:36 ort/utils.py:78 <Logger policy_server (NOTSET)> Starting receiver
+DEBUG 2026-07-11 15:13:36 ort/utils.py:80 <Logger policy_server (NOTSET)> Received item
+DEBUG 2026-07-11 15:13:36 ort/utils.py:97 <Logger policy_server (NOTSET)> Received data at step end size 1843751
+DEBUG 2026-07-11 15:13:36 y_server.py:186 Received observation #478
+DEBUG 2026-07-11 15:13:36 y_server.py:194 Received observation #478 | Avg FPS: 7.21 | Target: 30.00 | One-way latency: 1.28ms
+DEBUG 2026-07-11 15:13:36 y_server.py:201 Server timestamp: 1783808016.416240 | Client timestamp: 1783808016.414956 | Deserialization time: 0.002027s
+DEBUG 2026-07-11 15:13:36 y_server.py:278 Skipping observation #478 - Observation too similar to last obs predicted!
+DEBUG 2026-07-11 15:13:36 y_server.py:210 Observation #478 has been filtered out
+INFO 2026-07-11 15:13:36 y_server.py:359 Preprocessing and inference took 0.0328s, action shape: torch.Size([1, 30, 6])
+DEBUG 2026-07-11 15:13:36 y_server.py:380 Postprocessed action shape: torch.Size([30, 6])
+INFO 2026-07-11 15:13:36 y_server.py:391 Observation 477 | Total time: 106.54ms
+DEBUG 2026-07-11 15:13:36 y_server.py:396 Observation 477 | Prepare time: 4.41ms | Preprocessing time: 2.79ms | Inference time: 32.76ms | Postprocessing time: 66.45ms | Total time: 106.54ms
+INFO 2026-07-11 15:13:36 y_server.py:242 Action chunk #477 generated | Total time: 107.76ms
+DEBUG 2026-07-11 15:13:36 y_server.py:247 Action chunk #477 generated | Inference time: 0.11s |Serialize time: 0.00s |Total time: 0.11s

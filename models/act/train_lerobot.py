@@ -6,9 +6,10 @@ from pathlib import Path
 import time
 
 import torch
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader
 
 from configs.act.base import ACTConfig
+from data.episode_split import resolve_train_holdout_episodes
 from lerobot.configs.types import FeatureType, PolicyFeature
 from lerobot.datasets import LeRobotDataset, LeRobotDatasetMetadata
 from lerobot.datasets.factory import resolve_delta_timestamps
@@ -64,17 +65,24 @@ def make_lerobot_policy_config(cfg: ACTConfig, device_name: str) -> LeRobotACTCo
 
 def make_dataloaders(cfg: ACTConfig, policy_cfg: LeRobotACTConfig, device: torch.device):
     metadata = LeRobotDatasetMetadata(repo_id=cfg.dataset_repo_id, revision=cfg.dataset_revision)
-    dataset = LeRobotDataset(
+    train_episodes, holdout_episodes = resolve_train_holdout_episodes(
+        metadata.total_episodes, cfg.train_split, cfg.seed
+    )
+    print(
+        f"[make_dataloaders] {metadata.total_episodes} episodes total, holding out "
+        f"{holdout_episodes} ({len(holdout_episodes)}/{metadata.total_episodes} = "
+        f"{100 * len(holdout_episodes) / metadata.total_episodes:.1f}%), "
+        f"training on {len(train_episodes)} episodes.",
+        flush=True,
+    )
+    delta_timestamps = resolve_delta_timestamps(policy_cfg, metadata)
+
+    train_dataset = LeRobotDataset(
         repo_id=cfg.dataset_repo_id,
         revision=cfg.dataset_revision,
-        delta_timestamps=resolve_delta_timestamps(policy_cfg, metadata),
+        episodes=train_episodes,
+        delta_timestamps=delta_timestamps,
     )
-    train_size = int(len(dataset) * cfg.train_split)
-    train_size = min(max(train_size, 1), len(dataset))
-    val_size = len(dataset) - train_size
-    generator = torch.Generator().manual_seed(cfg.seed)
-    train_dataset, val_dataset = random_split(dataset, [train_size, val_size], generator=generator)
-
     train_loader = DataLoader(
         dataset=train_dataset,
         batch_size=cfg.batch_size,
@@ -82,13 +90,21 @@ def make_dataloaders(cfg: ACTConfig, policy_cfg: LeRobotACTConfig, device: torch
         num_workers=cfg.num_workers,
         pin_memory=device.type == "cuda",
     )
-    val_loader = None if val_size == 0 else DataLoader(
-        dataset=val_dataset,
-        batch_size=cfg.batch_size,
-        shuffle=False,
-        num_workers=cfg.num_workers,
-        pin_memory=device.type == "cuda",
-    )
+    val_loader = None
+    if holdout_episodes:
+        val_dataset = LeRobotDataset(
+            repo_id=cfg.dataset_repo_id,
+            revision=cfg.dataset_revision,
+            episodes=holdout_episodes,
+            delta_timestamps=delta_timestamps,
+        )
+        val_loader = DataLoader(
+            dataset=val_dataset,
+            batch_size=cfg.batch_size,
+            shuffle=False,
+            num_workers=cfg.num_workers,
+            pin_memory=device.type == "cuda",
+        )
     return metadata, train_loader, val_loader
 
 
@@ -203,7 +219,9 @@ def main():
                         flush=True,
                     )
                 if val_loader is not None and step % cfg.eval_freq == 0:
-                    model.eval()
+                    was_training = model.training
+                    # LeRobot ACT's VAE loss path expects train-mode forward even under no_grad.
+                    model.train()
                     val_loss = 0.0
                     val_action_loss = 0.0
                     val_kl_loss = 0.0
@@ -217,7 +235,7 @@ def main():
                                 val_kl_loss += kl_loss.item()
                                 val_batches += 1
                     finally:
-                        model.train()
+                        model.train(was_training)
                     val_batches = max(val_batches, 1)
                     val_metrics = {
                         "step": step,
