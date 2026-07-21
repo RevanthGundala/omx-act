@@ -86,3 +86,65 @@ def test_main_seeds_before_model_initialization(monkeypatch, tmp_path):
     train_module.main()
 
     assert events[:2] == [("seed", 123), ("model", None)]
+
+
+def test_resume_uses_checkpoint_stock_parity(monkeypatch, tmp_path):
+    checkpoint_path = tmp_path / "resume.pt"
+    torch.save(
+        {
+            "config": {"stock_parity": True},
+            "model_state_dict": {},
+            "optimizer_state_dict": {},
+            "step": 0,
+        },
+        checkpoint_path,
+    )
+    config = replace(
+        ACTConfig(dataset_repo_id="owner/dataset"),
+        output_root=str(tmp_path),
+        job_name="resume-parity",
+        num_train_steps=0,
+        num_workers=0,
+        stock_parity=False,
+    )
+    observed_parity = []
+
+    class FakeModel:
+        def __init__(self, model_config):
+            observed_parity.append(model_config.stock_parity)
+
+        def to(self, _device):
+            return self
+
+        def parameters(self):
+            return []
+
+        def load_state_dict(self, _state_dict):
+            return None
+
+        def train(self):
+            return self
+
+    class FakeOptimizer:
+        def load_state_dict(self, _state_dict):
+            return None
+
+    monkeypatch.setattr(train_module, "config_from_env", lambda: config)
+    monkeypatch.setattr(
+        train_module,
+        "ACTPolicy",
+        lambda model_config, **_kwargs: FakeModel(model_config),
+    )
+    monkeypatch.setattr(
+        train_module.torch.optim,
+        "AdamW",
+        lambda *_args, **_kwargs: FakeOptimizer(),
+    )
+    monkeypatch.setattr(train_module, "make_dataloaders", lambda _config: ([], None))
+    monkeypatch.setenv("ACT_DISABLE_MLFLOW", "1")
+    monkeypatch.setenv("ACT_DEVICE", "cpu")
+    monkeypatch.setenv("ACT_TRAIN_RESUME_CHECKPOINT", str(checkpoint_path))
+
+    train_module.main()
+
+    assert observed_parity == [True]
