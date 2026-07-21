@@ -21,7 +21,8 @@ own ACTPolicy directly:
   triggers a replan once the queue drains below --chunk-size-threshold * chunk_size.
 
 Usage:
-    uv run python -m models.act.eval_async_custom --checkpoint <run>/checkpoints/step_020000.pt
+    uv run python -m models.act.eval_async_custom \
+      --checkpoint <run>/checkpoints/step_020000.pt
 """
 import argparse
 import json
@@ -47,6 +48,7 @@ from models.act.eval import (
     send_action,
     validate_checkpoint_shapes,
 )
+from models.act.eval_common import clear_stuck_port, dataset_start_statistics, joint_positions, move_to_joint_state
 from utils.config import CAMERA_HEIGHT, CAMERA_WIDTH, FOLLOWER_PORT, FPS, JOINT_NAMES
 
 AGGREGATE_FNS = {
@@ -116,24 +118,6 @@ class ChunkQueue:
             return len(self._buffer)
 
 
-def clear_stuck_port(robot) -> bool:
-    """Recover from a Ctrl-C landing mid-serial-transaction.
-
-    dynamixel_sdk guards every read/write with a plain `port.is_using` bool (set True before the
-    transaction, False after), with NO try/finally. If SIGINT is delivered while that flag is
-    True, it never resets, and every subsequent sync_read/sync_write immediately fails with
-    ConnectionError("... [TxRxResult] Port is in use!") even though the port itself is fine.
-    robot.disconnect() resets this same flag (motors_bus.py disconnect(), before closing the
-    port) -- this does the equivalent reset without a full disconnect/reconnect cycle.
-    Returns True if a port_handler was found and reset.
-    """
-    port_handler = getattr(getattr(robot, "bus", None), "port_handler", None)
-    if port_handler is None:
-        return False
-    port_handler.is_using = False
-    return True
-
-
 def make_action_smoother(alpha: float):
     """Stateful EMA smoother: smoothed = prev + alpha*(new-prev). Gripper (last joint) is exempt."""
     state = {"prev": None}
@@ -163,6 +147,48 @@ def main() -> None:
     parser.add_argument("--model-width", type=int, default=CAMERA_WIDTH)
     parser.add_argument("--model-height", type=int, default=CAMERA_HEIGHT)
     parser.add_argument("--start-delay", type=float, default=3.0)
+    parser.add_argument(
+        "--move-to-dataset-start-state",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Before inference, move the follower to the mean/median demonstrated episode-start state "
+            "(default: enabled; use --no-move-to-dataset-start-state to opt out)."
+        ),
+    )
+    parser.add_argument(
+        "--start-state-reducer",
+        choices=["mean", "median"],
+        default="mean",
+        help="Dataset episode-start statistic used with --move-to-dataset-start-state.",
+    )
+    parser.add_argument(
+        "--start-state-repo-id",
+        default=None,
+        help="Dataset used for start-state statistics. Defaults to the checkpoint training dataset.",
+    )
+    parser.add_argument(
+        "--start-state-revision",
+        default=None,
+        help="Dataset revision used for start-state statistics. Defaults to the checkpoint training revision.",
+    )
+    parser.add_argument("--start-state-duration", type=float, default=8.0)
+    parser.add_argument("--start-state-ramp-seconds", type=float, default=3.0)
+    parser.add_argument("--start-state-max-delta", type=float, default=2.0)
+    parser.add_argument(
+        "--start-state-tolerance",
+        type=float,
+        default=0.5,
+        help="Minimum absolute per-joint start tolerance, combined with --start-state-max-z.",
+    )
+    parser.add_argument(
+        "--start-state-max-z",
+        type=float,
+        default=3.0,
+        help="Accept each joint once it is within this many demonstrated start-state standard deviations.",
+    )
+    parser.add_argument("--start-state-settle-seconds", type=float, default=1.0)
+    parser.add_argument("--start-state-log-every", type=float, default=1.0)
     parser.add_argument(
         "--action-space",
         choices=["absolute", "delta"],
@@ -273,8 +299,7 @@ def main() -> None:
         if any camera raises (e.g. a transient stale-frame TimeoutError), the whole call fails and
         the already-successful position read is discarded. Return-home is safety-critical and must
         never depend on camera health."""
-        raw = follower.bus.sync_read("Present_Position")
-        return {f"{motor}.pos": val for motor, val in raw.items()}
+        return joint_positions(follower)
 
     def capture_obs():
         """Hardware read. Called ONLY from the control thread -- OmxFollower/motors_bus have no
@@ -374,8 +399,63 @@ def main() -> None:
     exit_reason = "startup_error"
     step = 0
     home_pose = None
+    period = 1.0 / args.hz
     try:
         worker.start()
+
+        fallback_home = read_qpos_only()
+        home_pose = fallback_home
+        if args.move_to_dataset_start_state:
+            repo_id = args.start_state_repo_id or cfg.dataset_repo_id
+            revision = args.start_state_revision or cfg.dataset_revision
+            start_statistics = dataset_start_statistics(repo_id, revision)
+            target_start_state = start_statistics[args.start_state_reducer]
+            support_tolerance = np.maximum(
+                args.start_state_tolerance,
+                args.start_state_max_z * start_statistics["std"],
+            )
+            print(
+                "Moving follower to dataset "
+                f"{args.start_state_reducer} start state from {repo_id}@{revision}: "
+                f"{dict(zip(JOINT_NAMES, target_start_state.tolist(), strict=True))}; "
+                "accepted per-joint error="
+                f"{dict(zip(JOINT_NAMES, support_tolerance.tolist(), strict=True))}",
+                flush=True,
+            )
+            final_entry = move_to_joint_state(
+                follower,
+                target=target_start_state,
+                timeout=args.start_state_duration,
+                ramp_seconds=args.start_state_ramp_seconds,
+                hz=args.hz,
+                max_delta=args.start_state_max_delta,
+                tolerance=support_tolerance,
+                log_every=args.start_state_log_every,
+            )
+            if final_entry.get("reached"):
+                print(
+                    "Reached demonstrated start-state support "
+                    f"(max support ratio={final_entry['max_support_ratio']:.3f}).",
+                    flush=True,
+                )
+            else:
+                final_state = np.asarray(final_entry["state"], dtype=np.float32)
+                errors = np.abs(target_start_state - final_state)
+                violations = {
+                    JOINT_NAMES[i]: {
+                        "error": float(errors[i]),
+                        "allowed": float(support_tolerance[i]),
+                    }
+                    for i in range(len(JOINT_NAMES))
+                    if errors[i] > support_tolerance[i]
+                }
+                raise RuntimeError(
+                    "dataset start-state move remained outside demonstrated support: "
+                    f"{violations}."
+                )
+            if args.start_state_settle_seconds > 0:
+                print(f"Settling for {args.start_state_settle_seconds:.1f}s before rollout.", flush=True)
+                time.sleep(args.start_state_settle_seconds)
 
         if args.start_delay > 0:
             print(f"Starting custom async ACT eval in {args.start_delay:.1f}s. Ctrl-C to stop.", flush=True)
@@ -401,7 +481,6 @@ def main() -> None:
             raise RuntimeError("no chunk predicted within 10s; aborting.")
         print(f"[eval_async_custom] first chunk ready; starting playback at {args.hz:g}Hz.", flush=True)
 
-        period = 1.0 / args.hz
         start_time = time.perf_counter()
         last_heartbeat = start_time
         last_successful_capture = start_time
@@ -525,4 +604,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

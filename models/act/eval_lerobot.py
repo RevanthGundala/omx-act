@@ -30,6 +30,8 @@ except ImportError:
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+import models.act.lerobot_policy  # noqa: F401 -- register custom_act before config parsing
+from models.act.eval_common import dataset_start_statistics
 from utils.config import CAMERA_HEIGHT, CAMERA_WIDTH, CAMERAS, FOLLOWER_PORT, FPS, JOINT_NAMES
 from utils.rerun_utils import init_rerun
 
@@ -222,32 +224,9 @@ def load_training_run_config(policy_path: Path) -> dict:
 
 
 def dataset_start_state(repo_id: str, revision: str, reducer: str) -> np.ndarray:
-    dataset = LeRobotDataset(repo_id=repo_id, revision=revision)
-    columns = set(dataset.hf_dataset.column_names)
-    required_columns = {"observation.state", "episode_index", "frame_index"}
-    missing = required_columns - columns
-    if missing:
-        raise KeyError(f"dataset {repo_id}@{revision} is missing required columns: {sorted(missing)}")
-
-    episode_indices = np.asarray(dataset.hf_dataset["episode_index"])
-    frame_indices = np.asarray(dataset.hf_dataset["frame_index"])
-    states = []
-    for episode in sorted(np.unique(episode_indices)):
-        indices = np.where(episode_indices == episode)[0]
-        first = indices[np.argmin(frame_indices[indices])]
-        states.append(np.asarray(dataset.hf_dataset["observation.state"][int(first)], dtype=np.float32))
-
-    if not states:
-        raise ValueError(f"dataset {repo_id}@{revision} has no episodes")
-    start_states = np.stack(states)
-    if start_states.shape[1] != len(JOINT_NAMES):
-        raise ValueError(
-            f"dataset start state dim={start_states.shape[1]}, but OMX follower has {len(JOINT_NAMES)} joints"
-        )
-    if reducer == "mean":
-        return start_states.mean(axis=0)
-    if reducer == "median":
-        return np.median(start_states, axis=0)
+    statistics = dataset_start_statistics(repo_id, revision)
+    if reducer in {"mean", "median"}:
+        return statistics[reducer]
     raise ValueError(f"unknown start-state reducer: {reducer}")
 
 

@@ -80,6 +80,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--resume-checkpoint", default=None, help="Local checkpoint .pt to upload and resume from.")
     parser.add_argument("--gpu-name", default=os.environ.get("OMX_GPU_NAME", "RTX_4090"))
     parser.add_argument("--min-gpu-ram-mb", type=int, default=20_000)
+    parser.add_argument(
+        "--min-cuda-version",
+        default=None,
+        help="Require offer cuda_max_good to be at least this version (for example, 12.8).",
+    )
     parser.add_argument("--disk-gb", type=int, default=80)
     parser.add_argument("--boot-timeout", type=int, default=BOOT_TIMEOUT)
     parser.add_argument("--image", default=os.environ.get("OMX_VAST_IMAGE", DEFAULT_IMAGE))
@@ -89,6 +94,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", default="outputs/vastai")
     parser.add_argument("--exclude-host-id", action="append", default=[], help="Vast host_id to skip. Repeatable.")
     parser.add_argument("--exclude-machine-id", action="append", default=[], help="Vast machine_id to skip. Repeatable.")
+    parser.add_argument(
+        "--allow-existing-instance-id",
+        action="append",
+        type=int,
+        default=[],
+        help="Explicitly acknowledged unrelated Vast instance ID. Repeatable.",
+    )
     parser.add_argument(
         "--max-runtime-minutes",
         type=int,
@@ -152,6 +164,13 @@ def format_offer(offer: dict) -> str:
     )
 
 
+def _version_tuple(value: object) -> tuple[int, ...]:
+    try:
+        return tuple(int(part) for part in str(value).split("."))
+    except ValueError:
+        return ()
+
+
 def search_candidate_offers(vast: VastAI, args: argparse.Namespace) -> list[dict]:
     query = f"gpu_name={args.gpu_name} rentable=True rented=False"
     offers = coerce_result_data(vast.search_offers(query=query, limit=SEARCH_LIMIT, order=SEARCH_ORDER))
@@ -180,6 +199,9 @@ def search_candidate_offers(vast: VastAI, args: argparse.Namespace) -> list[dict
             continue
         reliability = float(offer.get("reliability2", offer.get("reliability", 0.0)) or 0.0)
         if reliability < MIN_RELIABILITY:
+            continue
+        min_cuda_version = getattr(args, "min_cuda_version", None)
+        if min_cuda_version and _version_tuple(offer.get("cuda_max_good")) < _version_tuple(min_cuda_version):
             continue
         filtered.append(offer)
     return filtered
@@ -324,7 +346,9 @@ raise SystemExit(0 if torch.cuda.is_available() else 1)
 PY
 then
   echo "Installing CUDA Torch..."
-  python -m pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cu124
+  python -m pip install --no-cache-dir --force-reinstall \
+    "torch==2.7.1" "torchvision==0.22.1" \
+    --index-url https://download.pytorch.org/whl/cu128
 fi
 python - <<PY
 import torch
@@ -421,7 +445,12 @@ python -m pip install --no-cache-dir --no-deps --force-reinstall git+https://git
 python -m pip install --no-cache-dir "termcolor>=2.4.0,<4.0.0"
 python - <<PY
 import lerobot
+import torch
+import torchvision
 print("LeRobot:", getattr(lerobot, "__version__", "unknown"))
+print("Torch:", torch.__version__, "Torchvision:", torchvision.__version__)
+if not torch.cuda.is_available():
+    raise SystemExit("CUDA is unavailable after final dependency installation.")
 PY
 python -m {module} 2>&1 | tee {shlex.quote(REMOTE_LOG)}
 '"""
@@ -575,14 +604,16 @@ def destroy_instance(vast: VastAI, instance_id: int) -> None:
     )
 
 
-def assert_no_managed_instances(vast: VastAI) -> None:
+def assert_no_managed_instances(vast: VastAI, allowed_instance_ids: list[int] | None = None) -> None:
     instances = coerce_result_data(vast.show_instances())
     if not isinstance(instances, list):
         raise RuntimeError(f"Unable to audit existing Vast instances: {instances}")
+    allowed_ids = set(allowed_instance_ids or [])
     managed = [
         instance
         for instance in instances
         if str(instance.get("label", "")).startswith("act-sim")
+        and int(instance.get("id", -1)) not in allowed_ids
     ]
     if managed:
         details = ", ".join(
@@ -633,7 +664,7 @@ def main() -> None:
         sys.exit(1)
 
     vast = VastAI(api_key=api_key)
-    assert_no_managed_instances(vast)
+    assert_no_managed_instances(vast, args.allow_existing_instance_id)
     print(f"Searching for {args.gpu_name} offers...")
     candidates = search_candidate_offers(vast, args)
     if not candidates:
@@ -682,11 +713,12 @@ def main() -> None:
         bootstrap_remote(instance)
         upload_repo(instance, args.remote_workspace)
         args.remote_resume_checkpoint = upload_resume_checkpoint(instance, args)
+        args.training_started = True
         run_remote_training(instance, args, local_output_dir)
     finally:
         active_error = sys.exc_info()[1]
         download_error = None
-        if instance is not None and local_output_dir is not None:
+        if instance is not None and local_output_dir is not None and getattr(args, "training_started", False):
             try:
                 download_outputs(instance, args, local_output_dir)
             except Exception as exc:

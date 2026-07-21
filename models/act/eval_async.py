@@ -27,6 +27,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
@@ -38,7 +40,14 @@ from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig
 from lerobot.robots.omx_follower.config_omx_follower import OmxFollowerConfig
 from lerobot.robots.omx_follower.omx_follower import OmxFollower
 
-from utils.config import CAMERAS, CAMERA_HEIGHT, CAMERA_WIDTH, FOLLOWER_PORT, FPS
+from models.act.eval_common import (
+    clear_stuck_port,
+    dataset_start_statistics,
+    joint_positions,
+    move_to_joint_state,
+    start_state_violations,
+)
+from utils.config import CAMERAS, CAMERA_HEIGHT, CAMERA_WIDTH, FOLLOWER_PORT, FPS, JOINT_NAMES
 
 DEFAULT_CKPT = (
     REPO_ROOT
@@ -110,10 +119,34 @@ def setup_file_logging(log_dir: Path, ts: str) -> tuple[Path, Path]:
     return log_dir / f"client_{ts}.log", log_dir / f"policy_server_{ts}.log"
 
 
-def launch_server(host: str, port: int, fps: int, log_path: Path | None, timeout: float) -> subprocess.Popen:
+def launch_server(
+    host: str,
+    port: int,
+    fps: int,
+    log_path: Path | None,
+    timeout: float,
+    policy_type: str,
+) -> subprocess.Popen:
     """Launch the local policy server and block until its port is accepting connections."""
-    cmd = [sys.executable, "-m", "lerobot.async_inference.policy_server",
-           f"--host={host}", f"--port={port}", f"--fps={fps}"]
+    if policy_type == "custom_act":
+        cmd = [
+            sys.executable,
+            "-m",
+            "models.act.lerobot_policy",
+            "serve",
+            f"--host={host}",
+            f"--port={port}",
+            f"--fps={fps}",
+        ]
+    else:
+        cmd = [
+            sys.executable,
+            "-m",
+            "lerobot.async_inference.policy_server",
+            f"--host={host}",
+            f"--port={port}",
+            f"--fps={fps}",
+        ]
     print(f"[eval_async] launching policy server: {' '.join(cmd)}", flush=True)
     stdout = open(log_path, "w") if log_path else None  # noqa: SIM115 (open for process lifetime)
     if log_path:
@@ -132,19 +165,6 @@ def launch_server(host: str, port: int, fps: int, log_path: Path | None, timeout
     raise RuntimeError(f"policy server did not open {host}:{port} within {timeout}s")
 
 
-def joint_positions(robot) -> dict[str, float]:
-    """Current absolute joint state as {'<joint>.pos': deg} (the send_action format).
-
-    Reads the motor bus directly rather than robot.get_observation(), which reads motor
-    positions successfully first and only THEN reads cameras -- if any camera raises (e.g. a
-    transient stale-frame TimeoutError), the whole call fails and the already-successful
-    position read is discarded. Homing/parking is safety-critical and must not depend on
-    camera health.
-    """
-    raw = robot.bus.sync_read("Present_Position")
-    return {f"{motor}.pos": float(val) for motor, val in raw.items()}
-
-
 def resolve_home_pose(target: str, robot, policy_path: Path) -> dict[str, float]:
     """Where the arm parks on Ctrl-C, as {'<joint>.pos': deg} in action_features order.
 
@@ -159,8 +179,6 @@ def resolve_home_pose(target: str, robot, policy_path: Path) -> dict[str, float]
         return joint_positions(robot)
     if target == "zeros":
         return dict.fromkeys(keys, 0.0)
-
-    import numpy as np
 
     if target == "mean":
         from safetensors.torch import load_file
@@ -190,6 +208,14 @@ def resolve_home_pose(target: str, robot, policy_path: Path) -> dict[str, float]
     return {k: float(vec[i]) for i, k in enumerate(keys)}
 
 
+def dataset_reference(policy_path: Path) -> tuple[str, str]:
+    train_config_path = policy_path / "train_config.json"
+    if not train_config_path.exists():
+        raise FileNotFoundError(f"no train_config.json in {policy_path}")
+    dataset = json.loads(train_config_path.read_text())["dataset"]
+    return dataset["repo_id"], dataset.get("revision") or "main"
+
+
 def install_action_smoother(robot, alpha: float) -> None:
     """Wrap ``robot.send_action`` with a per-joint EMA low-pass to damp residual jitter.
 
@@ -214,26 +240,20 @@ def install_action_smoother(robot, alpha: float) -> None:
     robot.send_action = smoothed_send
 
 
-def clear_stuck_port(robot) -> bool:
-    """Recover from a Ctrl-C landing mid-serial-transaction.
-
-    dynamixel_sdk guards every read/write with a plain `port.is_using` bool (set True before the
-    transaction, False after), with NO try/finally. If SIGINT is delivered while that flag is
-    True, it never resets, and every subsequent sync_read/sync_write immediately fails with
-    ConnectionError("... [TxRxResult] Port is in use!") even though the port itself is fine.
-    robot.disconnect() resets this same flag (motors_bus.py disconnect(), before closing the
-    port) -- this does the equivalent reset without a full disconnect/reconnect cycle.
-    Returns True if a port_handler was found and reset.
-    """
-    port_handler = getattr(getattr(robot, "bus", None), "port_handler", None)
-    if port_handler is None:
-        return False
-    port_handler.is_using = False
-    return True
-
-
-def return_home(robot, target: dict[str, float], duration_s: float, fps: int, label: str) -> None:
+def return_home(
+    robot,
+    target: dict[str, float],
+    duration_s: float,
+    fps: int,
+    label: str,
+    *,
+    max_step_delta: float | None = None,
+) -> None:
     """Smoothly interpolate from the current pose to ``target`` over ``duration_s`` at ``fps``."""
+    if fps <= 0:
+        raise ValueError("fps must be positive.")
+    if max_step_delta is not None and max_step_delta <= 0:
+        raise ValueError("max_step_delta must be positive when provided.")
     print(f"\n[eval_async] returning to {label} pose over {duration_s:.1f}s...", flush=True)
     try:
         current = joint_positions(robot)
@@ -245,15 +265,17 @@ def return_home(robot, target: dict[str, float], duration_s: float, fps: int, la
     for k in sorted(target):
         print(f"[eval_async]   {k:18s} {current.get(k, float('nan')):8.2f} -> {target[k]:8.2f} "
               f"(Δ{target[k] - current.get(k, target[k]):+.2f})", flush=True)
-    steps = max(1, int(duration_s * fps))
-    for step in range(1, steps + 1):
-        t0 = time.perf_counter()
-        alpha = step / steps
-        robot.send_action({k: current[k] + alpha * (target[k] - current[k]) for k in target})
-        time.sleep(max(0.0, 1.0 / fps - (time.perf_counter() - t0)))
+    target_vector = np.array([target[f"{name}.pos"] for name in JOINT_NAMES], dtype=np.float32)
+    move_to_joint_state(
+        robot,
+        target=target_vector,
+        timeout=max(duration_s, 1 / fps),
+        ramp_seconds=max(duration_s, 0),
+        hz=fps,
+        max_delta=max_step_delta or 0,
+        tolerance=None,
+    )
     print(f"[eval_async] {label} pose reached.", flush=True)
-
-
 def heartbeat(client, interval: float = 2.0) -> None:
     """Periodic liveness line, since the control loop is otherwise silent."""
     start = time.time()
@@ -331,6 +353,25 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--home-target", default="dataset_start", choices=["dataset_start", "mean", "start", "zeros"],
                    help="where to park on Ctrl-C (see resolve_home_pose; dataset_start recommended)")
     p.add_argument("--no-return-home", action="store_true", help="do not park the arm on exit")
+    p.add_argument(
+        "--move-to-dataset-start-state",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Move into the demonstrated episode-start distribution before connecting the policy "
+            "(default: enabled)."
+        ),
+    )
+    p.add_argument("--start-state-move-s", type=float, default=3.0)
+    p.add_argument(
+        "--start-state-max-delta",
+        type=float,
+        default=1.0,
+        help="Maximum per-command joint change during the pre-roll start-state move.",
+    )
+    p.add_argument("--start-state-settle-s", type=float, default=1.0)
+    p.add_argument("--start-state-tolerance", type=float, default=0.5)
+    p.add_argument("--start-state-max-z", type=float, default=3.0)
     p.add_argument("--log-dir", default=str(REPO_ROOT / "outputs/eval_async_logs"))
     p.add_argument("--no-file-log", action="store_true", help="do not write client/server log files")
     p.add_argument(
@@ -345,6 +386,154 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--no-launch-server", action="store_true", help="connect to an already-running/remote server")
     p.add_argument("--server-start-timeout", type=float, default=60.0)
     return p.parse_args()
+
+
+def run_robot_client(
+    args: argparse.Namespace,
+    policy_path: Path,
+    camera_names: list[str],
+    fourcc: str | None,
+) -> None:
+    client_cfg = RobotClientConfig(
+        policy_type=args.policy_type,
+        pretrained_name_or_path=str(policy_path),
+        robot=OmxFollowerConfig(
+            port=args.robot_port,
+            id=args.robot_id,
+            cameras={name: camera_config(name, fourcc, args.camera_warmup_s) for name in camera_names},
+        ),
+        actions_per_chunk=args.actions_per_chunk,
+        task=args.task,
+        server_address=args.server_address,
+        policy_device=args.policy_device,
+        client_device=args.client_device,
+        chunk_size_threshold=args.chunk_size_threshold,
+        fps=args.fps,
+        aggregate_fn_name=args.aggregate_fn,
+        debug_visualize_queue_size=args.visualize_queue,
+    )
+    print(
+        f"[eval_async] policy={policy_path.name} device={args.policy_device} fps={args.fps} "
+        f"actions_per_chunk={args.actions_per_chunk} threshold={args.chunk_size_threshold} "
+        f"aggregate={args.aggregate_fn} cameras={camera_names} fourcc={fourcc}",
+        flush=True,
+    )
+
+    client = None
+    trace_file = None
+    home_pose = None
+    home_label = args.home_target
+    fallback_pose = None
+    try:
+        client = RobotClient(client_cfg)  # connects the robot
+        fallback_pose = joint_positions(client.robot)
+        if "top" in client.robot.cameras:
+            try:
+                from models.act.scene_check import print_scene_check
+
+                frame = client.robot.cameras["top"].read_latest()
+                print_scene_check(frame, label="eval_async")
+            except Exception as exc:  # noqa: BLE001 -- informational only, must never block the eval
+                print(f"[eval_async] scene check skipped: {exc!r}", flush=True)
+
+        dataset_start_pose = None
+        if args.move_to_dataset_start_state:
+            repo_id, revision = dataset_reference(policy_path)
+            statistics = dataset_start_statistics(repo_id, revision)
+            dataset_start_pose = {
+                key: float(statistics["mean"][index])
+                for index, key in enumerate(client.robot.action_features)
+            }
+            print(
+                f"[eval_async] moving to demonstrated start distribution from {repo_id}@{revision}",
+                flush=True,
+            )
+            return_home(
+                client.robot,
+                dataset_start_pose,
+                args.start_state_move_s,
+                args.fps,
+                "dataset_start",
+                max_step_delta=args.start_state_max_delta,
+            )
+            current = joint_positions(client.robot)
+            std = {
+                key: float(statistics["std"][index])
+                for index, key in enumerate(client.robot.action_features)
+            }
+            violations = start_state_violations(
+                current,
+                dataset_start_pose,
+                std,
+                tolerance_floor=args.start_state_tolerance,
+                max_z=args.start_state_max_z,
+            )
+            if violations:
+                raise RuntimeError(
+                    f"dataset start-state move remained outside demonstrated support: {violations}"
+                )
+            print(f"[eval_async] demonstrated start-state support reached: {current}", flush=True)
+            if args.start_state_settle_s > 0:
+                time.sleep(args.start_state_settle_s)
+
+        if args.action_smoothing < 1.0:
+            install_action_smoother(client.robot, args.action_smoothing)
+            print(
+                f"[eval_async] action EMA smoothing a={args.action_smoothing} (gripper exempt)",
+                flush=True,
+            )
+        if args.trace_path.lower() != "none":
+            trace_path = (
+                Path("outputs/eval_traces")
+                / f"act_eval_async_{datetime.now().strftime('%Y%m%d-%H%M%S')}.jsonl"
+                if args.trace_path == "auto"
+                else Path(args.trace_path)
+            )
+            trace_path.parent.mkdir(parents=True, exist_ok=True)
+            trace_file = trace_path.open("w")
+            print(f"[eval_async] saving eval trace to {trace_path}", flush=True)
+            install_trace_logger(client.robot, trace_file)
+
+        if not args.no_return_home and args.return_home_s > 0:
+            if args.home_target == "dataset_start" and dataset_start_pose is not None:
+                home_pose = dataset_start_pose
+            else:
+                home_pose = resolve_home_pose(args.home_target, client.robot, policy_path)
+            print(f"[eval_async] Ctrl-C home '{args.home_target}': {home_pose}", flush=True)
+
+        if not client.start():
+            raise RuntimeError("Failed to connect RobotClient to the policy server.")
+        print("[eval_async] connected; control loop running (Ctrl-C to stop)", flush=True)
+        threading.Thread(target=client.receive_actions, daemon=True).start()
+        threading.Thread(target=heartbeat, args=(client,), daemon=True).start()
+        client.control_loop(task=args.task)
+    except KeyboardInterrupt:
+        print("\n[eval_async] interrupted; stopping policy and parking arm.", flush=True)
+    finally:
+        if client is not None:
+            client.shutdown_event.set()
+            cleanup_pose = home_pose
+            if (
+                cleanup_pose is None
+                and not args.no_return_home
+                and args.return_home_s > 0
+                and fallback_pose is not None
+            ):
+                cleanup_pose = fallback_pose
+                home_label = "startup"
+            if cleanup_pose is not None:
+                try:
+                    return_home(client.robot, cleanup_pose, args.return_home_s, args.fps, home_label)
+                except (Exception, KeyboardInterrupt) as exc:  # noqa: BLE001
+                    print(f"[eval_async] could not return home: {exc}", flush=True)
+            try:
+                client.stop()
+            except Exception as exc:  # noqa: BLE001 -- continue closing logs/server
+                print(f"[eval_async] client stop failed: {exc}", flush=True)
+        if trace_file is not None:
+            trace_file.close()
+        if args.visualize_queue and client is not None:
+            visualize_action_queue_size(client.action_queue_size)
 
 
 def main() -> None:
@@ -370,80 +559,17 @@ def main() -> None:
 
     server_proc = None
     if not args.no_launch_server:
-        server_proc = launch_server(host, int(port), args.fps, server_log_path, args.server_start_timeout)
-
-    client_cfg = RobotClientConfig(
-        policy_type=args.policy_type,
-        pretrained_name_or_path=str(policy_path),
-        robot=OmxFollowerConfig(
-            port=args.robot_port, id=args.robot_id,
-            cameras={n: camera_config(n, fourcc, args.camera_warmup_s) for n in camera_names},
-        ),
-        actions_per_chunk=args.actions_per_chunk,
-        task=args.task,
-        server_address=args.server_address,
-        policy_device=args.policy_device,
-        client_device=args.client_device,
-        chunk_size_threshold=args.chunk_size_threshold,
-        fps=args.fps,
-        aggregate_fn_name=args.aggregate_fn,
-        debug_visualize_queue_size=args.visualize_queue,
-    )
-    print(f"[eval_async] policy={policy_path.name} device={args.policy_device} fps={args.fps} "
-          f"actions_per_chunk={args.actions_per_chunk} threshold={args.chunk_size_threshold} "
-          f"aggregate={args.aggregate_fn} cameras={camera_names} fourcc={fourcc}", flush=True)
-
-    client = RobotClient(client_cfg)  # connects the robot
-    if "top" in client.robot.cameras:
-        try:
-            from models.act.scene_check import print_scene_check
-            frame = client.robot.cameras["top"].read_latest()
-            print_scene_check(frame, label="eval_async")
-        except Exception as exc:  # noqa: BLE001 -- informational only, must never block the eval
-            print(f"[eval_async] scene check skipped: {exc!r}", flush=True)
-    if args.action_smoothing < 1.0:
-        install_action_smoother(client.robot, args.action_smoothing)
-        print(f"[eval_async] action EMA smoothing a={args.action_smoothing} (gripper exempt)", flush=True)
-    trace_file = None
-    if args.trace_path.lower() != "none":
-        trace_path = (
-            Path("outputs/eval_traces") / f"act_eval_async_{datetime.now().strftime('%Y%m%d-%H%M%S')}.jsonl"
-            if args.trace_path == "auto"
-            else Path(args.trace_path)
+        server_proc = launch_server(
+            host,
+            int(port),
+            args.fps,
+            server_log_path,
+            args.server_start_timeout,
+            args.policy_type,
         )
-        trace_path.parent.mkdir(parents=True, exist_ok=True)
-        trace_file = trace_path.open("w")
-        print(f"[eval_async] saving eval trace to {trace_path}", flush=True)
-        install_trace_logger(client.robot, trace_file)  # installed after the smoother, see docstring
-    home_pose = None
-    if not args.no_return_home and args.return_home_s > 0:
-        home_pose = resolve_home_pose(args.home_target, client.robot, policy_path)
-        print(f"[eval_async] Ctrl-C home '{args.home_target}': {home_pose}", flush=True)
 
     try:
-        if not client.start():
-            raise RuntimeError("Failed to connect RobotClient to the policy server.")
-        print("[eval_async] connected; control loop running (Ctrl-C to stop)", flush=True)
-        threading.Thread(target=client.receive_actions, daemon=True).start()
-        threading.Thread(target=heartbeat, args=(client,), daemon=True).start()
-        try:
-            client.control_loop(task=args.task)
-        except KeyboardInterrupt:
-            print("\n[eval_async] interrupted; stopping policy and parking arm.", flush=True)
-        finally:
-            client.shutdown_event.set()  # stop control loop + receiver from issuing more actions
-            if home_pose is not None:
-                try:
-                    return_home(client.robot, home_pose, args.return_home_s, args.fps, args.home_target)
-                except (Exception, KeyboardInterrupt) as exc:  # noqa: BLE001
-                    print(f"[eval_async] could not return home: {exc}", flush=True)
-            client.stop()
-            if trace_file is not None:
-                trace_file.close()
-            if args.visualize_queue:
-                visualize_action_queue_size(client.action_queue_size)
-    except KeyboardInterrupt:
-        print("\n[eval_async] interrupted before control loop; shutting down.", flush=True)
+        run_robot_client(args, policy_path, camera_names, fourcc)
     finally:
         if server_proc is not None:
             server_proc.terminate()

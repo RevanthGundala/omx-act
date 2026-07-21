@@ -20,6 +20,7 @@ from lerobot.policies.factory import get_policy_class, make_pre_post_processors
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import models.act.lerobot_policy  # noqa: F401 -- register custom_act before config parsing
 from utils.config import JOINT_NAMES, RECORD_DATASET_REPO_ID
 
 
