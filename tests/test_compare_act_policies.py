@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 
+import evaluation.compare_act_policies as comparison
 from evaluation.compare_act_policies import (
     omx_end_effector_transforms,
     pose_errors,
@@ -35,3 +36,19 @@ def test_pose_errors_are_zero_for_identical_actions():
 
     assert np.array_equal(position_error, np.zeros(2))
     assert np.array_equal(orientation_error, np.zeros(2))
+
+
+def test_episode_start_pairs_skip_missing_and_cross_episode_next_frames():
+    class FakeDataset:
+        hf_dataset = [
+            {"episode_index": 0, "frame_index": 0},
+            {"episode_index": 1, "frame_index": 0},
+            {"episode_index": 2, "frame_index": 0},
+            {"episode_index": 1, "frame_index": 1},
+            {"episode_index": 2, "frame_index": 1},
+        ]
+
+        def __len__(self):
+            return len(self.hf_dataset)
+
+    assert comparison.episode_start_frame_pairs(FakeDataset()) == [(1, 3), (2, 4)]
