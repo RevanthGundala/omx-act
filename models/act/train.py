@@ -3,8 +3,10 @@ from datetime import datetime
 import json
 import os
 from pathlib import Path
+import random
 import time
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 
@@ -12,6 +14,14 @@ from configs.act.base import ACTConfig
 from models.act.act import ACTPolicy
 from models.act.helper import make_dataloaders
 from utils.config import RECORD_DATASET_REPO_ID
+
+
+def seed_training(seed: int) -> None:
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
 
 def compute_loss(model, batch, device, kl_weight):
@@ -47,6 +57,7 @@ def config_from_env() -> ACTConfig:
 
 def main():
     cfg = config_from_env()
+    seed_training(cfg.seed)
     device_name = os.environ.get("ACT_DEVICE")
     if device_name is None:
         device_name = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
