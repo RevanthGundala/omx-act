@@ -34,6 +34,7 @@ class ACTConfig:
     mlp_dim: int = 3200
     dropout: float = 0.1
     exp_weight: float = 0.01
+    stock_parity: bool = False
 
     # Optimization
     num_train_steps: int = 100_000

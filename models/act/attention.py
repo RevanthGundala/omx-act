@@ -3,13 +3,22 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class TransformerBlock(nn.Module):
-    def __init__(self, dim, num_heads=8, mlp_dim=2048, dropout=0.1, use_cross_attention=False):
+    def __init__(
+        self,
+        dim,
+        num_heads=8,
+        mlp_dim=2048,
+        dropout=0.1,
+        use_cross_attention=False,
+        stock_parity=False,
+    ):
         super(TransformerBlock, self).__init__()
         self.self_attn = Attention(dim, num_heads, dropout)
         self.cross_attn = Attention(dim, num_heads, dropout, use_cross_attention=True) if use_cross_attention else None
+        activation = nn.ReLU() if stock_parity else nn.GELU()
         self.mlp = nn.Sequential(
             nn.Linear(dim, mlp_dim),
-            nn.GELU(),
+            activation,
             nn.Dropout(dropout),
             nn.Linear(mlp_dim, dim),
             nn.Dropout(dropout),
@@ -17,8 +26,24 @@ class TransformerBlock(nn.Module):
         self.self_norm = nn.LayerNorm(dim)
         self.cross_norm = nn.LayerNorm(dim) if use_cross_attention else None
         self.mlp_norm = nn.LayerNorm(dim)
+        self.self_residual_dropout = nn.Dropout(dropout) if stock_parity else nn.Identity()
+        self.cross_residual_dropout = nn.Dropout(dropout) if stock_parity else nn.Identity()
+        self.stock_parity = stock_parity
 
     def forward(self, x, encoder_out=None, key_padding_mask=None, pos=None, query_pos=None):
+        if self.stock_parity:
+            self_pos = query_pos if self.cross_attn is not None else pos
+            skip = x
+            x = self.self_attn(x, key_padding_mask=key_padding_mask, pos=self_pos)
+            x = self.self_norm(skip + self.self_residual_dropout(x))
+
+            if self.cross_attn is not None and encoder_out is not None:
+                skip = x
+                x = self.cross_attn(x, encoder_out=encoder_out, pos=pos, query_pos=query_pos)
+                x = self.cross_norm(skip + self.cross_residual_dropout(x))
+
+            return self.mlp_norm(x + self.mlp(x))
+
         # Decoder blocks position their self-attention with the query positions;
         # encoder blocks position theirs with the token positions (pos).
         self_pos = query_pos if self.cross_attn is not None else pos

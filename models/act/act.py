@@ -1,3 +1,5 @@
+from itertools import chain
+
 import torch
 import torch.nn as nn
 from torchvision.models.resnet import ResNet18_Weights, resnet18
@@ -20,6 +22,7 @@ class ACTPolicy(nn.Module):
             num_heads=config.num_heads,
             mlp_dim=config.mlp_dim,
             dropout=config.dropout,
+            stock_parity=config.stock_parity,
         )
         self.decoder = Decoder(
             d_model=config.d_model,
@@ -33,7 +36,15 @@ class ACTPolicy(nn.Module):
             mlp_dim=config.mlp_dim,
             dropout=config.dropout,
             pretrained_backbone=pretrained_backbone,
+            stock_parity=config.stock_parity,
         )
+        if config.stock_parity:
+            for parameter in chain(
+                self.decoder.transformer_encoder.parameters(),
+                self.decoder.transformer_decoder.parameters(),
+            ):
+                if parameter.dim() > 1:
+                    nn.init.xavier_uniform_(parameter)
         temporal_weights = torch.exp(-config.exp_weight * torch.arange(0, config.chunk_size, dtype=torch.float32))
         self.register_buffer("temporal_weights", temporal_weights, persistent=False)
         self.register_buffer("temporal_weights_cumsum", torch.cumsum(temporal_weights, dim=0), persistent=False)
@@ -109,6 +120,7 @@ class CVAE_Encoder(nn.Module):
         num_heads=8,
         mlp_dim=2048,
         dropout=0.1,
+        stock_parity=False,
     ):
         super().__init__()
         # 2 separate projects for future actions and current joint pos
@@ -123,6 +135,7 @@ class CVAE_Encoder(nn.Module):
                 mlp_dim=mlp_dim,
                 dropout=dropout,
                 use_cross_attention=False,
+                stock_parity=stock_parity,
             ) for _ in range(num_encoder_layers)
         ])
         self.chunk_size = chunk_size
@@ -164,6 +177,7 @@ class Decoder(nn.Module):
         mlp_dim=2048,
         dropout=0.1,
         pretrained_backbone=False,
+        stock_parity=False,
     ): 
         super().__init__() 
         self.d_model = d_model
@@ -174,6 +188,7 @@ class Decoder(nn.Module):
         self.image_proj = nn.Linear(512, d_model)
         self.image_pos_emb = ACTSinusoidalPositionEmbedding2d(d_model // 2)
         self.camera_emb = nn.Parameter(torch.zeros(1, num_cameras, d_model))
+        self.stock_parity = stock_parity
         self.z_proj = nn.Linear(d_z, d_model)
         self.joint_proj = nn.Linear(joint_dim, d_model)
         self.transformer_encoder = nn.ModuleList([
@@ -183,6 +198,7 @@ class Decoder(nn.Module):
                 mlp_dim=mlp_dim,
                 dropout=dropout,
                 use_cross_attention=False,
+                stock_parity=stock_parity,
             ) for _ in range(num_encoder_layers)
         ]) 
         self.transformer_decoder = nn.ModuleList([
@@ -192,11 +208,13 @@ class Decoder(nn.Module):
                 mlp_dim=mlp_dim,
                 dropout=dropout,
                 use_cross_attention=True,
+                stock_parity=stock_parity,
             ) for _ in range(num_decoder_layers)
         ]) 
         self.joint_z_pos_emb = nn.Embedding(2, d_model)
         self.q_emb = nn.Parameter(torch.randn(1, chunk_size, d_model))
         self.act_proj = nn.Linear(d_model, joint_dim)
+        self.final_norm = nn.LayerNorm(d_model) if stock_parity else nn.Identity()
     
     def forward(self, images, joints, z): 
         images = self._prepare_images(images)
@@ -212,7 +230,8 @@ class Decoder(nn.Module):
         image_tokens = image_features.flatten(2).permute(0, 2, 1)
         image_tokens = self.image_proj(image_tokens)
         image_tokens = image_tokens.reshape(bs, num_cameras, spatial_tokens, self.d_model)
-        image_tokens = image_tokens + self.camera_emb.unsqueeze(2)
+        if not self.stock_parity:
+            image_tokens = image_tokens + self.camera_emb.unsqueeze(2)
         image_tokens = image_tokens.reshape(bs, num_cameras * spatial_tokens, self.d_model)
 
         qpos_token = self.joint_proj(joints).unsqueeze(1)
@@ -226,6 +245,7 @@ class Decoder(nn.Module):
         out = torch.zeros_like(q_tok)
         for block in self.transformer_decoder:
             out = block(out, encoder_out=memory, pos=pos, query_pos=q_tok)
+        out = self.final_norm(out)
         act_pred = self.act_proj(out)
         return act_pred
 
@@ -249,6 +269,5 @@ class Decoder(nn.Module):
         
 
         
-
 
 

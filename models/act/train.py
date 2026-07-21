@@ -38,6 +38,7 @@ def config_from_env() -> ACTConfig:
         chunk_size=int(os.environ.get("ACT_TRAIN_CHUNK_SIZE") or base_cfg.chunk_size),
         save_freq=int(os.environ.get("ACT_TRAIN_SAVE_FREQ", base_cfg.save_freq)),
         train_split=float(train_split) if train_split else base_cfg.train_split,
+        stock_parity=os.environ.get("ACT_TRAIN_STOCK_PARITY", "0") == "1",
     )
     if not 0 < cfg.train_split <= 1:
         raise ValueError(f"ACT_TRAIN_SPLIT must be in (0, 1], got {cfg.train_split}.")
