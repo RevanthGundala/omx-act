@@ -57,18 +57,31 @@ def config_from_env() -> ACTConfig:
 
 def main():
     cfg = config_from_env()
-    seed_training(cfg.seed)
     device_name = os.environ.get("ACT_DEVICE")
     if device_name is None:
         device_name = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
     device = torch.device(device_name)
+    resume_checkpoint = os.environ.get("ACT_TRAIN_RESUME_CHECKPOINT")
+    checkpoint = None
+    if resume_checkpoint:
+        checkpoint = torch.load(resume_checkpoint, map_location=device, weights_only=False)
+        if not isinstance(checkpoint, dict) or not isinstance(checkpoint.get("config"), dict):
+            raise ValueError(f"Resume checkpoint {resume_checkpoint} is missing a config dictionary.")
+        checkpoint_stock_parity = bool(checkpoint["config"].get("stock_parity", False))
+        if cfg.stock_parity != checkpoint_stock_parity:
+            print(
+                "Resume checkpoint architecture overrides "
+                f"stock_parity={cfg.stock_parity} with stock_parity={checkpoint_stock_parity}.",
+                flush=True,
+            )
+            cfg = replace(cfg, stock_parity=checkpoint_stock_parity)
+
+    seed_training(cfg.seed)
     model = ACTPolicy(cfg, pretrained_backbone=True).to(device)
     optim = torch.optim.AdamW(model.parameters(), lr=cfg.learning_rate, weight_decay=cfg.weight_decay)
     train_loader, val_loader = make_dataloaders(cfg)
-    resume_checkpoint = os.environ.get("ACT_TRAIN_RESUME_CHECKPOINT")
     start_step = 0
-    if resume_checkpoint:
-        checkpoint = torch.load(resume_checkpoint, map_location=device)
+    if checkpoint is not None:
         model.load_state_dict(checkpoint["model_state_dict"])
         optim.load_state_dict(checkpoint["optimizer_state_dict"])
         start_step = int(checkpoint["step"])
