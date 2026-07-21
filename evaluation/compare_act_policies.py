@@ -150,6 +150,39 @@ def _resolve_device(value: str) -> torch.device:
     return torch.device("cpu")
 
 
+def episode_start_frame_pairs(
+    dataset: LeRobotDataset,
+    max_episodes: int | None = None,
+) -> list[tuple[int, int]]:
+    indices_by_frame = {}
+    episode_starts = []
+    for dataset_index in range(len(dataset)):
+        row = dataset.hf_dataset[dataset_index]
+        episode_index = int(row["episode_index"])
+        frame_index = int(row["frame_index"])
+        key = (episode_index, frame_index)
+        if key in indices_by_frame:
+            raise ValueError(f"Dataset contains duplicate episode/frame key {key}")
+        indices_by_frame[key] = dataset_index
+        if frame_index == 0:
+            episode_starts.append((episode_index, dataset_index))
+
+    pairs = [
+        (start_index, indices_by_frame[(episode_index, 1)])
+        for episode_index, start_index in episode_starts
+        if (episode_index, 1) in indices_by_frame
+    ]
+    if max_episodes is not None:
+        if max_episodes <= 0:
+            raise ValueError("--max-episodes must be positive")
+        if len(pairs) > max_episodes:
+            selected = np.linspace(0, len(pairs) - 1, max_episodes).round().astype(int)
+            pairs = [pairs[index] for index in selected]
+    if not pairs:
+        raise ValueError("Dataset contains no episode starts with an in-episode frame 1")
+    return pairs
+
+
 def _predict_chunk(policy, preprocessor, postprocessor, image_keys, state_sample, image_sample):
     observation = {"observation.state": state_sample["observation.state"]}
     observation.update({key: image_sample[key] for key in image_keys})
@@ -397,23 +430,9 @@ def main() -> None:
             "action": [index / metadata.fps for index in range(chunk_size)]
         },
     )
-    start_indices = [
-        index
-        for index in range(len(dataset))
-        if int(dataset.hf_dataset[index]["frame_index"]) == 0
-    ]
-    if args.max_episodes is not None and len(start_indices) > args.max_episodes:
-        selected = np.linspace(
-            0,
-            len(start_indices) - 1,
-            args.max_episodes,
-        ).round().astype(int)
-        start_indices = [start_indices[index] for index in selected]
-    if not start_indices:
-        raise ValueError("Dataset contains no episode-start frames")
-
-    starts = [dataset[index] for index in start_indices]
-    next_frames = [dataset[index + 1] for index in start_indices]
+    start_frame_pairs = episode_start_frame_pairs(dataset, args.max_episodes)
+    starts = [dataset[start_index] for start_index, _ in start_frame_pairs]
+    next_frames = [dataset[next_index] for _, next_index in start_frame_pairs]
     device = _resolve_device(args.device)
     results = [
         evaluate_policy(label, path, device, starts, next_frames)
