@@ -19,3 +19,10 @@ def test_config_from_env_rejects_invalid_split(monkeypatch):
 
     with pytest.raises(ValueError, match="ACT_TRAIN_SPLIT"):
         config_from_env()
+
+
+def test_config_from_env_enables_stock_parity(monkeypatch):
+    monkeypatch.setenv("ACT_TRAIN_DATASET_REPO_ID", "owner/dataset")
+    monkeypatch.setenv("ACT_TRAIN_STOCK_PARITY", "1")
+
+    assert config_from_env().stock_parity
