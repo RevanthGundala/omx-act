@@ -20,10 +20,12 @@ def make_dataloaders(cfg: ACTConfig):
     )
 
     train_dataset = ACTDataset(cfg, episodes=train_episodes)
+    train_generator = torch.Generator().manual_seed(cfg.seed)
     train_loader = DataLoader(
         dataset=train_dataset,
         batch_size=cfg.batch_size,
         shuffle=True,
+        generator=train_generator,
         num_workers=cfg.num_workers,
         pin_memory=torch.cuda.is_available(),
     )
@@ -113,5 +115,4 @@ class ACTDataset(Dataset):
             "images": images * self.image_std + self.image_mean,
             "actions": actions * self.action_std + self.action_mean 
         }
-
 
