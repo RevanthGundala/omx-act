@@ -347,6 +347,18 @@ class ActionStreamWatchdog:
                 return
 
 
+class LockedRobotClient(RobotClient):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.action_queue_lock = threading.RLock()
+
+    def _aggregate_action_queues(self, *args, **kwargs):
+        # Upstream aliases the deque under this lock, then iterates it after
+        # releasing the lock while the control thread may pop from it.
+        with self.action_queue_lock:
+            return super()._aggregate_action_queues(*args, **kwargs)
+
+
 def install_trace_logger(robot, trace_file) -> None:
     """Wrap robot.send_action to log qpos + target + actually-sent action per control tick, for
     apples-to-apples comparison against models/act/eval_async_custom.py's trace.
@@ -498,7 +510,7 @@ def run_robot_client(
     home_label = args.home_target
     fallback_pose = None
     try:
-        client = RobotClient(client_cfg)  # connects the robot
+        client = LockedRobotClient(client_cfg)  # connects the robot
         fallback_pose = joint_positions(client.robot)
         if "top" in client.robot.cameras:
             try:
