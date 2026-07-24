@@ -158,7 +158,9 @@ def main():
                         flush=True,
                     )
                 if val_loader is not None and step % cfg.eval_freq == 0:
-                    model.eval()
+                    # Match stock LeRobot ACT: validation computes the VAE
+                    # objective in train mode, but without gradients.
+                    model.train()
                     val_loss = 0.0
                     val_action_loss = 0.0
                     val_kl_loss = 0.0

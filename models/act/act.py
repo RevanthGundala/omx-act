@@ -53,7 +53,7 @@ class ACTPolicy(nn.Module):
         
 
     def forward(self, images, qpos, future_actions=None, action_mask=None):
-        if future_actions is None:
+        if future_actions is None or not self.training:
             z = torch.zeros(qpos.shape[0], self.d_z, dtype=qpos.dtype, device=qpos.device)
             mu, log_var = None, None
         else:
