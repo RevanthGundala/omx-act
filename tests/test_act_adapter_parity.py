@@ -1,0 +1,82 @@
+from dataclasses import asdict
+
+import torch
+from lerobot.configs.types import FeatureType, PolicyFeature
+from lerobot.policies.act.modeling_act import ACTTemporalEnsembler
+
+from configs.act.base import ACTConfig
+from models.act.lerobot_policy import (
+    CustomACTConfig,
+    CustomACTPolicy,
+    _adapter_config,
+)
+
+
+def _source_config() -> ACTConfig:
+    return ACTConfig(
+        dataset_repo_id="owner/dataset",
+        camera_names=("top",),
+        chunk_size=3,
+        d_model=32,
+        d_z=8,
+        num_vae_encoder_layers=1,
+        num_encoder_layers=1,
+        num_decoder_layers=1,
+        num_heads=4,
+        mlp_dim=64,
+        joint_dim=2,
+        exp_weight=0.01,
+    )
+
+
+def _policy_config(source: ACTConfig) -> CustomACTConfig:
+    return CustomACTConfig(
+        input_features={
+            "observation.state": PolicyFeature(FeatureType.STATE, (2,)),
+            "observation.images.top": PolicyFeature(FeatureType.VISUAL, (3, 64, 64)),
+        },
+        output_features={"action": PolicyFeature(FeatureType.ACTION, (2,))},
+        device="cpu",
+        chunk_size=source.chunk_size,
+        n_action_steps=1,
+        temporal_ensemble_coeff=source.exp_weight,
+        dim_model=source.d_model,
+        n_heads=source.num_heads,
+        dim_feedforward=source.mlp_dim,
+        n_encoder_layers=source.num_encoder_layers,
+        n_decoder_layers=source.num_decoder_layers,
+        latent_dim=source.d_z,
+        n_vae_encoder_layers=source.num_vae_encoder_layers,
+        source_model_config=asdict(source),
+        dataset_repo_id=source.dataset_repo_id,
+        action_space="absolute",
+    )
+
+
+def test_adapter_select_action_honors_temporal_ensemble_config(monkeypatch):
+    source = _source_config()
+    policy = CustomACTPolicy(_policy_config(source))
+    chunks = [
+        torch.tensor([[[1.0, 10.0], [2.0, 20.0], [3.0, 30.0]]]),
+        torch.tensor([[[5.0, 50.0], [6.0, 60.0], [7.0, 70.0]]]),
+    ]
+    monkeypatch.setattr(policy, "predict_action_chunk", lambda _batch: chunks.pop(0))
+    reference = ACTTemporalEnsembler(source.exp_weight, source.chunk_size)
+
+    expected_first = reference.update(
+        torch.tensor([[[1.0, 10.0], [2.0, 20.0], [3.0, 30.0]]])
+    )
+    expected_second = reference.update(
+        torch.tensor([[[5.0, 50.0], [6.0, 60.0], [7.0, 70.0]]])
+    )
+
+    assert torch.equal(policy.select_action({}), expected_first)
+    assert torch.allclose(policy.select_action({}), expected_second)
+
+
+def test_exported_adapter_preserves_native_temporal_ensemble_weight():
+    source = _source_config()
+
+    config = _adapter_config(source, asdict(source), "cpu", "absolute")
+
+    assert config.temporal_ensemble_coeff == source.exp_weight
