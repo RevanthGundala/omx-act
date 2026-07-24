@@ -18,6 +18,7 @@ from lerobot.configs import PreTrainedConfig
 from lerobot.configs.types import FeatureType, PolicyFeature
 from lerobot.datasets import LeRobotDatasetMetadata
 from lerobot.policies.act.configuration_act import ACTConfig as LeRobotACTConfig
+from lerobot.policies.act.modeling_act import ACTTemporalEnsembler
 from lerobot.policies.act.processor_act import make_act_pre_post_processors
 from lerobot.policies.pretrained import PreTrainedPolicy
 from lerobot.utils.constants import ACTION, OBS_STATE
@@ -57,7 +58,12 @@ class CustomACTPolicy(PreTrainedPolicy):
         source["camera_names"] = tuple(source["camera_names"])
         self.source_config = ACTConfig(**source)
         self.model = ACTPolicy(self.source_config)
-        self._action_queue: deque[Tensor] = deque()
+        self._action_queue: deque[Tensor] = deque(maxlen=config.n_action_steps)
+        self.temporal_ensembler = (
+            ACTTemporalEnsembler(config.temporal_ensemble_coeff, config.chunk_size)
+            if config.temporal_ensemble_coeff is not None
+            else None
+        )
         self._validate_config()
 
     @property
@@ -83,6 +89,8 @@ class CustomACTPolicy(PreTrainedPolicy):
 
     def reset(self) -> None:
         self._action_queue.clear()
+        if self.temporal_ensembler is not None:
+            self.temporal_ensembler.reset()
 
     def _inputs(self, batch: dict[str, Tensor]) -> tuple[Tensor, Tensor]:
         images = torch.stack(
@@ -99,6 +107,8 @@ class CustomACTPolicy(PreTrainedPolicy):
     @torch.no_grad()
     def select_action(self, batch: dict[str, Tensor], **_kwargs) -> Tensor:
         self.eval()
+        if self.temporal_ensembler is not None:
+            return self.temporal_ensembler.update(self.predict_action_chunk(batch))
         if not self._action_queue:
             actions = self.predict_action_chunk(batch)[:, : self.config.n_action_steps]
             self._action_queue.extend(actions.transpose(0, 1))
@@ -210,7 +220,7 @@ def _adapter_config(
         device=device,
         chunk_size=source.chunk_size,
         n_action_steps=1,
-        temporal_ensemble_coeff=None,
+        temporal_ensemble_coeff=source.exp_weight,
         dim_model=source.d_model,
         n_heads=source.num_heads,
         dim_feedforward=source.mlp_dim,
