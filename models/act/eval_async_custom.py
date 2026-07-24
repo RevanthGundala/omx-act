@@ -60,6 +60,14 @@ AGGREGATE_FNS = {
 }
 
 
+def limit_action_chunk(chunk: np.ndarray, actions_per_chunk: int) -> np.ndarray:
+    if not 1 <= actions_per_chunk <= chunk.shape[0]:
+        raise ValueError(
+            f"actions_per_chunk must be in [1, {chunk.shape[0]}], got {actions_per_chunk}"
+        )
+    return chunk[:actions_per_chunk]
+
+
 class ChunkQueue:
     """Thread-safe buffer of upcoming absolute-timestep actions.
 
@@ -201,7 +209,16 @@ def main() -> None:
                          "comparison against the official checkpoint's async eval). --action-smoothing already "
                          "provides a soft velocity limiter.")
     parser.add_argument("--chunk-size-threshold", type=float, default=0.4,
-                         help="Trigger a replan once the queue drains below this fraction of chunk_size.")
+                         help="Trigger a replan once the queue drains below this fraction of actions_per_chunk.")
+    parser.add_argument(
+        "--actions-per-chunk",
+        type=int,
+        default=None,
+        help=(
+            "Number of predicted actions to enqueue per inference. Defaults to "
+            "min(30, checkpoint chunk_size), matching eval_async.py."
+        ),
+    )
     parser.add_argument("--aggregate-fn", choices=list(AGGREGATE_FNS), default="conservative")
     parser.add_argument("--action-smoothing", type=float, default=0.7,
                          help="EMA alpha applied to sent actions (1.0 disables). Gripper is exempt.")
@@ -225,6 +242,15 @@ def main() -> None:
     )
     ckpt = torch.load(args.checkpoint, map_location=device, weights_only=False)
     cfg = ACTConfig(**{f.name: ckpt["config"][f.name] for f in fields(ACTConfig) if f.name in ckpt["config"]})
+    actions_per_chunk = (
+        min(30, cfg.chunk_size)
+        if args.actions_per_chunk is None
+        else args.actions_per_chunk
+    )
+    if not 1 <= actions_per_chunk <= cfg.chunk_size:
+        raise ValueError(
+            f"--actions-per-chunk must be in [1, {cfg.chunk_size}], got {actions_per_chunk}"
+        )
 
     zero_cameras = parse_camera_list(args.zero_cameras)
     freeze_cameras = parse_camera_list(args.freeze_cameras)
@@ -257,6 +283,7 @@ def main() -> None:
     print(
         "eval_async_custom_config "
         f"checkpoint={args.checkpoint} device={device} chunk_size={cfg.chunk_size} "
+        f"actions_per_chunk={actions_per_chunk} "
         f"cameras={cfg.camera_names} hz={args.hz:g} threshold={args.chunk_size_threshold} "
         f"aggregate={args.aggregate_fn} action_smoothing={args.action_smoothing} "
         f"action_space={args.action_space}",
@@ -376,7 +403,10 @@ def main() -> None:
                 with torch.inference_mode():
                     qpos_normalized, images = preprocess(obs)
                     act_pred, _, _ = model.forward(images, qpos_normalized)
-                action_normalized = act_pred.squeeze(0).cpu().numpy()  # [chunk_size, action_dim]
+                action_normalized = limit_action_chunk(
+                    act_pred.squeeze(0).cpu().numpy(),
+                    actions_per_chunk,
+                )
                 action = action_normalized * a_std + a_mean
                 if args.action_space == "delta":
                     action = action + obs["qpos"][None, :]
@@ -522,7 +552,7 @@ def main() -> None:
             sent_action = send_action(follower, smoothed)
             last_target = np.array([sent_action[f"{n}.pos"] for n in JOINT_NAMES], dtype=np.float32)
 
-            if len(queue) <= args.chunk_size_threshold * cfg.chunk_size:
+            if len(queue) <= args.chunk_size_threshold * actions_per_chunk:
                 replan_event.set()
 
             obs, cam_err = capture_obs_safe()
