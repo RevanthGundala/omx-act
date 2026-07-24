@@ -286,6 +286,67 @@ def heartbeat(client, interval: float = 2.0) -> None:
               f"queue={client.action_queue.qsize()}", flush=True)
 
 
+class ActionStreamWatchdog:
+    def __init__(
+        self,
+        client,
+        *,
+        first_action_timeout: float,
+        starvation_timeout: float,
+        poll_interval: float = 0.1,
+    ):
+        self.client = client
+        self.first_action_timeout = first_action_timeout
+        self.starvation_timeout = starvation_timeout
+        self.poll_interval = poll_interval
+        self.reason: str | None = None
+
+    def run(self) -> None:
+        started = time.perf_counter()
+        last_progress = started
+        last_action = -1
+        received_actions = False
+        while not self.client.shutdown_event.wait(self.poll_interval):
+            now = time.perf_counter()
+            with self.client.latest_action_lock:
+                latest_action = self.client.latest_action
+            with self.client.action_queue_lock:
+                queue_size = self.client.action_queue.qsize()
+
+            if latest_action > last_action:
+                last_action = latest_action
+                last_progress = now
+                received_actions = True
+            elif queue_size > 0 and not received_actions:
+                last_progress = now
+                received_actions = True
+
+            if (
+                not received_actions
+                and self.first_action_timeout > 0
+                and now - started >= self.first_action_timeout
+            ):
+                self.reason = (
+                    "no first action chunk received within "
+                    f"{self.first_action_timeout:g}s"
+                )
+            elif (
+                received_actions
+                and queue_size == 0
+                and self.starvation_timeout > 0
+                and now - last_progress >= self.starvation_timeout
+            ):
+                self.reason = (
+                    "action queue remained empty for "
+                    f"{self.starvation_timeout:g}s"
+                )
+
+            if self.reason is not None:
+                print(f"[eval_async] watchdog abort: {self.reason}", flush=True)
+                self.client.shutdown_event.set()
+                return
+
+
 def install_trace_logger(robot, trace_file) -> None:
     """Wrap robot.send_action to log qpos + target + actually-sent action per control tick, for
     apples-to-apples comparison against models/act/eval_async_custom.py's trace.
@@ -385,6 +446,18 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--server-address", default="127.0.0.1:8080")
     p.add_argument("--no-launch-server", action="store_true", help="connect to an already-running/remote server")
     p.add_argument("--server-start-timeout", type=float, default=60.0)
+    p.add_argument(
+        "--first-action-timeout",
+        type=float,
+        default=10.0,
+        help="Abort if no first action chunk arrives within this many seconds. <=0 disables.",
+    )
+    p.add_argument(
+        "--action-starvation-timeout",
+        type=float,
+        default=2.0,
+        help="Abort if the action queue stays empty this long after playback starts. <=0 disables.",
+    )
     return p.parse_args()
 
 
@@ -506,7 +579,15 @@ def run_robot_client(
         print("[eval_async] connected; control loop running (Ctrl-C to stop)", flush=True)
         threading.Thread(target=client.receive_actions, daemon=True).start()
         threading.Thread(target=heartbeat, args=(client,), daemon=True).start()
+        watchdog = ActionStreamWatchdog(
+            client,
+            first_action_timeout=args.first_action_timeout,
+            starvation_timeout=args.action_starvation_timeout,
+        )
+        threading.Thread(target=watchdog.run, daemon=True).start()
         client.control_loop(task=args.task)
+        if watchdog.reason is not None:
+            raise RuntimeError(watchdog.reason)
     except KeyboardInterrupt:
         print("\n[eval_async] interrupted; stopping policy and parking arm.", flush=True)
     finally:
