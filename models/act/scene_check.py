@@ -86,7 +86,26 @@ def load_coverage(path: Path = COVERAGE_JSON) -> tuple[Counter, Counter, int]:
     return sponge_counts, bowl_counts, len(data)
 
 
-def check_scene(image_rgb: np.ndarray, coverage_path: Path = COVERAGE_JSON) -> dict:
+def coverage_from_frames(
+    frames: list[np.ndarray] | tuple[np.ndarray, ...],
+) -> tuple[Counter, Counter, int]:
+    sponge_counts = Counter()
+    bowl_counts = Counter()
+    for frame in frames:
+        detection = detect_sponge_bowl(frame)
+        if detection["sponge_xy_norm"] is not None:
+            sponge_counts[xy_bucket(detection["sponge_xy_norm"])] += 1
+        if detection["bowl_xy_norm"] is not None:
+            bowl_counts[xy_bucket(detection["bowl_xy_norm"])] += 1
+    return sponge_counts, bowl_counts, len(frames)
+
+
+def check_scene(
+    image_rgb: np.ndarray,
+    coverage_path: Path = COVERAGE_JSON,
+    *,
+    coverage: tuple[Counter, Counter, int] | None = None,
+) -> dict:
     """Full check: detect + bucket + compare against training coverage. Returns a dict with
     the raw detections, buckets, per-bucket episode counts, and a plain-language verdict."""
     det = detect_sponge_bowl(image_rgb)
@@ -104,11 +123,13 @@ def check_scene(image_rgb: np.ndarray, coverage_path: Path = COVERAGE_JSON) -> d
         )
         return result
 
-    try:
-        sponge_counts, bowl_counts, n_episodes = load_coverage(coverage_path)
-    except FileNotFoundError as exc:
-        result["verdict"] = f"detected positions but no coverage baseline available: {exc}"
-        return result
+    if coverage is None:
+        try:
+            coverage = load_coverage(coverage_path)
+        except FileNotFoundError as exc:
+            result["verdict"] = f"detected positions but no coverage baseline available: {exc}"
+            return result
+    sponge_counts, bowl_counts, n_episodes = coverage
 
     sponge_bucket = xy_bucket(det["sponge_xy_norm"])
     bowl_bucket = xy_bucket(det["bowl_xy_norm"])
@@ -141,9 +162,14 @@ def check_scene(image_rgb: np.ndarray, coverage_path: Path = COVERAGE_JSON) -> d
     return result
 
 
-def print_scene_check(image_rgb: np.ndarray, label: str = "eval") -> dict:
+def print_scene_check(
+    image_rgb: np.ndarray,
+    label: str = "eval",
+    *,
+    coverage: tuple[Counter, Counter, int] | None = None,
+) -> dict:
     """Convenience wrapper: run check_scene and print a one-line summary. Returns the full result."""
-    result = check_scene(image_rgb)
+    result = check_scene(image_rgb, coverage=coverage)
     sx = result["sponge_xy_norm"]
     bx = result["bowl_xy_norm"]
     sx_s = f"({sx[0]:.2f},{sx[1]:.2f})" if sx else "?"

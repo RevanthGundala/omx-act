@@ -12,10 +12,10 @@ def _frame(sponge_x: int, bowl_x: int) -> np.ndarray:
 
 
 def test_scene_check_uses_supplied_training_frame_coverage():
-    references = [_frame(30, 300), _frame(45, 315), _frame(60, 330)]
+    references = [_frame(30, 330), _frame(45, 345), _frame(60, 360)]
     coverage = coverage_from_frames(references)
 
-    result = check_scene(_frame(50, 320), coverage=coverage)
+    result = check_scene(_frame(50, 350), coverage=coverage)
 
     assert result["n_episodes"] == 3
     assert result["sponge_bucket_count"] == 3
