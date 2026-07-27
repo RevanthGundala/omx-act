@@ -39,6 +39,7 @@ from lerobot.cameras.opencv.camera_opencv import OpenCVCamera
 from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig
 from lerobot.robots.omx_follower.config_omx_follower import OmxFollowerConfig
 from lerobot.robots.omx_follower.omx_follower import OmxFollower
+from lerobot.transport import services_pb2
 
 from models.act.eval_common import (
     clear_stuck_port,
@@ -351,12 +352,32 @@ class LockedRobotClient(RobotClient):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.action_queue_lock = threading.RLock()
+        self.trial_active = threading.Event()
+        self.trial_active.set()
 
     def _aggregate_action_queues(self, *args, **kwargs):
+        trial_active = getattr(self, "trial_active", None)
+        if trial_active is not None and not trial_active.is_set():
+            return
         # Upstream aliases the deque under this lock, then iterates it after
         # releasing the lock while the control thread may pop from it.
         with self.action_queue_lock:
             return super()._aggregate_action_queues(*args, **kwargs)
+
+    def pause_trial(self) -> None:
+        self.trial_active.clear()
+        with self.action_queue_lock:
+            while not self.action_queue.empty():
+                self.action_queue.get_nowait()
+
+    def prepare_trial(self) -> None:
+        self.pause_trial()
+        self.stub.Ready(services_pb2.Empty())
+        with self.latest_action_lock:
+            self.latest_action = -1
+        self.action_chunk_size = -1
+        self.must_go.set()
+        self.trial_active.set()
 
 
 def install_trace_logger(robot, trace_file) -> None:
