@@ -455,6 +455,8 @@ def run_trial_sequence(
         )
         reasons.append(reason)
         after_trial(trial, reason)
+        if reason == "shutdown" or not getattr(client, "running", True):
+            break
     return reasons
 
 
