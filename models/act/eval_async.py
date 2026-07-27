@@ -697,10 +697,9 @@ def run_robot_client(
         fallback_pose = joint_positions(client.robot)
         camera_view_checker = None
         scene_coverage = None
-        if args.camera_view_check and "top" in client.robot.cameras:
+        if "top" in client.robot.cameras:
             try:
-                from models.act.camera_alignment import CameraAlignmentChecker
-                from models.act.scene_check import coverage_from_frames
+                from models.act.camera_alignment import prepare_diagnostic_references
 
                 camera_repo_id, camera_revision = diagnostic_dataset_reference(
                     policy_path,
@@ -830,11 +829,18 @@ def run_robot_client(
                     from models.act.scene_check import print_scene_check
 
                     frame = client.robot.cameras["top"].read_latest()
-                    print_scene_check(
-                        frame,
-                        label=f"eval_async trial={trial}",
-                        coverage=scene_coverage,
-                    )
+                    if scene_coverage is None:
+                        print(
+                            f"[eval_async trial={trial}] SCENE CHECK SKIPPED: "
+                            "training coverage unavailable.",
+                            flush=True,
+                        )
+                    else:
+                        print_scene_check(
+                            frame,
+                            label=f"eval_async trial={trial}",
+                            coverage=scene_coverage,
+                        )
                     if camera_view_checker is not None:
                         from models.act.camera_alignment import print_camera_view_check
 

@@ -9,7 +9,12 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from models.act.scene_check import BLUE_RANGE, TABLE_FRACTION, WHITE_RANGE
+from models.act.scene_check import (
+    BLUE_RANGE,
+    TABLE_FRACTION,
+    WHITE_RANGE,
+    coverage_from_frames,
+)
 
 
 @dataclass(frozen=True)
@@ -38,6 +43,30 @@ def diagnostic_dataset_reference(
         policy_revision if repo_id_override is None else "main"
     )
     return repo_id, revision
+
+
+def prepare_diagnostic_references(
+    repo_id: str,
+    *,
+    revision: str,
+    camera_name: str,
+    max_alignment_references: int,
+    enable_alignment: bool,
+):
+    coverage_frames = load_training_start_frames(
+        repo_id,
+        revision=revision,
+        camera_name=camera_name,
+        max_references=None,
+    )
+    coverage = coverage_from_frames(coverage_frames)
+    checker = None
+    if enable_alignment:
+        checker = CameraAlignmentChecker.from_frames(
+            _select_evenly(coverage_frames, max_alignment_references)
+        )
+        checker.coverage_frames = tuple(coverage_frames)
+    return checker, coverage
 
 
 def _background_feature_mask(image_rgb: np.ndarray) -> np.ndarray:
