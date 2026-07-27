@@ -371,14 +371,12 @@ class LockedRobotClient(RobotClient):
             return
         trial_started_at = getattr(self, "trial_started_at", 0.0)
         if args and trial_started_at:
-            incoming_actions = [
-                action
-                for action in args[0]
-                if action.get_timestamp() >= trial_started_at
-            ]
-            if not incoming_actions:
+            incoming_actions = args[0]
+            if (
+                incoming_actions
+                and incoming_actions[0].get_timestamp() < trial_started_at
+            ):
                 return
-            args = (incoming_actions, *args[1:])
         # Upstream aliases the deque under this lock, then iterates it after
         # releasing the lock while the control thread may pop from it.
         with self.action_queue_lock:
