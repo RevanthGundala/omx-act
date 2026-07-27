@@ -5,7 +5,11 @@ from types import SimpleNamespace
 import torch
 from lerobot.async_inference.helpers import TimedAction
 
-from models.act.eval_async import LockedRobotClient, run_trial_sequence
+from models.act.eval_async import (
+    LockedRobotClient,
+    diagnostic_dataset_reference,
+    run_trial_sequence,
+)
 
 
 class _FakeStub:
@@ -117,3 +121,17 @@ def test_trial_sequence_reuses_client_and_runs_reset_callbacks():
         ("control", "pick", 60.0),
         ("after", 2, "operator"),
     ]
+
+
+def test_diagnostic_reference_can_use_seed_dataset_for_dagger_policy(tmp_path):
+    policy_path = tmp_path / "pretrained_model"
+    policy_path.mkdir()
+    (policy_path / "train_config.json").write_text(
+        '{"dataset": {"repo_id": "owner/dagger", "revision": "dagger-rev"}}'
+    )
+
+    assert diagnostic_dataset_reference(
+        policy_path,
+        repo_id_override="owner/seed",
+        revision_override=None,
+    ) == ("owner/seed", "main")
