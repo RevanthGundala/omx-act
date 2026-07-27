@@ -98,6 +98,30 @@ def load_session_diagnostics(
     )
 
 
+def resolve_dataset_start_pose(
+    robot,
+    policy_path: Path,
+    *,
+    repo_id_override: str | None,
+    revision_override: str | None,
+    statistics_loader,
+):
+    repo_id, revision = diagnostic_dataset_reference(
+        policy_path,
+        repo_id_override,
+        revision_override,
+    )
+    statistics = statistics_loader(repo_id, revision)
+    keys = list(robot.action_features)
+    mean = np.asarray(statistics["mean"], dtype=np.float32).reshape(-1)
+    if len(mean) != len(keys):
+        raise ValueError(
+            f"Dataset start mean has {len(mean)} joints but robot has {len(keys)}."
+        )
+    pose = {key: float(mean[index]) for index, key in enumerate(keys)}
+    return pose, statistics, repo_id, revision
+
+
 def _background_feature_mask(image_rgb: np.ndarray) -> np.ndarray:
     hsv = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2HSV)
     height, width = image_rgb.shape[:2]

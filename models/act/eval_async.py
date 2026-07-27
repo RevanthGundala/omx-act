@@ -45,6 +45,7 @@ from lerobot.transport import services_pb2
 from models.act.camera_alignment import (
     diagnostic_dataset_reference,
     load_session_diagnostics,
+    resolve_dataset_start_pose,
 )
 from models.act.eval_common import (
     clear_stuck_port,
@@ -649,6 +650,20 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--start-state-settle-s", type=float, default=1.0)
     p.add_argument("--start-state-tolerance", type=float, default=0.5)
     p.add_argument("--start-state-max-z", type=float, default=3.0)
+    p.add_argument(
+        "--start-state-repo-id",
+        default=None,
+        help=(
+            "Dataset used to compute the demonstrated start pose. Defaults to the "
+            "policy training dataset. DAgger aggregates with mid-task correction "
+            "windows should override this with the seed dataset."
+        ),
+    )
+    p.add_argument(
+        "--start-state-revision",
+        default=None,
+        help="Revision for --start-state-repo-id (default: main).",
+    )
     p.add_argument("--log-dir", default=str(REPO_ROOT / "outputs/eval_async_logs"))
     p.add_argument("--no-file-log", action="store_true", help="do not write client/server log files")
     p.add_argument(
@@ -736,13 +751,22 @@ def run_robot_client(
                 )
 
         dataset_start_pose = None
+        statistics = None
+        needs_dataset_start = args.move_to_dataset_start_state or (
+            not args.no_return_home
+            and args.return_home_s > 0
+            and args.home_target == "dataset_start"
+        )
+        if needs_dataset_start:
+            dataset_start_pose, statistics, repo_id, revision = resolve_dataset_start_pose(
+                client.robot,
+                policy_path,
+                repo_id_override=args.start_state_repo_id,
+                revision_override=args.start_state_revision,
+                statistics_loader=dataset_start_statistics,
+            )
         if args.move_to_dataset_start_state:
-            repo_id, revision = dataset_reference(policy_path)
-            statistics = dataset_start_statistics(repo_id, revision)
-            dataset_start_pose = {
-                key: float(statistics["mean"][index])
-                for index, key in enumerate(client.robot.action_features)
-            }
+            assert dataset_start_pose is not None and statistics is not None
             print(
                 f"[eval_async] moving to demonstrated start distribution from {repo_id}@{revision}",
                 flush=True,
