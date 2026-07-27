@@ -42,6 +42,7 @@ from lerobot.robots.omx_follower.config_omx_follower import OmxFollowerConfig
 from lerobot.robots.omx_follower.omx_follower import OmxFollower
 from lerobot.transport import services_pb2
 
+from models.act.camera_alignment import diagnostic_dataset_reference
 from models.act.eval_common import (
     clear_stuck_port,
     dataset_start_statistics,
@@ -527,6 +528,19 @@ def parse_args() -> argparse.Namespace:
         default=12,
         help="Maximum number of training start frames used by --camera-view-check.",
     )
+    p.add_argument(
+        "--diagnostic-dataset-repo-id",
+        default=None,
+        help=(
+            "Dataset used for scene/camera baselines. Defaults to the policy "
+            "training dataset; DAgger policies should pass the seed dataset."
+        ),
+    )
+    p.add_argument(
+        "--diagnostic-dataset-revision",
+        default=None,
+        help="Revision for --diagnostic-dataset-repo-id (default: main).",
+    )
 
     p.add_argument("--fps", type=int, default=FPS, help="control-loop rate the robot replays actions at")
     p.add_argument("--policy-device", default="mps", choices=["mps", "cuda", "cpu", "xpu"])
@@ -667,7 +681,11 @@ def run_robot_client(
                 from models.act.camera_alignment import CameraAlignmentChecker
                 from models.act.scene_check import coverage_from_frames
 
-                camera_repo_id, camera_revision = dataset_reference(policy_path)
+                camera_repo_id, camera_revision = diagnostic_dataset_reference(
+                    policy_path,
+                    args.diagnostic_dataset_repo_id,
+                    args.diagnostic_dataset_revision,
+                )
                 print(
                     "[eval_async] loading top-camera alignment references from "
                     f"{camera_repo_id}@{camera_revision}...",

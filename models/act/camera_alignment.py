@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from itertools import combinations
+import json
 import math
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -18,6 +20,24 @@ class CameraTransform:
     scale: float
     inliers: int
     inlier_ratio: float
+
+
+def diagnostic_dataset_reference(
+    policy_path: Path,
+    repo_id_override: str | None,
+    revision_override: str | None,
+) -> tuple[str, str]:
+    train_config_path = policy_path / "train_config.json"
+    if not train_config_path.exists():
+        raise FileNotFoundError(f"no train_config.json in {policy_path}")
+    dataset = json.loads(train_config_path.read_text())["dataset"]
+    policy_repo_id = dataset["repo_id"]
+    policy_revision = dataset.get("revision") or "main"
+    repo_id = repo_id_override or policy_repo_id
+    revision = revision_override or (
+        policy_revision if repo_id_override is None else "main"
+    )
+    return repo_id, revision
 
 
 def _background_feature_mask(image_rgb: np.ndarray) -> np.ndarray:
