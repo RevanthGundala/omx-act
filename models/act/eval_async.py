@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import select
 import socket
 import subprocess
 import sys
@@ -309,6 +310,13 @@ class ActionStreamWatchdog:
         received_actions = False
         while not self.client.shutdown_event.wait(self.poll_interval):
             now = time.perf_counter()
+            trial_active = getattr(self.client, "trial_active", None)
+            if trial_active is not None and not trial_active.is_set():
+                started = now
+                last_progress = now
+                last_action = -1
+                received_actions = False
+                continue
             with self.client.latest_action_lock:
                 latest_action = self.client.latest_action
             with self.client.action_queue_lock:
@@ -353,13 +361,23 @@ class LockedRobotClient(RobotClient):
         super().__init__(*args, **kwargs)
         self.action_queue_lock = threading.RLock()
         self.trial_active = threading.Event()
-        self.trial_active.set()
         self._control_loop_started = False
+        self.trial_started_at = 0.0
 
     def _aggregate_action_queues(self, *args, **kwargs):
         trial_active = getattr(self, "trial_active", None)
         if trial_active is not None and not trial_active.is_set():
             return
+        trial_started_at = getattr(self, "trial_started_at", 0.0)
+        if args and trial_started_at:
+            incoming_actions = [
+                action
+                for action in args[0]
+                if action.get_timestamp() >= trial_started_at
+            ]
+            if not incoming_actions:
+                return
+            args = (incoming_actions, *args[1:])
         # Upstream aliases the deque under this lock, then iterates it after
         # releasing the lock while the control thread may pop from it.
         with self.action_queue_lock:
@@ -378,6 +396,7 @@ class LockedRobotClient(RobotClient):
             self.latest_action = -1
         self.action_chunk_size = -1
         self.must_go.set()
+        self.trial_started_at = time.time()
         self.trial_active.set()
 
     def control_trial(
@@ -414,6 +433,40 @@ class LockedRobotClient(RobotClient):
 
         self.pause_trial()
         return reason
+
+
+def run_trial_sequence(
+    client: LockedRobotClient,
+    *,
+    trials: int,
+    task: str,
+    duration_s: float,
+    stop_requested_factory,
+    before_trial,
+    after_trial,
+) -> list[str]:
+    reasons = []
+    for trial in range(1, trials + 1):
+        before_trial(trial)
+        client.prepare_trial()
+        reason = client.control_trial(
+            task=task,
+            duration_s=duration_s,
+            stop_requested=stop_requested_factory(trial),
+        )
+        reasons.append(reason)
+        after_trial(trial, reason)
+    return reasons
+
+
+def stdin_enter_pressed(stream=sys.stdin) -> bool:
+    if not stream.isatty():
+        return False
+    readable, _, _ = select.select([stream], [], [], 0)
+    if not readable:
+        return False
+    stream.readline()
+    return True
 
 
 def install_trace_logger(robot, trace_file) -> None:
@@ -478,6 +531,28 @@ def parse_args() -> argparse.Namespace:
                         "1.0 = off (raw targets), lower = smoother but laggier. ~0.6-0.8 removes residual jitter; "
                         "gripper is exempt so grasps stay crisp.")
     p.add_argument("--visualize-queue", action="store_true", help="plot action-queue size on exit")
+    p.add_argument("--trials", type=int, default=1, help="Number of trials to run without reconnecting hardware.")
+    p.add_argument(
+        "--trial-duration",
+        type=float,
+        default=None,
+        help=(
+            "Maximum seconds per trial. Defaults to 60 for multi-trial sessions; "
+            "a single trial keeps the legacy no-timeout behavior."
+        ),
+    )
+    p.add_argument(
+        "--enter-to-end-trial",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Allow Enter to end the current trial early without stopping the session.",
+    )
+    p.add_argument(
+        "--wait-for-trial-start",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Wait for Enter after object repositioning. Defaults to enabled when --trials > 1.",
+    )
 
     p.add_argument("--return-home-s", type=float, default=3.0, help="seconds to park the arm on Ctrl-C (0 disables)")
     p.add_argument("--home-target", default="dataset_start", choices=["dataset_start", "mean", "start", "zeros"],
@@ -566,17 +641,10 @@ def run_robot_client(
     home_pose = None
     home_label = args.home_target
     fallback_pose = None
+    parked = False
     try:
         client = LockedRobotClient(client_cfg)  # connects the robot
         fallback_pose = joint_positions(client.robot)
-        if "top" in client.robot.cameras:
-            try:
-                from models.act.scene_check import print_scene_check
-
-                frame = client.robot.cameras["top"].read_latest()
-                print_scene_check(frame, label="eval_async")
-            except Exception as exc:  # noqa: BLE001 -- informational only, must never block the eval
-                print(f"[eval_async] scene check skipped: {exc!r}", flush=True)
 
         dataset_start_pose = None
         if args.move_to_dataset_start_state:
@@ -645,7 +713,10 @@ def run_robot_client(
 
         if not client.start():
             raise RuntimeError("Failed to connect RobotClient to the policy server.")
-        print("[eval_async] connected; control loop running (Ctrl-C to stop)", flush=True)
+        print(
+            f"[eval_async] connected; persistent session ready for {args.trials} trial(s).",
+            flush=True,
+        )
         threading.Thread(target=client.receive_actions, daemon=True).start()
         threading.Thread(target=heartbeat, args=(client,), daemon=True).start()
         watchdog = ActionStreamWatchdog(
@@ -654,7 +725,71 @@ def run_robot_client(
             starvation_timeout=args.action_starvation_timeout,
         )
         threading.Thread(target=watchdog.run, daemon=True).start()
-        client.control_loop(task=args.task)
+
+        trial_duration = (
+            args.trial_duration
+            if args.trial_duration is not None
+            else (60.0 if args.trials > 1 else 0.0)
+        )
+        wait_for_trial_start = (
+            args.wait_for_trial_start
+            if args.wait_for_trial_start is not None
+            else args.trials > 1
+        )
+
+        def before_trial(trial: int) -> None:
+            nonlocal parked
+            if wait_for_trial_start:
+                input(
+                    f"\n[eval_async] Trial {trial}/{args.trials}: position the objects, "
+                    "then press Enter to start..."
+                )
+            if "top" in client.robot.cameras:
+                try:
+                    from models.act.scene_check import print_scene_check
+
+                    frame = client.robot.cameras["top"].read_latest()
+                    print_scene_check(frame, label=f"eval_async trial={trial}")
+                except Exception as exc:  # noqa: BLE001 -- informational only
+                    print(f"[eval_async] scene check skipped: {exc!r}", flush=True)
+            parked = False
+            timeout_text = (
+                f" or after {trial_duration:g}s"
+                if trial_duration > 0
+                else ""
+            )
+            print(
+                f"[eval_async] Trial {trial} running; press Enter to end{timeout_text}.",
+                flush=True,
+            )
+
+        def after_trial(trial: int, reason: str) -> None:
+            nonlocal parked
+            print(f"[eval_async] Trial {trial} ended: {reason}.", flush=True)
+            if home_pose is not None and not args.no_return_home and args.return_home_s > 0:
+                return_home(
+                    client.robot,
+                    home_pose,
+                    args.return_home_s,
+                    args.fps,
+                    home_label,
+                    max_step_delta=args.start_state_max_delta,
+                )
+                parked = True
+                if args.start_state_settle_s > 0:
+                    time.sleep(args.start_state_settle_s)
+
+        run_trial_sequence(
+            client,
+            trials=args.trials,
+            task=args.task,
+            duration_s=trial_duration,
+            stop_requested_factory=lambda _trial: (
+                stdin_enter_pressed if args.enter_to_end_trial else (lambda: False)
+            ),
+            before_trial=before_trial,
+            after_trial=after_trial,
+        )
         if watchdog.reason is not None:
             raise RuntimeError(watchdog.reason)
     except KeyboardInterrupt:
@@ -671,7 +806,7 @@ def run_robot_client(
             ):
                 cleanup_pose = fallback_pose
                 home_label = "startup"
-            if cleanup_pose is not None:
+            if cleanup_pose is not None and not parked:
                 try:
                     return_home(client.robot, cleanup_pose, args.return_home_s, args.fps, home_label)
                 except (Exception, KeyboardInterrupt) as exc:  # noqa: BLE001
