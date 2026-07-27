@@ -42,7 +42,10 @@ from lerobot.robots.omx_follower.config_omx_follower import OmxFollowerConfig
 from lerobot.robots.omx_follower.omx_follower import OmxFollower
 from lerobot.transport import services_pb2
 
-from models.act.camera_alignment import diagnostic_dataset_reference
+from models.act.camera_alignment import (
+    diagnostic_dataset_reference,
+    load_session_diagnostics,
+)
 from models.act.eval_common import (
     clear_stuck_port,
     dataset_start_statistics,
@@ -714,26 +717,12 @@ def run_robot_client(
         scene_coverage = None
         if "top" in client.robot.cameras:
             try:
-                from models.act.camera_alignment import prepare_diagnostic_references
-
-                camera_repo_id, camera_revision = diagnostic_dataset_reference(
+                camera_view_checker, scene_coverage = load_session_diagnostics(
                     policy_path,
-                    args.diagnostic_dataset_repo_id,
-                    args.diagnostic_dataset_revision,
-                )
-                print(
-                    "[eval_async] loading top-camera alignment references from "
-                    f"{camera_repo_id}@{camera_revision}...",
-                    flush=True,
-                )
-                camera_view_checker = CameraAlignmentChecker.from_dataset(
-                    camera_repo_id,
-                    revision=camera_revision,
-                    camera_name="top",
-                    max_references=args.camera_reference_count,
-                )
-                scene_coverage = coverage_from_frames(
-                    camera_view_checker.coverage_frames
+                    repo_id_override=args.diagnostic_dataset_repo_id,
+                    revision_override=args.diagnostic_dataset_revision,
+                    camera_view_check=args.camera_view_check,
+                    camera_reference_count=args.camera_reference_count,
                 )
             except Exception as exc:  # noqa: BLE001 -- diagnostic must not block eval
                 print(

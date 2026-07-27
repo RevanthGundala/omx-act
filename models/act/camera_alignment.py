@@ -69,6 +69,35 @@ def prepare_diagnostic_references(
     return checker, coverage
 
 
+def load_session_diagnostics(
+    policy_path: Path,
+    *,
+    repo_id_override: str | None,
+    revision_override: str | None,
+    camera_view_check: bool,
+    camera_reference_count: int,
+    prepare=None,
+):
+    prepare = prepare or prepare_diagnostic_references
+    repo_id, revision = diagnostic_dataset_reference(
+        policy_path,
+        repo_id_override,
+        revision_override,
+    )
+    print(
+        "[eval_async] loading top-camera diagnostic references from "
+        f"{repo_id}@{revision}...",
+        flush=True,
+    )
+    return prepare(
+        repo_id,
+        revision=revision,
+        camera_name="top",
+        max_alignment_references=camera_reference_count,
+        enable_alignment=camera_view_check,
+    )
+
+
 def _background_feature_mask(image_rgb: np.ndarray) -> np.ndarray:
     hsv = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2HSV)
     height, width = image_rgb.shape[:2]
