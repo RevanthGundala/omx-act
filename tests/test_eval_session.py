@@ -11,6 +11,7 @@ from models.act.eval_async import (
     diagnostic_dataset_reference,
     prompt_for_trial_start,
     run_trial_sequence,
+    trial_stop_instructions,
 )
 
 
@@ -200,3 +201,27 @@ def test_trial_sequence_stops_after_watchdog_shutdown():
         "prepare",
         ("after", 1, "shutdown"),
     ]
+
+
+def test_trial_stop_instructions_only_advertise_available_controls():
+    interactive = trial_stop_instructions(
+        duration_s=60,
+        enter_enabled=True,
+        stdin_interactive=True,
+    )
+    noninteractive = trial_stop_instructions(
+        duration_s=60,
+        enter_enabled=True,
+        stdin_interactive=False,
+    )
+    enter_disabled = trial_stop_instructions(
+        duration_s=0,
+        enter_enabled=False,
+        stdin_interactive=True,
+    )
+
+    assert "Enter" in interactive
+    assert "Enter" not in noninteractive
+    assert "60s" in noninteractive
+    assert "Enter" not in enter_disabled
+    assert "Ctrl-C" in enter_disabled
