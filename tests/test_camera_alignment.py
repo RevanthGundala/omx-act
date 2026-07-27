@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 
+import models.act.camera_alignment as camera_alignment
 from models.act.camera_alignment import (
     CameraAlignmentChecker,
     estimate_camera_transform,
@@ -65,3 +66,20 @@ def test_camera_alignment_never_passes_low_feature_frames():
     result = checker.check(blank.copy())
 
     assert result["status"] == "low_confidence"
+
+
+def test_dataset_checker_keeps_all_starts_for_scene_coverage(monkeypatch):
+    frames = [_with_objects(_background(), offset) for offset in range(0, 100, 20)]
+    monkeypatch.setattr(
+        camera_alignment,
+        "load_training_start_frames",
+        lambda *_args, **_kwargs: frames,
+    )
+
+    checker = CameraAlignmentChecker.from_dataset(
+        "owner/dataset",
+        max_references=2,
+    )
+
+    assert len(checker.reference_frames) == 2
+    assert len(checker.coverage_frames) == 5
