@@ -509,6 +509,10 @@ def trial_stop_instructions(
     return "; ".join(controls)
 
 
+def should_park_after_trial(reason: str) -> bool:
+    return reason != "shutdown"
+
+
 def install_trace_logger(robot, trace_file) -> None:
     """Wrap robot.send_action to log qpos + target + actually-sent action per control tick, for
     apples-to-apples comparison against models/act/eval_async_custom.py's trace.
@@ -710,6 +714,7 @@ def run_robot_client(
     home_label = args.home_target
     fallback_pose = None
     parked = False
+    watchdog = None
     try:
         client = LockedRobotClient(client_cfg)  # connects the robot
         fallback_pose = joint_positions(client.robot)
@@ -865,7 +870,12 @@ def run_robot_client(
         def after_trial(trial: int, reason: str) -> None:
             nonlocal parked
             print(f"[eval_async] Trial {trial} ended: {reason}.", flush=True)
-            if home_pose is not None and not args.no_return_home and args.return_home_s > 0:
+            if (
+                should_park_after_trial(reason)
+                and home_pose is not None
+                and not args.no_return_home
+                and args.return_home_s > 0
+            ):
                 return_home(
                     client.robot,
                     home_pose,
@@ -905,7 +915,11 @@ def run_robot_client(
             ):
                 cleanup_pose = fallback_pose
                 home_label = "startup"
-            if cleanup_pose is not None and not parked:
+            if (
+                cleanup_pose is not None
+                and not parked
+                and (watchdog is None or watchdog.reason is None)
+            ):
                 try:
                     return_home(client.robot, cleanup_pose, args.return_home_s, args.fps, home_label)
                 except (Exception, KeyboardInterrupt) as exc:  # noqa: BLE001
