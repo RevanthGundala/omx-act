@@ -1,4 +1,5 @@
 from queue import Queue
+import io
 import threading
 from types import SimpleNamespace
 
@@ -8,6 +9,7 @@ from lerobot.async_inference.helpers import TimedAction
 from models.act.eval_async import (
     LockedRobotClient,
     diagnostic_dataset_reference,
+    prompt_for_trial_start,
     run_trial_sequence,
 )
 
@@ -135,3 +137,15 @@ def test_diagnostic_reference_can_use_seed_dataset_for_dagger_policy(tmp_path):
         repo_id_override="owner/seed",
         revision_override=None,
     ) == ("owner/seed", "main")
+
+
+def test_trial_start_prompt_does_not_crash_without_interactive_stdin():
+    stream = io.StringIO("")
+
+    prompted = prompt_for_trial_start(
+        trial=1,
+        total_trials=2,
+        stream=stream,
+    )
+
+    assert not prompted
