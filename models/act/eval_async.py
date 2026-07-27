@@ -354,6 +354,7 @@ class LockedRobotClient(RobotClient):
         self.action_queue_lock = threading.RLock()
         self.trial_active = threading.Event()
         self.trial_active.set()
+        self._control_loop_started = False
 
     def _aggregate_action_queues(self, *args, **kwargs):
         trial_active = getattr(self, "trial_active", None)
@@ -378,6 +379,41 @@ class LockedRobotClient(RobotClient):
         self.action_chunk_size = -1
         self.must_go.set()
         self.trial_active.set()
+
+    def control_trial(
+        self,
+        *,
+        task: str,
+        duration_s: float,
+        stop_requested,
+        verbose: bool = False,
+        clock=time.perf_counter,
+        sleep=time.sleep,
+    ) -> str:
+        if not self._control_loop_started:
+            self.start_barrier.wait()
+            self._control_loop_started = True
+
+        started = clock()
+        reason = "shutdown"
+        while self.running and self.trial_active.is_set():
+            loop_started = clock()
+            if stop_requested():
+                reason = "operator"
+                break
+            if duration_s > 0 and loop_started - started >= duration_s:
+                reason = "duration"
+                break
+
+            if self.actions_available():
+                self.control_loop_action(verbose)
+            if self._ready_to_send_observation():
+                self.control_loop_observation(task, verbose)
+
+            sleep(max(0.0, self.config.environment_dt - (clock() - loop_started)))
+
+        self.pause_trial()
+        return reason
 
 
 def install_trace_logger(robot, trace_file) -> None:

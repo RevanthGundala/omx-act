@@ -63,6 +63,7 @@ def test_control_trial_stops_without_global_shutdown_and_reuses_receiver_barrier
     client._control_loop_started = False
     client.actions_available = lambda: False
     client._ready_to_send_observation = lambda: False
+    client.trial_active.set()
 
     first_reason = client.control_trial(
         task="test",
