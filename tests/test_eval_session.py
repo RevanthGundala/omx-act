@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import torch
 from lerobot.async_inference.helpers import TimedAction
 
-from models.act.eval_async import LockedRobotClient
+from models.act.eval_async import LockedRobotClient, run_trial_sequence
 
 
 class _FakeStub:
@@ -83,3 +83,37 @@ def test_control_trial_stops_without_global_shutdown_and_reuses_receiver_barrier
     assert second_reason == "operator"
     assert client.start_barrier.wait_calls == 1
     assert not client.shutdown_event.is_set()
+
+
+def test_trial_sequence_reuses_client_and_runs_reset_callbacks():
+    events = []
+
+    class FakeClient:
+        def prepare_trial(self):
+            events.append("prepare")
+
+        def control_trial(self, **kwargs):
+            events.append(("control", kwargs["task"], kwargs["duration_s"]))
+            return "operator"
+
+    reasons = run_trial_sequence(
+        FakeClient(),
+        trials=2,
+        task="pick",
+        duration_s=60.0,
+        stop_requested_factory=lambda _trial: (lambda: False),
+        before_trial=lambda trial: events.append(("before", trial)),
+        after_trial=lambda trial, reason: events.append(("after", trial, reason)),
+    )
+
+    assert reasons == ["operator", "operator"]
+    assert events == [
+        ("before", 1),
+        "prepare",
+        ("control", "pick", 60.0),
+        ("after", 1, "operator"),
+        ("before", 2),
+        "prepare",
+        ("control", "pick", 60.0),
+        ("after", 2, "operator"),
+    ]
