@@ -5,6 +5,7 @@ import models.act.camera_alignment as camera_alignment
 from models.act.camera_alignment import (
     CameraAlignmentChecker,
     estimate_camera_transform,
+    prepare_diagnostic_references,
 )
 
 
@@ -83,3 +84,23 @@ def test_dataset_checker_keeps_all_starts_for_scene_coverage(monkeypatch):
 
     assert len(checker.reference_frames) == 2
     assert len(checker.coverage_frames) == 5
+
+
+def test_scene_coverage_loads_when_camera_alignment_is_disabled(monkeypatch):
+    frames = [_with_objects(_background(), offset) for offset in range(0, 100, 20)]
+    monkeypatch.setattr(
+        camera_alignment,
+        "load_training_start_frames",
+        lambda *_args, **_kwargs: frames,
+    )
+
+    checker, coverage = prepare_diagnostic_references(
+        "owner/dataset",
+        revision="main",
+        camera_name="top",
+        max_alignment_references=2,
+        enable_alignment=False,
+    )
+
+    assert checker is None
+    assert coverage[2] == 5
