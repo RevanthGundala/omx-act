@@ -12,6 +12,7 @@ from models.act.eval_async import (
     load_session_diagnostics,
     prompt_for_trial_start,
     run_trial_sequence,
+    should_park_after_trial,
     trial_stop_instructions,
 )
 
@@ -261,3 +262,9 @@ def test_session_diagnostics_respect_camera_disable_and_dataset_override(tmp_pat
             },
         )
     ]
+
+
+def test_watchdog_shutdown_never_triggers_automatic_parking():
+    assert should_park_after_trial("operator")
+    assert should_park_after_trial("duration")
+    assert not should_park_after_trial("shutdown")
