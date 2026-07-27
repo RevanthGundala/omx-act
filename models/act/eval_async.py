@@ -470,6 +470,27 @@ def stdin_enter_pressed(stream=sys.stdin) -> bool:
     return True
 
 
+def prompt_for_trial_start(
+    *,
+    trial: int,
+    total_trials: int,
+    stream=sys.stdin,
+) -> bool:
+    if not stream.isatty():
+        print(
+            f"[eval_async] Trial {trial}/{total_trials}: stdin is non-interactive; "
+            "starting without a repositioning prompt.",
+            flush=True,
+        )
+        return False
+    print(
+        f"\n[eval_async] Trial {trial}/{total_trials}: position the objects, "
+        "then press Enter to start...",
+        flush=True,
+    )
+    return bool(stream.readline())
+
+
 def install_trace_logger(robot, trace_file) -> None:
     """Wrap robot.send_action to log qpos + target + actually-sent action per control tick, for
     apples-to-apples comparison against models/act/eval_async_custom.py's trace.
@@ -800,9 +821,9 @@ def run_robot_client(
         def before_trial(trial: int) -> None:
             nonlocal parked
             if wait_for_trial_start:
-                input(
-                    f"\n[eval_async] Trial {trial}/{args.trials}: position the objects, "
-                    "then press Enter to start..."
+                prompt_for_trial_start(
+                    trial=trial,
+                    total_trials=args.trials,
                 )
             if "top" in client.robot.cameras:
                 try:
