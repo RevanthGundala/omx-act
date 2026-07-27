@@ -369,20 +369,19 @@ class LockedRobotClient(RobotClient):
         self.trial_started_at = 0.0
 
     def _aggregate_action_queues(self, *args, **kwargs):
-        trial_active = getattr(self, "trial_active", None)
-        if trial_active is not None and not trial_active.is_set():
-            return
-        trial_started_at = getattr(self, "trial_started_at", 0.0)
-        if args and trial_started_at:
-            incoming_actions = args[0]
-            if (
-                incoming_actions
-                and incoming_actions[0].get_timestamp() < trial_started_at
-            ):
-                return
-        # Upstream aliases the deque under this lock, then iterates it after
-        # releasing the lock while the control thread may pop from it.
         with self.action_queue_lock:
+            trial_active = getattr(self, "trial_active", None)
+            if trial_active is not None and not trial_active.is_set():
+                return
+            trial_started_at = getattr(self, "trial_started_at", 0.0)
+            if args and trial_started_at:
+                incoming_actions = args[0]
+                if (
+                    incoming_actions
+                    and incoming_actions[0].get_timestamp() < trial_started_at
+                ):
+                    return
+            # Keep the lock across upstream's deque snapshot and queue swap.
             return super()._aggregate_action_queues(*args, **kwargs)
 
     def pause_trial(self) -> None:
@@ -394,12 +393,13 @@ class LockedRobotClient(RobotClient):
     def prepare_trial(self) -> None:
         self.pause_trial()
         self.stub.Ready(services_pb2.Empty())
-        with self.latest_action_lock:
-            self.latest_action = -1
-        self.action_chunk_size = -1
-        self.must_go.set()
-        self.trial_started_at = time.time()
-        self.trial_active.set()
+        with self.action_queue_lock:
+            with self.latest_action_lock:
+                self.latest_action = -1
+            self.action_chunk_size = -1
+            self.must_go.set()
+            self.trial_started_at = time.time()
+            self.trial_active.set()
 
     def control_trial(
         self,
