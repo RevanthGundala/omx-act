@@ -9,6 +9,7 @@ from lerobot.async_inference.helpers import TimedAction
 from models.act.eval_async import (
     LockedRobotClient,
     diagnostic_dataset_reference,
+    load_session_diagnostics,
     prompt_for_trial_start,
     run_trial_sequence,
     trial_stop_instructions,
@@ -225,3 +226,38 @@ def test_trial_stop_instructions_only_advertise_available_controls():
     assert "60s" in noninteractive
     assert "Enter" not in enter_disabled
     assert "Ctrl-C" in enter_disabled
+
+
+def test_session_diagnostics_respect_camera_disable_and_dataset_override(tmp_path):
+    policy_path = tmp_path / "pretrained_model"
+    policy_path.mkdir()
+    (policy_path / "train_config.json").write_text(
+        '{"dataset": {"repo_id": "owner/dagger", "revision": "dagger-rev"}}'
+    )
+    calls = []
+
+    def prepare(repo_id, **kwargs):
+        calls.append((repo_id, kwargs))
+        return "checker", "coverage"
+
+    checker, coverage = load_session_diagnostics(
+        policy_path,
+        repo_id_override="owner/seed",
+        revision_override=None,
+        camera_view_check=False,
+        camera_reference_count=8,
+        prepare=prepare,
+    )
+
+    assert (checker, coverage) == ("checker", "coverage")
+    assert calls == [
+        (
+            "owner/seed",
+            {
+                "revision": "main",
+                "camera_name": "top",
+                "max_alignment_references": 8,
+                "enable_alignment": False,
+            },
+        )
+    ]
