@@ -268,3 +268,52 @@ def test_watchdog_shutdown_never_triggers_automatic_parking():
     assert should_park_after_trial("operator")
     assert should_park_after_trial("duration")
     assert not should_park_after_trial("shutdown")
+
+
+def test_chunk_waiting_on_lock_cannot_cross_trial_reset():
+    waiting = threading.Event()
+    release = threading.Event()
+
+    class GateRLock:
+        def __init__(self):
+            self.lock = threading.RLock()
+
+        def __enter__(self):
+            if threading.current_thread().name == "receiver":
+                waiting.set()
+                assert release.wait(timeout=1)
+            self.lock.acquire()
+            return self
+
+        def __exit__(self, *_args):
+            self.lock.release()
+
+    client = _client_with_trial_state()
+    client.action_queue_lock = GateRLock()
+    client.trial_active.set()
+    client.trial_started_at = 100.0
+    client.latest_action = -1
+    while not client.action_queue.empty():
+        client.action_queue.get_nowait()
+    old_chunk = [
+        TimedAction(timestamp=150.0, timestep=0, action=torch.zeros(2))
+    ]
+    receiver = threading.Thread(
+        target=client._aggregate_action_queues,
+        args=(old_chunk,),
+        name="receiver",
+    )
+    receiver.start()
+    assert waiting.wait(timeout=1)
+
+    client.trial_active.clear()
+    with client.action_queue_lock:
+        while not client.action_queue.empty():
+            client.action_queue.get_nowait()
+    client.trial_started_at = 200.0
+    client.trial_active.set()
+    release.set()
+    receiver.join(timeout=1)
+
+    assert not receiver.is_alive()
+    assert client.action_queue.empty()
