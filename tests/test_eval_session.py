@@ -170,3 +170,33 @@ def test_new_trial_rejects_entire_chunk_from_prior_observation():
     client._aggregate_action_queues(old_chunk)
 
     assert client.action_queue.empty()
+
+
+def test_trial_sequence_stops_after_watchdog_shutdown():
+    events = []
+
+    class FakeClient:
+        running = False
+
+        def prepare_trial(self):
+            events.append("prepare")
+
+        def control_trial(self, **_kwargs):
+            return "shutdown"
+
+    reasons = run_trial_sequence(
+        FakeClient(),
+        trials=3,
+        task="pick",
+        duration_s=60,
+        stop_requested_factory=lambda _trial: (lambda: False),
+        before_trial=lambda trial: events.append(("before", trial)),
+        after_trial=lambda trial, reason: events.append(("after", trial, reason)),
+    )
+
+    assert reasons == ["shutdown"]
+    assert events == [
+        ("before", 1),
+        "prepare",
+        ("after", 1, "shutdown"),
+    ]
