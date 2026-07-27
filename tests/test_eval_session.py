@@ -149,3 +149,24 @@ def test_trial_start_prompt_does_not_crash_without_interactive_stdin():
     )
 
     assert not prompted
+
+
+def test_new_trial_rejects_entire_chunk_from_prior_observation():
+    client = _client_with_trial_state()
+    client.trial_active.set()
+    client.trial_started_at = 100.25
+    client.latest_action = -1
+    while not client.action_queue.empty():
+        client.action_queue.get_nowait()
+    old_chunk = [
+        TimedAction(
+            timestamp=100.0 + index / 30,
+            timestep=index,
+            action=torch.zeros(2),
+        )
+        for index in range(30)
+    ]
+
+    client._aggregate_action_queues(old_chunk)
+
+    assert client.action_queue.empty()
