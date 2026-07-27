@@ -491,6 +491,21 @@ def prompt_for_trial_start(
     return bool(stream.readline())
 
 
+def trial_stop_instructions(
+    *,
+    duration_s: float,
+    enter_enabled: bool,
+    stdin_interactive: bool,
+) -> str:
+    controls = []
+    if enter_enabled and stdin_interactive:
+        controls.append("press Enter to end early")
+    if duration_s > 0:
+        controls.append(f"ends after {duration_s:g}s")
+    controls.append("Ctrl-C stops the session")
+    return "; ".join(controls)
+
+
 def install_trace_logger(robot, trace_file) -> None:
     """Wrap robot.send_action to log qpos + target + actually-sent action per control tick, for
     apples-to-apples comparison against models/act/eval_async_custom.py's trace.
@@ -852,13 +867,9 @@ def run_robot_client(
                 except Exception as exc:  # noqa: BLE001 -- informational only
                     print(f"[eval_async] scene check skipped: {exc!r}", flush=True)
             parked = False
-            timeout_text = (
-                f" or after {trial_duration:g}s"
-                if trial_duration > 0
-                else ""
-            )
             print(
-                f"[eval_async] Trial {trial} running; press Enter to end{timeout_text}.",
+                f"[eval_async] Trial {trial} running; "
+                f"{trial_stop_instructions(duration_s=trial_duration, enter_enabled=args.enter_to_end_trial, stdin_interactive=sys.stdin.isatty())}.",
                 flush=True,
             )
 
