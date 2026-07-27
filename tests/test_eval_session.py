@@ -1,5 +1,6 @@
 from queue import Queue
 import threading
+from types import SimpleNamespace
 
 import torch
 from lerobot.async_inference.helpers import TimedAction
@@ -47,3 +48,37 @@ def test_prepare_trial_resets_async_state_without_reloading_policy():
     assert client.action_chunk_size == -1
     assert client.must_go.is_set()
     assert client.trial_active.is_set()
+
+
+def test_control_trial_stops_without_global_shutdown_and_reuses_receiver_barrier():
+    client = _client_with_trial_state()
+    client.shutdown_event = threading.Event()
+    client.config = SimpleNamespace(environment_dt=0.0)
+    client.start_barrier = SimpleNamespace(wait_calls=0)
+    client.start_barrier.wait = lambda: setattr(
+        client.start_barrier,
+        "wait_calls",
+        client.start_barrier.wait_calls + 1,
+    )
+    client._control_loop_started = False
+    client.actions_available = lambda: False
+    client._ready_to_send_observation = lambda: False
+
+    first_reason = client.control_trial(
+        task="test",
+        duration_s=60.0,
+        stop_requested=lambda: True,
+        sleep=lambda _seconds: None,
+    )
+    client.trial_active.set()
+    second_reason = client.control_trial(
+        task="test",
+        duration_s=60.0,
+        stop_requested=lambda: True,
+        sleep=lambda _seconds: None,
+    )
+
+    assert first_reason == "operator"
+    assert second_reason == "operator"
+    assert client.start_barrier.wait_calls == 1
+    assert not client.shutdown_event.is_set()
