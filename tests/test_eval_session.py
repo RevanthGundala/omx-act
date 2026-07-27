@@ -3,6 +3,8 @@ import io
 import threading
 from types import SimpleNamespace
 
+import numpy as np
+import pytest
 import torch
 from lerobot.async_inference.helpers import TimedAction
 
@@ -11,6 +13,7 @@ from models.act.eval_async import (
     diagnostic_dataset_reference,
     load_session_diagnostics,
     prompt_for_trial_start,
+    resolve_dataset_start_pose,
     run_trial_sequence,
     should_park_after_trial,
     trial_stop_instructions,
@@ -268,6 +271,38 @@ def test_watchdog_shutdown_never_triggers_automatic_parking():
     assert should_park_after_trial("operator")
     assert should_park_after_trial("duration")
     assert not should_park_after_trial("shutdown")
+
+
+def test_dataset_start_pose_uses_seed_dataset_override(tmp_path):
+    policy_path = tmp_path / "pretrained_model"
+    policy_path.mkdir()
+    (policy_path / "train_config.json").write_text(
+        '{"dataset": {"repo_id": "owner/dagger", "revision": "dagger-rev"}}'
+    )
+    robot = SimpleNamespace(
+        action_features={"joint_a.pos": float, "joint_b.pos": float}
+    )
+    calls = []
+
+    def load_statistics(repo_id, revision):
+        calls.append((repo_id, revision))
+        return {
+            "mean": np.array([1.0, 2.0], dtype=np.float32),
+            "std": np.array([0.1, 0.2], dtype=np.float32),
+        }
+
+    pose, statistics, repo_id, revision = resolve_dataset_start_pose(
+        robot,
+        policy_path,
+        repo_id_override="owner/seed",
+        revision_override=None,
+        statistics_loader=load_statistics,
+    )
+
+    assert pose == {"joint_a.pos": 1.0, "joint_b.pos": 2.0}
+    assert statistics["std"].tolist() == pytest.approx([0.1, 0.2])
+    assert (repo_id, revision) == ("owner/seed", "main")
+    assert calls == [("owner/seed", "main")]
 
 
 def test_chunk_waiting_on_lock_cannot_cross_trial_reset():
