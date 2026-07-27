@@ -512,6 +512,21 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--camera-warmup-s", type=int, default=5)
     p.add_argument("--no-camera-preflight", action="store_true", help="skip the camera verify/clear-state step")
     p.add_argument("--camera-preflight-retries", type=int, default=3)
+    p.add_argument(
+        "--camera-view-check",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Compare the live top-camera background against training episode starts "
+            "and print PASS/WARN/LOW CONFIDENCE (screening only, not calibration)."
+        ),
+    )
+    p.add_argument(
+        "--camera-reference-count",
+        type=int,
+        default=12,
+        help="Maximum number of training start frames used by --camera-view-check.",
+    )
 
     p.add_argument("--fps", type=int, default=FPS, help="control-loop rate the robot replays actions at")
     p.add_argument("--policy-device", default="mps", choices=["mps", "cuda", "cpu", "xpu"])
@@ -645,6 +660,28 @@ def run_robot_client(
     try:
         client = LockedRobotClient(client_cfg)  # connects the robot
         fallback_pose = joint_positions(client.robot)
+        camera_view_checker = None
+        if args.camera_view_check and "top" in client.robot.cameras:
+            try:
+                from models.act.camera_alignment import CameraAlignmentChecker
+
+                camera_repo_id, camera_revision = dataset_reference(policy_path)
+                print(
+                    "[eval_async] loading top-camera alignment references from "
+                    f"{camera_repo_id}@{camera_revision}...",
+                    flush=True,
+                )
+                camera_view_checker = CameraAlignmentChecker.from_dataset(
+                    camera_repo_id,
+                    revision=camera_revision,
+                    camera_name="top",
+                    max_references=args.camera_reference_count,
+                )
+            except Exception as exc:  # noqa: BLE001 -- diagnostic must not block eval
+                print(
+                    f"[eval_async] camera view reference load skipped: {exc!r}",
+                    flush=True,
+                )
 
         dataset_start_pose = None
         if args.move_to_dataset_start_state:
@@ -750,6 +787,14 @@ def run_robot_client(
 
                     frame = client.robot.cameras["top"].read_latest()
                     print_scene_check(frame, label=f"eval_async trial={trial}")
+                    if camera_view_checker is not None:
+                        from models.act.camera_alignment import print_camera_view_check
+
+                        print_camera_view_check(
+                            camera_view_checker,
+                            frame,
+                            label=f"eval_async trial={trial}",
+                        )
                 except Exception as exc:  # noqa: BLE001 -- informational only
                     print(f"[eval_async] scene check skipped: {exc!r}", flush=True)
             parked = False
