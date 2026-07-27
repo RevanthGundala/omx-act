@@ -679,6 +679,9 @@ def run_robot_client(
                     camera_name="top",
                     max_references=args.camera_reference_count,
                 )
+                scene_coverage = coverage_from_frames(
+                    camera_view_checker.coverage_frames
+                )
             except Exception as exc:  # noqa: BLE001 -- diagnostic must not block eval
                 print(
                     f"[eval_async] camera view reference load skipped: {exc!r}",

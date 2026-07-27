@@ -137,8 +137,18 @@ def _percentile_limit(values, floor: float) -> float:
 
 
 class CameraAlignmentChecker:
-    def __init__(self, reference_frames, thresholds, *, minimum_references: int):
+    def __init__(
+        self,
+        reference_frames,
+        thresholds,
+        *,
+        minimum_references: int,
+        coverage_frames=None,
+    ):
         self.reference_frames = tuple(reference_frames)
+        self.coverage_frames = tuple(
+            self.reference_frames if coverage_frames is None else coverage_frames
+        )
         self.thresholds = thresholds
         self.minimum_references = minimum_references
 
@@ -183,14 +193,16 @@ class CameraAlignmentChecker:
         camera_name: str = "top",
         max_references: int = 12,
     ):
-        return cls.from_frames(
-            load_training_start_frames(
-                repo_id,
-                revision=revision,
-                camera_name=camera_name,
-                max_references=max_references,
-            )
+        coverage_frames = load_training_start_frames(
+            repo_id,
+            revision=revision,
+            camera_name=camera_name,
+            max_references=None,
         )
+        reference_frames = _select_evenly(coverage_frames, max_references)
+        checker = cls.from_frames(reference_frames)
+        checker.coverage_frames = tuple(coverage_frames)
+        return checker
 
     def check(self, live_rgb: np.ndarray) -> dict:
         estimates = [
@@ -255,7 +267,7 @@ def load_training_start_frames(
     *,
     revision: str,
     camera_name: str,
-    max_references: int,
+    max_references: int | None,
 ) -> list[np.ndarray]:
     from lerobot.datasets import LeRobotDataset
 
@@ -267,7 +279,7 @@ def load_training_start_frames(
     ]
     if not start_indices:
         raise ValueError(f"Dataset {repo_id}@{revision} has no episode-start frames.")
-    if len(start_indices) > max_references:
+    if max_references is not None and len(start_indices) > max_references:
         selected = np.linspace(
             0,
             len(start_indices) - 1,
@@ -276,6 +288,14 @@ def load_training_start_frames(
         start_indices = [start_indices[index] for index in selected]
     key = f"observation.images.{camera_name}"
     return [_image_to_rgb_uint8(dataset[index][key]) for index in start_indices]
+
+
+def _select_evenly(frames, maximum: int):
+    frames = tuple(frames)
+    if len(frames) <= maximum:
+        return frames
+    selected = np.linspace(0, len(frames) - 1, maximum).round().astype(int)
+    return tuple(frames[index] for index in selected)
 
 
 def print_camera_view_check(
