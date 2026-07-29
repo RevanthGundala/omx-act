@@ -2,6 +2,7 @@ from itertools import chain
 
 import torch
 import torch.nn as nn
+from einops import rearrange, repeat
 from torchvision.models.resnet import ResNet18_Weights, resnet18
 from torchvision.ops import FrozenBatchNorm2d
 
@@ -22,7 +23,6 @@ class ACTPolicy(nn.Module):
             num_heads=config.num_heads,
             mlp_dim=config.mlp_dim,
             dropout=config.dropout,
-            stock_parity=config.stock_parity,
         )
         self.decoder = Decoder(
             d_model=config.d_model,
@@ -36,15 +36,13 @@ class ACTPolicy(nn.Module):
             mlp_dim=config.mlp_dim,
             dropout=config.dropout,
             pretrained_backbone=pretrained_backbone,
-            stock_parity=config.stock_parity,
         )
-        if config.stock_parity:
-            for parameter in chain(
-                self.decoder.transformer_encoder.parameters(),
-                self.decoder.transformer_decoder.parameters(),
-            ):
-                if parameter.dim() > 1:
-                    nn.init.xavier_uniform_(parameter)
+        for parameter in chain(
+            self.decoder.transformer_encoder.parameters(),
+            self.decoder.transformer_decoder.parameters(),
+        ):
+            if parameter.dim() > 1:
+                nn.init.xavier_uniform_(parameter)
         temporal_weights = torch.exp(-config.exp_weight * torch.arange(0, config.chunk_size, dtype=torch.float32))
         self.register_buffer("temporal_weights", temporal_weights, persistent=False)
         self.register_buffer("temporal_weights_cumsum", torch.cumsum(temporal_weights, dim=0), persistent=False)
@@ -120,7 +118,6 @@ class CVAE_Encoder(nn.Module):
         num_heads=8,
         mlp_dim=2048,
         dropout=0.1,
-        stock_parity=False,
     ):
         super().__init__()
         # 2 separate projects for future actions and current joint pos
@@ -135,7 +132,6 @@ class CVAE_Encoder(nn.Module):
                 mlp_dim=mlp_dim,
                 dropout=dropout,
                 use_cross_attention=False,
-                stock_parity=stock_parity,
             ) for _ in range(num_encoder_layers)
         ])
         self.chunk_size = chunk_size
@@ -177,7 +173,6 @@ class Decoder(nn.Module):
         mlp_dim=2048,
         dropout=0.1,
         pretrained_backbone=False,
-        stock_parity=False,
     ): 
         super().__init__() 
         self.d_model = d_model
@@ -187,8 +182,6 @@ class Decoder(nn.Module):
         self.backbone = nn.Sequential(*list(backbone.children())[:-2])
         self.image_proj = nn.Linear(512, d_model)
         self.image_pos_emb = ACTSinusoidalPositionEmbedding2d(d_model // 2)
-        self.camera_emb = nn.Parameter(torch.zeros(1, num_cameras, d_model))
-        self.stock_parity = stock_parity
         self.z_proj = nn.Linear(d_z, d_model)
         self.joint_proj = nn.Linear(joint_dim, d_model)
         self.transformer_encoder = nn.ModuleList([
@@ -198,7 +191,6 @@ class Decoder(nn.Module):
                 mlp_dim=mlp_dim,
                 dropout=dropout,
                 use_cross_attention=False,
-                stock_parity=stock_parity,
             ) for _ in range(num_encoder_layers)
         ]) 
         self.transformer_decoder = nn.ModuleList([
@@ -208,31 +200,41 @@ class Decoder(nn.Module):
                 mlp_dim=mlp_dim,
                 dropout=dropout,
                 use_cross_attention=True,
-                stock_parity=stock_parity,
             ) for _ in range(num_decoder_layers)
         ]) 
         self.joint_z_pos_emb = nn.Embedding(2, d_model)
         self.q_emb = nn.Parameter(torch.randn(1, chunk_size, d_model))
         self.act_proj = nn.Linear(d_model, joint_dim)
-        self.final_norm = nn.LayerNorm(d_model) if stock_parity else nn.Identity()
+        self.final_norm = nn.LayerNorm(d_model)
     
     def forward(self, images, joints, z): 
         images = self._prepare_images(images)
-        bs, num_cameras, channels, height, width = images.shape
+        bs, num_cameras = images.shape[:2]
         if num_cameras != self.num_cameras:
             raise ValueError(f"Expected {self.num_cameras} cameras, got {num_cameras}")
 
-        image_features = self.backbone(images.reshape(bs * num_cameras, channels, height, width))
-        spatial_tokens = image_features.shape[2] * image_features.shape[3]
-        image_pos = self.image_pos_emb(image_features).flatten(2).permute(0, 2, 1)
-        image_pos = image_pos.to(dtype=image_features.dtype).repeat(1, num_cameras, 1)
+        image_features = self.backbone(
+            rearrange(images, "b m c h w -> (b m) c h w")
+        )
+        image_pos = repeat(
+            self.image_pos_emb(image_features),
+            "1 d h w -> 1 (m h w) d",
+            m=num_cameras,
+        ).to(dtype=image_features.dtype)
 
-        image_tokens = image_features.flatten(2).permute(0, 2, 1)
+        image_tokens = rearrange(
+            image_features,
+            "(b m) c h w -> (b m) (h w) c",
+            b=bs,
+            m=num_cameras,
+        )
         image_tokens = self.image_proj(image_tokens)
-        image_tokens = image_tokens.reshape(bs, num_cameras, spatial_tokens, self.d_model)
-        if not self.stock_parity:
-            image_tokens = image_tokens + self.camera_emb.unsqueeze(2)
-        image_tokens = image_tokens.reshape(bs, num_cameras * spatial_tokens, self.d_model)
+        image_tokens = rearrange(
+            image_tokens,
+            "(b m) n d -> b (m n) d",
+            b=bs,
+            m=num_cameras,
+        )
 
         qpos_token = self.joint_proj(joints).unsqueeze(1)
         z_token = self.z_proj(z).unsqueeze(1)
@@ -254,12 +256,12 @@ class Decoder(nn.Module):
             if images.shape[1] in (1, 3):
                 images = images.unsqueeze(1)
             elif images.shape[-1] in (1, 3):
-                images = images.permute(0, 3, 1, 2).unsqueeze(1)
+                images = rearrange(images, "b h w c -> b 1 c h w")
             else:
                 raise ValueError(f"Expected image shape (B,C,H,W) or (B,H,W,C), got {tuple(images.shape)}")
         elif images.dim() == 5:
             if images.shape[2] not in (1, 3) and images.shape[-1] in (1, 3):
-                images = images.permute(0, 1, 4, 2, 3)
+                images = rearrange(images, "b m h w c -> b m c h w")
         else:
             raise ValueError(f"Expected images with 4 or 5 dimensions, got {tuple(images.shape)}")
         # run real normalization in preprocessor
@@ -269,5 +271,3 @@ class Decoder(nn.Module):
         
 
         
-
-

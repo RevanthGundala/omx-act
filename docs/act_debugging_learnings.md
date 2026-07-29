@@ -4,16 +4,63 @@ Record of the investigation into why the custom `models/act` ACT policy was
 training poorly, what we changed, and (importantly) what we did and did not
 actually measure.
 
-## Current diagnosis — read this first (2026-07-21)
+## Current diagnosis — read this first (updated 2026-07-21)
 
-The current comparison is:
+### Latest result: corrected custom architecture works live
+
+A fresh custom ACT was trained from scratch for 20k steps on all 50 episodes
+after directly aligning its transformer with LeRobot ACT: post-norm, ReLU,
+Xavier transformer initialization, residual dropout, no camera embedding, and
+a final decoder LayerNorm. The trainer was also made deterministic with seed
+1000. Final train loss was `0.06656` (`action_l1=0.06478`).
+
+Checkpoint:
+
+`outputs/modal/act_custom_lerobot_arch_chunk30_steps20000_all50/20260721T223816Z-824f6399/checkpoints/last.pt`
+
+Live evaluation used the shared `models/act/eval_async.py` path through the
+custom LeRobot adapter, with the same default async settings used for stock
+LeRobot:
+
+| layout | old unaugmented LeRobot 20k | corrected custom 20k |
+|---:|---:|---:|
+| 1 | 5/6 | 1/6 |
+| 2 | 1/6 | 2/6 |
+| 3 | 2/6 | 4/6 |
+| 4 | 2/6 | 0/6 |
+| 5 | 1/6 | 3/6 |
+| **Total** | **11/30 (36.7%)** | **10/30 (33.3%)** |
+
+This is a **large practical improvement over the prior custom policy's live
+behavior**, which was described as effectively nonfunctional. More
+importantly, the corrected custom model has closed the measured live gap to the
+working LeRobot reference: `10/30` versus `11/30`. The architecture correction
+therefore helped enough to make the custom implementation competitive with
+LeRobot ACT.
+
+The result is not a clean architecture-only causal estimate. The legacy custom
+checkpoint did not receive the same 30-trial layout matrix, and the new run also
+fixed previously uncontrolled initialization/data-order seeding. We can
+attribute the improvement to the **combined corrected implementation and
+controlled retraining**, not assign a percentage to post-norm, final
+LayerNorm, Xavier initialization, or any other individual change.
+
+The remaining failure is now shared with LeRobot: narrow, model-specific
+spatial specialization. Aggregate success is nearly identical, but the models
+succeed in different regions (custom improves layouts 2, 3, and 5 while
+regressing layouts 1 and 4). Architecture alignment fixed the custom-specific
+failure; it did not solve the dataset/task's broader spatial brittleness.
+
+### Legacy custom diagnosis that motivated the retrain
+
+The pre-correction comparison was:
 
 - Stock LeRobot ACT 20k:
   `instance-44620633/.../020000/pretrained_model`
-- Custom ACT 20k, trained on all 50 episodes:
+- Legacy custom ACT 20k, trained on all 50 episodes:
   `instance-45436934/.../checkpoints/step_020000.pt`
 
-The custom checkpoint's lower training loss is real but misleading. It was
+The legacy custom checkpoint's lower training loss was real but misleading. It was
 trained with `train_split=1.0`, so it has no held-out validation loss, and
 aggregate frame-level joint L1 is dominated by easy mid-trajectory states. On
 50 uniformly sampled recorded frames, deterministic custom inference is better
@@ -56,33 +103,16 @@ checkpoint, were not actually controlled seed-matched comparisons. This is now
 fixed in `models/act/train.py`; it affects future fresh runs, not existing
 weights.
 
-The custom transformer's legacy path is not stock-equivalent: it uses pre-norm,
-GELU, different attention residual-dropout/initialization behavior, an extra
-camera embedding, and was missing stock ACT's final decoder LayerNorm. The
-working LeRobot ACT uses post-norm and ReLU.
-
-An opt-in `ACTConfig.stock_parity` mode now removes those differences while
-leaving old checkpoints on the unchanged legacy path. The local parity tests
-map identical LeRobot weights into the custom model and verify matching
-inference **and VAE training-forward outputs** (`atol=rtol=1e-5`). This is the
-implementation gate that the earlier train-loss A/B never provided.
-
-These architecture differences are still not individually proven causal for
-the live gap. Do **not** launch more broad hyperparameter ablations. The next
-and only justified training comparison is one fresh, seeded, all-50,
-`stock_parity=True` custom run against the existing stock 20k checkpoint:
-
-```bash
-uv run python deploy/train_act_vastai.py \
-  --runner custom \
-  --stock-parity \
-  --dataset-repo-id RevanthGundala/014-place-sponge-in-bowl-diverse-50 \
-  --train-split 1.0 \
-  --chunk-size 30 \
-  --steps 20000 \
-  --save-freq 2000 \
-  --job-name act_custom_stock_parity_chunk30_steps20000_all50
-```
+The legacy custom transformer used pre-norm, GELU, different attention
+residual-dropout/initialization behavior, an extra camera embedding, and was
+missing stock ACT's final decoder LayerNorm. The custom architecture now
+directly uses LeRobot's post-norm, ReLU, Xavier transformer initialization, no
+camera embedding, and final decoder LayerNorm. There is no compatibility mode.
+The local architecture tests map identical LeRobot weights into the custom
+model and verify matching inference **and VAE training-forward outputs**
+(`atol=rtol=1e-5`). This is the implementation gate that the earlier train-loss
+A/B never provided. The fresh seeded all-50 comparison has now been completed;
+its result is the `10/30` live score above.
 
 Do not reuse/resume the legacy custom checkpoint: the architecture and its
 missing decoder normalization are different.
@@ -97,9 +127,10 @@ uv run python evaluation/compare_act_policies.py \
   --output outputs/dataset_audits/014_episode_start_task_space_comparison.json
 ```
 
-This is now the checkpoint gate: compare episode-start task-space geometry,
-visual conditioning, and replan consistency before spending time on live
-rollouts.
+Rerun this diagnostic on the corrected checkpoint to determine whether the
+episode-start task-space metrics track the large legacy-to-corrected live
+improvement. It remains useful for checkpoint screening, but the live result
+shows that layout-level rollout evaluation is still decisive.
 
 ## Historical sim TL;DR (June 2026; not the current sponge diagnosis)
 
@@ -973,3 +1004,205 @@ against attributing the transformed models' behavior to a single transform:
 training-time augmentation changed the learned solution, but this small
 dataset/model can converge to a narrow layout-dependent policy even when pixel
 geometry is unchanged.
+
+### Corrected custom architecture 20k (2026-07-21)
+
+The custom implementation was changed directly to match LeRobot ACT's
+transformer semantics: post-norm, ReLU, Xavier transformer initialization,
+residual dropout, no custom camera embedding, and a final decoder LayerNorm.
+The previously ineffective training seed was also wired into Python, NumPy,
+PyTorch, model initialization, and dataloader shuffling.
+
+A fresh model was trained on all 50 episodes for 20k steps, chunk size 30,
+without image transforms. It finished with loss `0.06656` and action L1
+`0.06478`. The final checkpoint is:
+
+`outputs/modal/act_custom_lerobot_arch_chunk30_steps20000_all50/20260721T223816Z-824f6399/checkpoints/last.pt`
+
+The checkpoint was exported through `models.act.lerobot_policy` and evaluated
+through the same `models/act/eval_async.py` client used by official LeRobot ACT.
+
+| layout | old unaugmented LeRobot 20k | corrected custom 20k |
+|---:|---:|---:|
+| 1 | 5/6 | 1/6 |
+| 2 | 1/6 | 2/6 |
+| 3 | 2/6 | 4/6 |
+| 4 | 2/6 | 0/6 |
+| 5 | 1/6 | 3/6 |
+| **Total** | **11/30 (36.7%)** | **10/30 (33.3%)** |
+
+**Interpretation:** this is a large practical improvement over the prior
+custom policy's effectively nonfunctional live behavior. The corrected custom
+model is now competitive with the working LeRobot reference rather than failing
+as a separate implementation. However, the nearly equal totals still hide
+different spatial biases. The custom model trades layout-1 and layout-4
+performance for better layout-2, layout-3, and layout-5 performance.
+
+This result supports the conclusion that the old custom implementation was a
+real blocker. It does not isolate which architecture detail was responsible,
+because all transformer mismatches were corrected together and deterministic
+seeding was fixed in the same retrain. It also does not solve the remaining
+problem shared by both models: narrow spatial generalization from this small
+dataset.
+
+### Matched unaugmented 50k continuations (2026-07-25)
+
+The corrected custom base and the old unaugmented LeRobot base were both
+continued from their 20k checkpoints to total step 50k on Modal A10Gs. Both
+runs used the same 50-episode
+`RevanthGundala/014-place-sponge-in-bowl-diverse-50` dataset, chunk size 30,
+absolute actions, no image transforms, and periodic 2k-step checkpoints.
+
+| model | resume source | final train metric | local 50k checkpoint |
+|---|---|---|---|
+| corrected custom ACT | corrected custom 20k | loss `0.04557`; action L1 `0.04506` | `outputs/modal/act_custom_lerobot_arch_chunk30_steps50000_all50_resume20k/checkpoints/last.pt` |
+| stock LeRobot ACT | unaugmented LeRobot 20k | loss `0.045` | `outputs/modal/lerobot_014_unaugmented_resume20k_to50k/checkpoints/050000/pretrained_model` |
+
+The LeRobot run resumed model, optimizer, step counter, and saved RNG state. The
+older custom checkpoint format resumed model, optimizer, and step counter but
+did not contain RNG state; its dataloader sequence therefore restarted from
+seed 1000. This is still a continuation of the same learned weights and optimizer
+moments, but it is not a bit-for-bit stochastic continuation.
+
+The two jobs cost approximately `$4.86` combined. Independent watchdogs
+downloaded both outputs, stopped their exact Modal apps, and a fresh account
+audit confirmed no active apps or containers remained.
+
+The corrected custom 50k policy was evaluated on the same five-layout,
+six-attempt protocol:
+
+| layout | corrected custom 20k | corrected custom 50k |
+|---:|---:|---:|
+| 1 | 1/6 | 5/6 |
+| 2 | 2/6 | 0/6 |
+| 3 | 4/6 | 3/6 |
+| 4 | 0/6 | 0/6 |
+| 5 | 3/6 | 0/6 |
+| **Total** | **10/30 (33.3%)** | **8/30 (26.7%)** |
+
+Longer training did not improve total success for the corrected custom policy.
+It shifted the policy sharply toward layout 1 while losing all layout-2 and
+layout-5 successes. The lower 50k training loss therefore did not translate to
+better rollout performance. Stock LeRobot 50k live evaluation remains pending.
+
+### LeRobot-policy DAgger corrections did not transfer to custom ACT (2026-07-21)
+
+The corrected custom 20k checkpoint was warm-start fine-tuned for 8k additional
+steps on `RevanthGundala/015-place-sponge-in-bowl-dagger18-trimmed` (50 seed
+episodes plus 18 trimmed DAgger correction episodes). The warm start loaded
+model weights only; optimizer and step counter were fresh, and normalization
+was recomputed on the 68-episode aggregate, matching the official LeRobot
+DAgger recipe. Final loss was `0.05775` (`action_l1=0.05685`).
+
+Checkpoint:
+
+`outputs/modal/act_custom_lerobot_arch_dagger18ft_steps8000/20260722T004246Z-1522b4a4/checkpoints/last.pt`
+
+The available matched live comparison is partial but negative:
+
+| layout | corrected custom base 20k | custom + LeRobot-policy DAgger data |
+|---:|---:|---:|
+| 2 | 2/6 | 3/6 |
+| 3 | **4/6** | **0/6** |
+| **Tested subtotal** | **6/12 (50%)** | **3/12 (25%)** |
+
+Continuing the same cross-policy fine-tune is not justified. Although layout 2
+improved by one success, layout 3 collapsed, halving success across the two
+tested layouts.
+
+This is consistent with a policy-state-distribution mismatch. The 18 DAgger
+corrections were collected while the **LeRobot** policy controlled the robot.
+They therefore teach expert recovery actions for arm/object/image states
+induced by LeRobot's own mistakes. The corrected custom policy starts from the
+same scene, but its live success pattern is already very different by layout,
+showing that it follows different approach trajectories. The policies do not
+need to visit completely disjoint states: a few degrees of early joint
+difference compounds into a different gripper pose, camera observation, and
+object relationship by the time intervention begins. A correction that is
+locally appropriate on LeRobot's trajectory can be irrelevant or conflicting
+on the custom trajectory.
+
+The next DAgger round must therefore be collected **on-policy from the corrected
+custom 20k checkpoint**. Keep the original 50 seed demonstrations in the next
+aggregate, but replace the LeRobot-induced correction set with corrections
+triggered during custom-policy rollouts. Use the 014 seed dataset for the robot
+start pose; correction windows begin mid-task and must never be averaged into
+the rollout start state.
+
+### Morning-to-afternoon live reversal (2026-07-24)
+
+The live behavior changed materially within one day without changing policy
+weights. During the morning evaluation on layout 5, the operator observed the
+same wrong approach trajectory from all four primary checkpoints:
+
+- LeRobot 20k
+- LeRobot DAgger
+- corrected custom 20k
+- custom-policy DAgger
+
+The photometric-only LeRobot checkpoint and the default-transform LeRobot
+checkpoint also failed on layout 5 that morning. On layout 1, both LeRobot
+checkpoints worked while both custom checkpoints failed. Later that afternoon,
+the operator reran DAgger evaluation and reported successful behavior. The
+latest successful runs loaded the same custom-policy DAgger export used in the
+morning:
+
+`outputs/modal_downloads/act_custom_lerobot_arch_dagger016ft_steps8000/pretrained_model`
+
+The recorded follower start pose remained effectively unchanged, and the
+follower continued to track the commanded path comparably. The meaningful
+difference was the trajectory requested by the policy. Because inference is
+deterministic, unchanged weights cannot spontaneously improve with wall-clock
+time: some input to the closed loop changed.
+
+This distinguishes three different notions of "time":
+
+- The time at which GPU training runs is irrelevant; training consumes saved
+  images.
+- The time at which demonstrations or DAgger corrections are **recorded** may
+  matter because the saved images contain the illumination conditions present
+  at collection time.
+- The time at which live evaluation runs may matter because sunlight angle,
+  directional shadows, reflections, camera auto-exposure, and automatic white
+  balance can change the observation distribution.
+
+The reversal is strong evidence for a time-correlated live-domain shift, but it
+does not yet prove that lighting is the cause. The morning traces did not save
+synchronized camera frames, the available 11:22 snapshot was captured after a
+run, and object placement was not mechanically locked between morning and
+afternoon. A subtle placement change remains a confound.
+
+The prior photometric-only ablation does not rule out illumination sensitivity.
+It applied global brightness, contrast, saturation, hue, and sharpness jitter.
+It did not reproduce moving directional shadows, localized glare, reflections,
+or the coupled response of camera auto-exposure and white balance.
+
+The controlled test is:
+
+1. Mechanically fix one scene and camera pose.
+2. Save synchronized raw top/wrist frames and qpos during both morning and
+   afternoon evaluations.
+3. Run every checkpoint offline on both image pairs using the same qpos and
+   compare the predicted action chunks and end-effector paths.
+4. Repeat live evaluation with daylight blocked and fixed artificial lighting;
+   lock exposure and white balance if the cameras support it.
+
+Collecting morning DAgger data is useful as a diagnostic only if it supervises
+the initial wrong approach. Dataset `016` contains correction-only windows and
+no autonomous prefix, so an intervention that begins after the misaim may not
+teach a different initial trajectory. Any morning collection should use a new
+dataset ID, preserve early-approach observations with explicit intervention
+labels, combine morning and afternoon coverage, and evaluate the resulting
+checkpoint in both conditions. The intended robust outcome is one
+lighting-tolerant policy or controlled lighting, not separate morning and
+afternoon models.
+
+
+
+
+# TODO: 
+rl ablations
+
+intiialize weights from the pretrained policy
+do uncond == negative
+adaln vs exztra token

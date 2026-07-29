@@ -20,7 +20,6 @@ def test_remote_training_command_exports_train_split(monkeypatch):
         job_name="custom-all50",
         dataset_repo_id="owner/dataset",
         train_split=1.0,
-        stock_parity=True,
         remote_resume_checkpoint="",
         remote_workspace="/workspace/act-sim",
     )
@@ -28,7 +27,6 @@ def test_remote_training_command_exports_train_split(monkeypatch):
     command = remote_training_command(args)
 
     assert "export ACT_TRAIN_SPLIT=\"1.0\"" in command
-    assert "export ACT_TRAIN_STOCK_PARITY=1" in command
     assert 'export ACT_TRAIN_JOB_NAME="custom-all50"' in command
 
 

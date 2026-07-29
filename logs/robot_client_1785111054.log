@@ -1,0 +1,3 @@
+DEBUG 2026-07-26 17:10:54 ort_utils.py:65 Detected datasets version: 4.8.5
+DEBUG 2026-07-26 17:10:54 ort_utils.py:65 Detected av version: 15.1.0
+DEBUG 2026-07-26 17:10:54 ts/config.py:54 PyTorch version 2.11.0 available.

@@ -1,5 +1,5 @@
 from dataclasses import asdict, replace
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -24,6 +24,20 @@ def seed_training(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
+def write_training_status(path: str | None, payload: dict) -> None:
+    if not path:
+        return
+    status_path = Path(path)
+    status_path.parent.mkdir(parents=True, exist_ok=True)
+    status_path.write_text(
+        json.dumps(
+            {"timestamp": datetime.now(timezone.utc).isoformat(), **payload},
+            sort_keys=True,
+        )
+        + "\n"
+    )
+
+
 def compute_loss(model, batch, device, kl_weight):
     images = batch["images"].to(device)
     qpos = batch["qpos"].to(device)
@@ -44,11 +58,11 @@ def config_from_env() -> ACTConfig:
     cfg = replace(
         base_cfg,
         job_name=os.environ.get("ACT_TRAIN_JOB_NAME", base_cfg.job_name),
+        output_root=os.environ.get("ACT_TRAIN_OUTPUT_ROOT", base_cfg.output_root),
         num_train_steps=int(os.environ.get("ACT_TRAIN_STEPS", base_cfg.num_train_steps)),
         chunk_size=int(os.environ.get("ACT_TRAIN_CHUNK_SIZE") or base_cfg.chunk_size),
         save_freq=int(os.environ.get("ACT_TRAIN_SAVE_FREQ", base_cfg.save_freq)),
         train_split=float(train_split) if train_split else base_cfg.train_split,
-        stock_parity=os.environ.get("ACT_TRAIN_STOCK_PARITY", "0") == "1",
     )
     if not 0 < cfg.train_split <= 1:
         raise ValueError(f"ACT_TRAIN_SPLIT must be in (0, 1], got {cfg.train_split}.")
@@ -62,30 +76,44 @@ def main():
         device_name = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
     device = torch.device(device_name)
     resume_checkpoint = os.environ.get("ACT_TRAIN_RESUME_CHECKPOINT")
+    pretrained_checkpoint = os.environ.get("ACT_TRAIN_PRETRAINED_CHECKPOINT")
+    if resume_checkpoint and pretrained_checkpoint:
+        raise ValueError(
+            "ACT_TRAIN_RESUME_CHECKPOINT and ACT_TRAIN_PRETRAINED_CHECKPOINT are mutually exclusive."
+        )
     checkpoint = None
-    if resume_checkpoint:
-        checkpoint = torch.load(resume_checkpoint, map_location=device, weights_only=False)
+    checkpoint_path = resume_checkpoint or pretrained_checkpoint
+    if checkpoint_path:
+        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
         if not isinstance(checkpoint, dict) or not isinstance(checkpoint.get("config"), dict):
-            raise ValueError(f"Resume checkpoint {resume_checkpoint} is missing a config dictionary.")
-        checkpoint_stock_parity = bool(checkpoint["config"].get("stock_parity", False))
-        if cfg.stock_parity != checkpoint_stock_parity:
-            print(
-                "Resume checkpoint architecture overrides "
-                f"stock_parity={cfg.stock_parity} with stock_parity={checkpoint_stock_parity}.",
-                flush=True,
+            raise ValueError(f"Checkpoint {checkpoint_path} is missing a config dictionary.")
+        model_state = checkpoint.get("model_state_dict")
+        if (
+            not isinstance(model_state, dict)
+            or "decoder.camera_emb" in model_state
+            or "decoder.final_norm.weight" not in model_state
+        ):
+            raise ValueError(
+                "Resume checkpoint uses the legacy custom ACT architecture. "
+                "Start a fresh run with the current LeRobot-aligned architecture."
             )
-            cfg = replace(cfg, stock_parity=checkpoint_stock_parity)
 
     seed_training(cfg.seed)
     model = ACTPolicy(cfg, pretrained_backbone=True).to(device)
+    if checkpoint is not None:
+        model.load_state_dict(checkpoint["model_state_dict"])
     optim = torch.optim.AdamW(model.parameters(), lr=cfg.learning_rate, weight_decay=cfg.weight_decay)
     train_loader, val_loader = make_dataloaders(cfg)
     start_step = 0
-    if checkpoint is not None:
-        model.load_state_dict(checkpoint["model_state_dict"])
+    if resume_checkpoint:
         optim.load_state_dict(checkpoint["optimizer_state_dict"])
         start_step = int(checkpoint["step"])
         print(f"Resumed checkpoint {resume_checkpoint} at step {start_step}", flush=True)
+    elif pretrained_checkpoint:
+        print(
+            f"Warm-started weights from {pretrained_checkpoint}; optimizer and step counter are fresh.",
+            flush=True,
+        )
     run_dir = Path(cfg.output_root) / cfg.job_name / datetime.now().strftime("%Y%m%d-%H%M%S")
     run_dir.mkdir(parents=True, exist_ok=False)
     checkpoint_dir = run_dir / "checkpoints"
@@ -122,6 +150,19 @@ def main():
     model.train()
 
     step = start_step
+    status_path = os.environ.get("ACT_TRAIN_STATUS_PATH")
+    latest_metrics = None
+    latest_checkpoint = None
+    write_training_status(
+        status_path,
+        {
+            "status": "running",
+            "step": step,
+            "device": str(device),
+            "run_dir": str(run_dir),
+            "latest_checkpoint": latest_checkpoint,
+        },
+    )
     try:
         if mlflow_module is not None:
             mlflow_module.log_artifact(str(run_dir / "config.json"), artifact_path="config")
@@ -144,6 +185,7 @@ def main():
                     "grad_norm": float(grad_norm),
                     "step_seconds": time.perf_counter() - step_start,
                 }
+                latest_metrics = train_metrics
                 if step % cfg.log_freq == 0:
                     with (run_dir / "metrics.jsonl").open("a") as file:
                         file.write(json.dumps(train_metrics, sort_keys=True) + "\n")
@@ -156,6 +198,17 @@ def main():
                         f"step={step} loss={loss.item():.4f} "
                         f"action_l1={action_loss.item():.4f} kl={kl_loss.item():.4f}",
                         flush=True,
+                    )
+                    write_training_status(
+                        status_path,
+                        {
+                            "status": "running",
+                            "step": step,
+                            "device": str(device),
+                            "run_dir": str(run_dir),
+                            "latest_checkpoint": latest_checkpoint,
+                            "metrics": train_metrics,
+                        },
                     )
                 if val_loader is not None and step % cfg.eval_freq == 0:
                     # Match stock LeRobot ACT: validation computes the VAE
@@ -192,11 +245,38 @@ def main():
                     model.train()
 
                 if (step + 1) % cfg.save_freq == 0 or (step + 1) >= cfg.num_train_steps:
-                    save_checkpoint(checkpoint_dir, step + 1, model, optim, cfg, train_metrics)
+                    latest_checkpoint = str(
+                        save_checkpoint(checkpoint_dir, step + 1, model, optim, cfg, train_metrics)
+                    )
 
                 step += 1
                 if step >= cfg.num_train_steps:
                     break
+        write_training_status(
+            status_path,
+            {
+                "status": "complete",
+                "step": step,
+                "device": str(device),
+                "run_dir": str(run_dir),
+                "latest_checkpoint": latest_checkpoint,
+                "metrics": latest_metrics,
+            },
+        )
+    except Exception as exc:
+        write_training_status(
+            status_path,
+            {
+                "status": "failed",
+                "step": step,
+                "device": str(device),
+                "run_dir": str(run_dir),
+                "latest_checkpoint": latest_checkpoint,
+                "metrics": latest_metrics,
+                "error": repr(exc),
+            },
+        )
+        raise
     finally:
         if mlflow_module is not None:
             if (run_dir / "metrics.jsonl").exists():
@@ -216,6 +296,7 @@ def save_checkpoint(checkpoint_dir, step, model, optim, cfg, metrics):
     torch.save(checkpoint, step_path)
     torch.save(checkpoint, checkpoint_dir / "last.pt")
     print(f"Saved checkpoint: {step_path}", flush=True)
+    return step_path
 
 
 if __name__ == "__main__":

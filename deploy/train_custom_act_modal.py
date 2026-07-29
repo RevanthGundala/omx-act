@@ -15,17 +15,26 @@ Download outputs:
 from __future__ import annotations
 
 from dataclasses import asdict, replace
+from datetime import datetime, timezone
 import importlib
 from pathlib import Path
+import uuid
 
 import modal
+
+try:
+    from modal_training_common import validate_dataset_run, validate_pretrained_checkpoint_path
+except ModuleNotFoundError:
+    from deploy.modal_training_common import validate_dataset_run, validate_pretrained_checkpoint_path
 
 
 REMOTE_WORKSPACE = Path("/workspace")
 REMOTE_OUTPUTS = Path("/outputs")
 REMOTE_BENCHMARK_DATA = Path("/benchmark-data")
 MODAL_GPU = "A10G"
+MODAL_MAX_RUNTIME_SECONDS = 3 * 60 * 60
 VOLUME_COMMIT_INTERVAL_SECONDS = 300
+LEROBOT_GIT_REF = "87242cfced5228b6181fb0047021d684d424df38"
 
 hf_secret = modal.Secret.from_name("huggingface")
 
@@ -33,29 +42,66 @@ image = (
     modal.Image.from_registry("nvidia/cuda:12.6.3-cudnn-runtime-ubuntu24.04", add_python="3.12")
     .apt_install("git", "ffmpeg", "linux-libc-dev", "clang")
     .pip_install(
-        "torch",
-        "torchvision",
-        index_url="https://download.pytorch.org/whl/cu124",
+        "torch==2.7.1",
+        "torchvision==0.22.1",
+        index_url="https://download.pytorch.org/whl/cu128",
     )
     .pip_install(
         "huggingface-hub>=1.0,<2.0",
-        "lerobot>=0.5.1",
+        f"lerobot[training] @ git+https://github.com/huggingface/lerobot.git@{LEROBOT_GIT_REF}",
         "av>=15,<16",
         "h5py>=3.15",
         "mlflow>=2.17",
         "pandas",
         "pyarrow",
         "safetensors",
+        "torchcodec==0.5.0",
     )
     .add_local_dir("models", remote_path=str(REMOTE_WORKSPACE / "models"))
     .add_local_dir("configs", remote_path=str(REMOTE_WORKSPACE / "configs"))
     .add_local_dir("utils", remote_path=str(REMOTE_WORKSPACE / "utils"))
-    .add_local_dir("benchmarks", remote_path=str(REMOTE_WORKSPACE / "benchmarks"))
+    .add_local_dir("data", remote_path=str(REMOTE_WORKSPACE / "data"))
+    .add_local_file("deploy/modal_training_common.py", remote_path="/root/modal_training_common.py")
 )
+if Path("benchmarks").is_dir():
+    image = image.add_local_dir("benchmarks", remote_path=str(REMOTE_WORKSPACE / "benchmarks"))
 
 app = modal.App("omx-custom-act-training", image=image)
 vol = modal.Volume.from_name("omx-custom-act-training-logs", create_if_missing=True)
 benchmark_vol = modal.Volume.from_name("omx-custom-act-benchmark-data", create_if_missing=True)
+
+
+@app.function(timeout=300)
+def runtime_preflight() -> str:
+    import subprocess
+
+    import lerobot
+    import torch
+    import torchcodec
+    import torchvision
+    from torchcodec.decoders import VideoDecoder
+
+    video_path = "/tmp/torchcodec_preflight.mp4"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=size=64x64:duration=1:rate=2",
+            "-y",
+            video_path,
+        ],
+        check=True,
+    )
+    frame = VideoDecoder(video_path)[0]
+    return (
+        f"torch={torch.__version__} torchvision={torchvision.__version__} "
+        f"torchcodec={torchcodec.__version__} lerobot={lerobot.__version__} "
+        f"decoded_frame_shape={tuple(frame.shape)}"
+    )
 
 
 def load_profile(profile: str):
@@ -138,6 +184,170 @@ def configure_remote_profile(config, profile: str):
     if updated.dataset_format == "act_hdf5":
         updated = replace(updated, benchmark_dataset_dir=str(benchmark_remote_dir(profile)))
     return updated
+
+
+@app.function(
+    gpu=MODAL_GPU,
+    cpu=4.0,
+    timeout=MODAL_MAX_RUNTIME_SECONDS,
+    memory=32_768,
+    volumes={REMOTE_OUTPUTS: vol},
+    secrets=[hf_secret],
+)
+def train_dataset_remote(
+    dataset_repo_id: str,
+    steps: int,
+    chunk_size: int,
+    save_freq: int,
+    train_split: float,
+    job_name: str,
+    run_token: str,
+    pretrained_checkpoint: str | None,
+    resume_checkpoint: str | None,
+) -> str:
+    import json
+    import os
+    import subprocess
+    import sys
+    import threading
+    import time
+
+    validate_dataset_run(
+        dataset_repo_id=dataset_repo_id,
+        steps=steps,
+        chunk_size=chunk_size,
+        save_freq=save_freq,
+        train_split=train_split,
+        job_name=job_name,
+    )
+    pretrained_checkpoint = validate_pretrained_checkpoint_path(pretrained_checkpoint)
+    resume_checkpoint = validate_pretrained_checkpoint_path(resume_checkpoint)
+    if pretrained_checkpoint and resume_checkpoint:
+        raise ValueError(
+            "pretrained_checkpoint and resume_checkpoint are mutually exclusive."
+        )
+    vol.reload()
+    pretrained_path = (
+        REMOTE_OUTPUTS / pretrained_checkpoint
+        if pretrained_checkpoint is not None
+        else None
+    )
+    resume_path = (
+        REMOTE_OUTPUTS / resume_checkpoint
+        if resume_checkpoint is not None
+        else None
+    )
+    if pretrained_path is not None and not pretrained_path.is_file():
+        raise FileNotFoundError(
+            f"Warm-start checkpoint is missing from Modal volume: {pretrained_path}"
+        )
+    if resume_path is not None and not resume_path.is_file():
+        raise FileNotFoundError(
+            f"Resume checkpoint is missing from Modal volume: {resume_path}"
+        )
+    os.environ.update(
+        {
+            "PYTHONUNBUFFERED": "1",
+            "HF_TOKEN": os.environ.get("HF_TOKEN", ""),
+            "HUGGINGFACE_HUB_TOKEN": os.environ.get("HF_TOKEN", ""),
+            "ACT_DEVICE": "cuda",
+            "ACT_DISABLE_MLFLOW": "1",
+            "ACT_TRAIN_DATASET_REPO_ID": dataset_repo_id,
+            "ACT_TRAIN_STEPS": str(steps),
+            "ACT_TRAIN_CHUNK_SIZE": str(chunk_size),
+            "ACT_TRAIN_SAVE_FREQ": str(save_freq),
+            "ACT_TRAIN_SPLIT": str(train_split),
+            "ACT_TRAIN_JOB_NAME": job_name,
+            "ACT_TRAIN_OUTPUT_ROOT": str(REMOTE_OUTPUTS / "act_experiments"),
+            "ACT_TRAIN_STATUS_PATH": str(
+                REMOTE_OUTPUTS / "modal_monitors" / f"{run_token}_training.json"
+            ),
+            "ACT_TRAIN_RESUME_CHECKPOINT": (
+                str(resume_path) if resume_path is not None else ""
+            ),
+            "ACT_TRAIN_PRETRAINED_CHECKPOINT": (
+                str(pretrained_path) if pretrained_path is not None else ""
+            ),
+        }
+    )
+    sys.path.insert(0, str(REMOTE_WORKSPACE))
+    os.chdir(REMOTE_WORKSPACE)
+
+    import torch
+
+    print("=== CUDA PREFLIGHT ===", flush=True)
+    print(f"run_token={run_token}", flush=True)
+    print(f"torch={torch.__version__} cuda_runtime={torch.version.cuda}", flush=True)
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA is not available; refusing CPU fallback on a paid GPU job.")
+    gpu_name = torch.cuda.get_device_name(0)
+    gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / 1e9
+    print(f"gpu={gpu_name} vram_gb={gpu_memory_gb:.1f}", flush=True)
+    print(
+        "training_config "
+        f"dataset={dataset_repo_id} steps={steps} chunk_size={chunk_size} "
+        f"save_freq={save_freq} train_split={train_split} job_name={job_name} "
+        f"pretrained_checkpoint={pretrained_path} resume_checkpoint={resume_path}",
+        flush=True,
+    )
+
+    monitor_dir = REMOTE_OUTPUTS / "modal_monitors"
+    monitor_dir.mkdir(parents=True, exist_ok=True)
+    telemetry_path = monitor_dir / f"{run_token}.jsonl"
+    stop_monitor = threading.Event()
+
+    def sample_gpu() -> None:
+        while not stop_monitor.is_set():
+            timestamp = datetime.now(timezone.utc).isoformat()
+            try:
+                result = subprocess.run(
+                    [
+                        "nvidia-smi",
+                        "--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu",
+                        "--format=csv,noheader,nounits",
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                fields = [value.strip() for value in result.stdout.strip().split(",")]
+                entry = {
+                    "timestamp": timestamp,
+                    "gpu_name": fields[0],
+                    "utilization_percent": float(fields[1]),
+                    "memory_used_mib": float(fields[2]),
+                    "memory_total_mib": float(fields[3]),
+                    "temperature_c": float(fields[4]),
+                }
+            except Exception as exc:
+                entry = {"timestamp": timestamp, "telemetry_error": repr(exc)}
+            with telemetry_path.open("a") as file:
+                file.write(json.dumps(entry, sort_keys=True) + "\n")
+            print(f"GPU_TELEMETRY {json.dumps(entry, sort_keys=True)}", flush=True)
+            vol.commit()
+            stop_monitor.wait(VOLUME_COMMIT_INTERVAL_SECONDS)
+
+    monitor_thread = threading.Thread(target=sample_gpu, name="gpu-telemetry", daemon=True)
+    monitor_thread.start()
+    try:
+        from models.act.train import main as train_main
+
+        train_main()
+    finally:
+        stop_monitor.set()
+        monitor_thread.join(timeout=10)
+        vol.commit()
+    return json.dumps(
+        {
+            "status": "complete",
+            "run_token": run_token,
+            "job_name": job_name,
+            "output_root": str(REMOTE_OUTPUTS / "act_experiments" / job_name),
+            "pretrained_checkpoint": str(pretrained_path) if pretrained_path is not None else None,
+            "resume_checkpoint": str(resume_path) if resume_path is not None else None,
+        },
+        sort_keys=True,
+    )
 
 
 @app.function(
@@ -234,7 +444,65 @@ def main(
     benchmark_dataset_dir: str | None = None,
     upload_benchmark_data: bool = False,
     list_benchmark_only: bool = False,
+    dataset_repo_id: str | None = None,
+    steps: int = 20_000,
+    chunk_size: int = 30,
+    save_freq: int = 2_000,
+    train_split: float = 1.0,
+    job_name: str = "act_custom_lerobot_arch_chunk30_steps20000_all50",
+    pretrained_checkpoint: str | None = None,
+    resume_checkpoint: str | None = None,
 ):
+    if dataset_repo_id is not None:
+        validate_dataset_run(
+            dataset_repo_id=dataset_repo_id,
+            steps=steps,
+            chunk_size=chunk_size,
+            save_freq=save_freq,
+            train_split=train_split,
+            job_name=job_name,
+        )
+        pretrained_checkpoint = validate_pretrained_checkpoint_path(pretrained_checkpoint)
+        resume_checkpoint = validate_pretrained_checkpoint_path(resume_checkpoint)
+        if pretrained_checkpoint and resume_checkpoint:
+            raise ValueError(
+                "--pretrained-checkpoint and --resume-checkpoint are mutually exclusive."
+            )
+        print(
+            "DATASET_RUN "
+            f"gpu={MODAL_GPU} hard_timeout_seconds={MODAL_MAX_RUNTIME_SECONDS} "
+            f"dataset={dataset_repo_id} steps={steps} chunk_size={chunk_size} "
+            f"save_freq={save_freq} train_split={train_split} job_name={job_name} "
+            f"pretrained_checkpoint={pretrained_checkpoint} "
+            f"resume_checkpoint={resume_checkpoint}"
+        )
+        if preflight_only:
+            print("Preflight only; not launching Modal GPU job.")
+            return
+        run_token = (
+            datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            + "-"
+            + uuid.uuid4().hex[:8]
+        )
+        function_call = train_dataset_remote.spawn(
+            dataset_repo_id=dataset_repo_id,
+            steps=steps,
+            chunk_size=chunk_size,
+            save_freq=save_freq,
+            train_split=train_split,
+            job_name=job_name,
+            run_token=run_token,
+            pretrained_checkpoint=pretrained_checkpoint,
+            resume_checkpoint=resume_checkpoint,
+        )
+        print(f"MODAL_FUNCTION_CALL_ID={function_call.object_id}")
+        print(f"MODAL_RUN_TOKEN={run_token}")
+        print(f"MODAL_JOB_NAME={job_name}")
+        print(f"MODAL_HARD_TIMEOUT_SECONDS={MODAL_MAX_RUNTIME_SECONDS}")
+        print("MODAL_OUTPUT_VOLUME=omx-custom-act-training-logs")
+        print(f"MODAL_OUTPUT_PATH=act_experiments/{job_name}")
+        return
+
     preflight_profile(profile)
     config = load_profile(profile)
     if upload_benchmark_data:

@@ -223,6 +223,19 @@ def dataset_reference(policy_path: Path) -> tuple[str, str]:
     return dataset["repo_id"], dataset.get("revision") or "main"
 
 
+def start_state_reference(
+    policy_path: Path,
+    repo_id_override: str | None,
+    revision_override: str | None,
+) -> tuple[str, str]:
+    policy_repo_id, policy_revision = dataset_reference(policy_path)
+    repo_id = repo_id_override or policy_repo_id
+    revision = revision_override or (
+        policy_revision if repo_id_override is None else "main"
+    )
+    return repo_id, revision
+
+
 def install_action_smoother(robot, alpha: float) -> None:
     """Wrap ``robot.send_action`` with a per-joint EMA low-pass to damp residual jitter.
 
@@ -241,10 +254,55 @@ def install_action_smoother(robot, alpha: float) -> None:
                 out[k] = v
             else:
                 out[k] = alpha * v + (1.0 - alpha) * state[k]
-            state[k] = out[k]
-        return raw_send(out)
+        sent = raw_send(out)
+        state.update({key: float(value) for key, value in sent.items()})
+        return sent
 
     robot.send_action = smoothed_send
+
+
+def install_action_rate_limiter(robot, max_delta: float) -> None:
+    """Limit every final joint target relative to the previously sent command."""
+    if not np.isfinite(max_delta) or max_delta <= 0:
+        raise ValueError("max_delta must be a positive finite value.")
+
+    raw_send = robot.send_action
+    previous = joint_positions(robot)
+    warning_state = {"last_print": 0.0}
+
+    def limited_send(action: dict[str, float]):
+        limited = {}
+        clipped = {}
+        for key, value in action.items():
+            if key not in previous:
+                raise KeyError(f"Policy produced an action for unknown joint {key!r}.")
+            value = float(value)
+            if not np.isfinite(value):
+                raise ValueError(f"Policy produced a non-finite action for {key}: {value}")
+            prior = previous[key]
+            bounded = float(np.clip(value, prior - max_delta, prior + max_delta))
+            limited[key] = bounded
+            if bounded != value:
+                clipped[key] = (value, bounded)
+
+        sent = raw_send(limited)
+        for key, value in sent.items():
+            previous[key] = float(value)
+
+        now = time.monotonic()
+        if clipped and now - warning_state["last_print"] >= 1.0:
+            details = ", ".join(
+                f"{key} {requested:.2f}->{bounded:.2f}"
+                for key, (requested, bounded) in clipped.items()
+            )
+            print(
+                f"[eval_async] SAFETY CLAMP active (max {max_delta:g} deg/command): {details}",
+                flush=True,
+            )
+            warning_state["last_print"] = now
+        return sent
+
+    robot.send_action = limited_send
 
 
 def return_home(
@@ -603,6 +661,15 @@ def parse_args() -> argparse.Namespace:
                    help="EMA low-pass on executed joint targets: sent = a*target + (1-a)*prev. "
                         "1.0 = off (raw targets), lower = smoother but laggier. ~0.6-0.8 removes residual jitter; "
                         "gripper is exempt so grasps stay crisp.")
+    p.add_argument(
+        "--max-joint-delta",
+        type=float,
+        default=2.0,
+        help=(
+            "Hard safety limit in degrees between consecutive commands for every joint, "
+            "including the gripper (default: 2.0; must be positive)."
+        ),
+    )
     p.add_argument("--visualize-queue", action="store_true", help="plot action-queue size on exit")
     p.add_argument("--trials", type=int, default=1, help="Number of trials to run without reconnecting hardware.")
     p.add_argument(
@@ -805,6 +872,12 @@ def run_robot_client(
                 f"[eval_async] action EMA smoothing a={args.action_smoothing} (gripper exempt)",
                 flush=True,
             )
+        install_action_rate_limiter(client.robot, args.max_joint_delta)
+        print(
+            f"[eval_async] hard action safety clamp={args.max_joint_delta:g} deg/command "
+            "(all joints, including gripper)",
+            flush=True,
+        )
         if args.trace_path.lower() != "none":
             trace_path = (
                 Path("outputs/eval_traces")
@@ -945,7 +1018,14 @@ def run_robot_client(
                 and (watchdog is None or watchdog.reason is None)
             ):
                 try:
-                    return_home(client.robot, cleanup_pose, args.return_home_s, args.fps, home_label)
+                    return_home(
+                        client.robot,
+                        cleanup_pose,
+                        args.return_home_s,
+                        args.fps,
+                        home_label,
+                        max_step_delta=args.max_joint_delta,
+                    )
                 except (Exception, KeyboardInterrupt) as exc:  # noqa: BLE001
                     print(f"[eval_async] could not return home: {exc}", flush=True)
             try:
@@ -960,12 +1040,20 @@ def run_robot_client(
 
 def main() -> None:
     args = parse_args()
+    if args.trials <= 0:
+        raise ValueError("--trials must be positive.")
+    if args.trial_duration is not None and args.trial_duration <= 0:
+        raise ValueError("--trial-duration must be positive when provided.")
+    if args.camera_reference_count <= 0:
+        raise ValueError("--camera-reference-count must be positive.")
     policy_path = Path(args.policy_path).resolve()
     if not policy_path.exists():
         raise FileNotFoundError(f"Policy path not found: {policy_path}")
     camera_names = [c.strip() for c in args.cameras.split(",") if c.strip()]
     fourcc = args.camera_fourcc or None
     host, port = args.server_address.split(":")
+    if not np.isfinite(args.max_joint_delta) or args.max_joint_delta <= 0:
+        raise ValueError("--max-joint-delta must be a positive finite value.")
 
     force_no_calibration()
 

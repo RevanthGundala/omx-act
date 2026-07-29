@@ -8,6 +8,7 @@ dependencies = [
     "torch",
     "torchvision",
     "numpy",
+    "einops>=0.8",
     # LeRobot stack (datasets, stock ACT policy, train/eval) + sim env
     "lerobot[async,diffusion,dynamixel,training]>=0.5.1",
     "gym-aloha>=0.1.4",

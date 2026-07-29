@@ -87,7 +87,6 @@ def _custom_config():
         num_heads=4,
         mlp_dim=64,
         dropout=0.0,
-        stock_parity=True,
     )
 
 
@@ -153,12 +152,11 @@ def _copy_vae_weights(custom: ACTPolicy, official: LeRobotACT):
     )
 
 
-def test_stock_parity_mode_matches_lerobot_inference_with_mapped_weights():
+def test_custom_act_matches_lerobot_inference_with_mapped_weights():
     torch.manual_seed(0)
     official = LeRobotACT(_lerobot_config()).eval()
     custom = ACTPolicy(_custom_config(), pretrained_backbone=False).eval()
     _copy_inference_weights(custom, official)
-    custom.decoder.camera_emb.data.fill_(100)
 
     state = torch.randn(2, 6)
     image = torch.randn(2, 3, 64, 64)
@@ -169,7 +167,7 @@ def test_stock_parity_mode_matches_lerobot_inference_with_mapped_weights():
     assert torch.allclose(actual, expected, atol=1e-5, rtol=1e-5)
 
 
-def test_stock_parity_mode_uses_stock_transformer_topology():
+def test_custom_act_uses_lerobot_transformer_topology():
     config = replace(_custom_config(), dropout=0.1)
     custom = ACTPolicy(config, pretrained_backbone=False)
 
@@ -183,9 +181,10 @@ def test_stock_parity_mode_uses_stock_transformer_topology():
     assert isinstance(decoder_block.cross_residual_dropout, nn.Dropout)
     assert decoder_block.cross_residual_dropout.p == 0.1
     assert isinstance(custom.decoder.final_norm, nn.LayerNorm)
+    assert not hasattr(custom.decoder, "camera_emb")
 
 
-def test_stock_parity_mode_matches_lerobot_training_forward_with_mapped_weights():
+def test_custom_act_matches_lerobot_training_forward_with_mapped_weights():
     torch.manual_seed(0)
     official = LeRobotACT(_lerobot_config()).train()
     custom = ACTPolicy(_custom_config(), pretrained_backbone=False).train()

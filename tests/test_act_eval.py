@@ -8,7 +8,12 @@ from lerobot.configs.types import FeatureType, PolicyFeature
 from lerobot.policies.factory import get_policy_class
 
 from configs.act.base import ACTConfig
-from models.act.eval_async import return_home
+from models.act.eval_async import (
+    install_action_rate_limiter,
+    install_action_smoother,
+    return_home,
+    start_state_reference,
+)
 from models.act.eval_common import move_to_joint_state, start_state_violations
 from models.act.lerobot_policy import CustomACTConfig, CustomACTPolicy, export_checkpoint
 from utils.config import JOINT_NAMES
@@ -173,6 +178,23 @@ def test_start_state_violations_use_per_joint_dataset_support():
     assert violations["narrow.pos"] == pytest.approx({"error": 1.0, "allowed": 0.5})
 
 
+def test_start_state_reference_uses_seed_override(tmp_path):
+    policy_path = tmp_path / "pretrained_model"
+    policy_path.mkdir()
+    (policy_path / "train_config.json").write_text(
+        '{"dataset": {"repo_id": "owner/dagger", "revision": "dagger-rev"}}'
+    )
+
+    assert start_state_reference(policy_path, "owner/seed", None) == (
+        "owner/seed",
+        "main",
+    )
+    assert start_state_reference(policy_path, "owner/seed", "seed-rev") == (
+        "owner/seed",
+        "seed-rev",
+    )
+
+
 def test_return_home_limits_each_command_even_with_zero_duration():
     robot = _FakeRobot()
     return_home(
@@ -188,3 +210,47 @@ def test_return_home_limits_each_command_even_with_zero_duration():
     )
     assert len(commands) == 5
     assert np.max(np.diff(np.vstack([np.zeros(len(JOINT_NAMES)), commands]), axis=0)) <= 1.0
+
+
+def test_async_action_rate_limiter_clamps_every_joint_from_live_start():
+    robot = _FakeRobot()
+    install_action_rate_limiter(robot, max_delta=2.0)
+
+    target = {f"{name}.pos": 20.0 for name in JOINT_NAMES}
+    first = robot.send_action(target)
+    second = robot.send_action(target)
+
+    assert all(value == pytest.approx(2.0) for value in first.values())
+    assert all(value == pytest.approx(4.0) for value in second.values())
+
+
+def test_async_action_rate_limiter_bounds_final_smoothed_command():
+    robot = _FakeRobot()
+    install_action_smoother(robot, alpha=0.7)
+    install_action_rate_limiter(robot, max_delta=2.0)
+
+    robot.send_action({f"{name}.pos": 20.0 for name in JOINT_NAMES})
+    robot.send_action({f"{name}.pos": -20.0 for name in JOINT_NAMES})
+
+    commands = np.array(
+        [[item[f"{name}.pos"] for name in JOINT_NAMES] for item in robot.commands]
+    )
+    assert np.max(np.abs(np.diff(np.vstack([np.zeros(len(JOINT_NAMES)), commands]), axis=0))) <= 2.0
+
+
+def test_async_action_rate_limiter_rejects_nonfinite_policy_action():
+    robot = _FakeRobot()
+    install_action_rate_limiter(robot, max_delta=2.0)
+    target = {f"{name}.pos": 0.0 for name in JOINT_NAMES}
+    target[f"{JOINT_NAMES[0]}.pos"] = float("nan")
+
+    with pytest.raises(ValueError, match="non-finite action"):
+        robot.send_action(target)
+
+
+def test_async_action_rate_limiter_rejects_unknown_joint():
+    robot = _FakeRobot()
+    install_action_rate_limiter(robot, max_delta=2.0)
+
+    with pytest.raises(KeyError, match="unknown joint"):
+        robot.send_action({"not_a_joint.pos": 0.0})

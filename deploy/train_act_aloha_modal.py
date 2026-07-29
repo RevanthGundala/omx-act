@@ -22,15 +22,25 @@ Download checkpoints:
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import shlex
 import subprocess
 from pathlib import Path
+import uuid
 
 import modal
+
+try:
+    from modal_training_common import validate_volume_relative_path
+except ModuleNotFoundError:
+    from deploy.modal_training_common import validate_volume_relative_path
 
 
 REMOTE_OUTPUTS = Path("/outputs")
 MODAL_GPU = "A10G"
+MODAL_MAX_RUNTIME_SECONDS = 3 * 60 * 60
+VOLUME_COMMIT_INTERVAL_SECONDS = 300
+LEROBOT_GIT_REF = "87242cfced5228b6181fb0047021d684d424df38"
 ALOHA_DATASET_REPO_ID = "lerobot/aloha_sim_transfer_cube_human"
 DEFAULT_OMX_DATASET_REPO_ID = "RevanthGundala/007-place-penne-pasta-in-bowl"
 TOWEL_DATASET_REPO_ID = "RevanthGundala/009-place-towel-in-bowl-10fps"
@@ -45,18 +55,22 @@ image = (
         "libegl1", "libgl1", "libgles2", "libglib2.0-0", "libosmesa6",
     )
     .pip_install(
-        "torch",
-        "torchvision",
-        index_url="https://download.pytorch.org/whl/cu124",
+        "torch==2.7.1",
+        "torchvision==0.22.1",
+        index_url="https://download.pytorch.org/whl/cu128",
     )
     .pip_install(
-        "lerobot[training]>=0.5.1",
+        f"lerobot[training] @ git+https://github.com/huggingface/lerobot.git@{LEROBOT_GIT_REF}",
         "gym-aloha>=0.1.4",
         "accelerate",
+        "av>=15,<16",
         "huggingface-hub>=1.0,<2.0",
+        "safetensors",
+        "torchcodec==0.5.0",
     )
     # EGL = headless GPU rendering for MuJoCo (no display/X server in container).
     .env({"MUJOCO_GL": "egl", "PYOPENGL_PLATFORM": "egl"})
+    .add_local_file("deploy/modal_training_common.py", remote_path="/root/modal_training_common.py")
 )
 
 app = modal.App("omx-act-aloha-training", image=image)
@@ -192,6 +206,184 @@ def train_remote(
     _run(command)
     vol.commit()
     return f"Trained LeRobot ACT on {dataset_repo_id} for {steps} steps; checkpoint under {output_dir}/checkpoints."
+
+
+@app.function(
+    gpu=MODAL_GPU,
+    cpu=4.0,
+    timeout=MODAL_MAX_RUNTIME_SECONDS,
+    memory=32_768,
+    volumes={REMOTE_OUTPUTS: vol},
+    secrets=[hf_secret],
+)
+def resume_dataset_remote(
+    checkpoint_path: str,
+    output_path: str,
+    steps: int,
+    save_freq: int,
+    log_freq: int,
+    run_token: str,
+) -> str:
+    import json
+    import os
+    import re
+    import subprocess
+    import threading
+    import time
+
+    import torch
+
+    checkpoint_path = validate_volume_relative_path(
+        checkpoint_path,
+        expected_prefix="resume_sources",
+    )
+    output_path = validate_volume_relative_path(
+        output_path,
+        expected_prefix="act_lerobot_014-place-sponge-in-bowl-diverse-50",
+    )
+    if steps <= 20_000:
+        raise ValueError("steps must be greater than the 20k resume checkpoint.")
+    if not 0 < save_freq < steps:
+        raise ValueError("save_freq must be positive and smaller than steps.")
+
+    vol.reload()
+    checkpoint_dir = REMOTE_OUTPUTS / checkpoint_path
+    config_path = checkpoint_dir / "pretrained_model" / "train_config.json"
+    training_step_path = checkpoint_dir / "training_state" / "training_step.json"
+    if not config_path.is_file() or not training_step_path.is_file():
+        raise FileNotFoundError(
+            f"Resume checkpoint is incomplete: {checkpoint_dir}"
+        )
+    resume_step = int(json.loads(training_step_path.read_text())["step"])
+    if resume_step >= steps:
+        raise ValueError(
+            f"Resume step {resume_step} must be smaller than target step {steps}."
+        )
+    output_dir = REMOTE_OUTPUTS / output_path
+    if output_dir.exists():
+        raise FileExistsError(f"Output directory already exists: {output_dir}")
+
+    print("=== CUDA PREFLIGHT ===", flush=True)
+    print(f"run_token={run_token}", flush=True)
+    print(f"torch={torch.__version__} cuda_runtime={torch.version.cuda}", flush=True)
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA is not available; refusing CPU fallback on a paid GPU job.")
+    print(
+        f"gpu={torch.cuda.get_device_name(0)} "
+        f"vram_gb={torch.cuda.get_device_properties(0).total_memory / 1e9:.1f}",
+        flush=True,
+    )
+    print(
+        f"resume_checkpoint={checkpoint_dir} resume_step={resume_step} "
+        f"target_step={steps} save_freq={save_freq} output_dir={output_dir}",
+        flush=True,
+    )
+
+    monitor_dir = REMOTE_OUTPUTS / "modal_monitors"
+    monitor_dir.mkdir(parents=True, exist_ok=True)
+    status_path = monitor_dir / f"{run_token}_training.json"
+    telemetry_path = monitor_dir / f"{run_token}.jsonl"
+    state_lock = threading.Lock()
+    state = {
+        "status": "running",
+        "step": resume_step,
+        "loss": None,
+        "resume_step": resume_step,
+        "target_step": steps,
+        "output_dir": str(output_dir),
+    }
+
+    def write_status(**updates) -> None:
+        with state_lock:
+            state.update(updates)
+            payload = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                **state,
+            }
+        status_path.write_text(json.dumps(payload, sort_keys=True) + "\n")
+
+    stop_monitor = threading.Event()
+
+    def sample_gpu() -> None:
+        while not stop_monitor.is_set():
+            timestamp = datetime.now(timezone.utc).isoformat()
+            telemetry = subprocess.run(
+                [
+                    "nvidia-smi",
+                    "--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu",
+                    "--format=csv,noheader,nounits",
+                ],
+                capture_output=True,
+                text=True,
+            )
+            entry = {
+                "timestamp": timestamp,
+                "exit_code": telemetry.returncode,
+                "telemetry": telemetry.stdout.strip(),
+                "error": telemetry.stderr.strip(),
+            }
+            with telemetry_path.open("a") as file:
+                file.write(json.dumps(entry, sort_keys=True) + "\n")
+            print(f"GPU_TELEMETRY {json.dumps(entry, sort_keys=True)}", flush=True)
+            write_status()
+            vol.commit()
+            stop_monitor.wait(VOLUME_COMMIT_INTERVAL_SECONDS)
+
+    write_status()
+    monitor_thread = threading.Thread(target=sample_gpu, name="gpu-telemetry", daemon=True)
+    monitor_thread.start()
+    command = [
+        "lerobot-train",
+        "--resume=true",
+        f"--config_path={config_path}",
+        f"--steps={steps}",
+        f"--save_freq={save_freq}",
+        "--save_checkpoint=true",
+        "--eval_freq=0",
+        f"--log_freq={log_freq}",
+        "--wandb.enable=false",
+        f"--output_dir={output_dir}",
+        "--job_name=lerobot_014_unaugmented_resume20k_to50k",
+    ]
+    print("RUN:", " \\\n    ".join(shlex.quote(part) for part in command), flush=True)
+    progress_pattern = re.compile(r"step:(\d+).*?loss:([0-9.eE+-]+)")
+    try:
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            env={**os.environ, "PYTHONUNBUFFERED": "1"},
+        )
+        assert process.stdout is not None
+        for line in process.stdout:
+            print(line, end="", flush=True)
+            matches = progress_pattern.findall(line)
+            if matches:
+                step_value, loss_value = matches[-1]
+                write_status(step=int(step_value), loss=float(loss_value))
+        return_code = process.wait()
+        if return_code != 0:
+            raise subprocess.CalledProcessError(return_code, command)
+        write_status(status="complete", step=steps)
+    except Exception as exc:
+        write_status(status="failed", error=repr(exc))
+        raise
+    finally:
+        stop_monitor.set()
+        monitor_thread.join(timeout=10)
+        vol.commit()
+    return json.dumps(
+        {
+            "status": "complete",
+            "run_token": run_token,
+            "resume_step": resume_step,
+            "target_step": steps,
+            "output_dir": str(output_dir),
+        },
+        sort_keys=True,
+    )
 
 
 @app.function(
@@ -378,3 +570,49 @@ def main(
     elif do_eval:
         print("No Modal eval is configured for OMX datasets.")
     print("Outputs volume: omx-act-aloha-logs")
+
+
+@app.local_entrypoint()
+def resume_main(
+    checkpoint_path: str,
+    output_path: str,
+    steps: int = 50_000,
+    save_freq: int = 2_000,
+    log_freq: int = 100,
+    preflight_only: bool = False,
+):
+    checkpoint_path = validate_volume_relative_path(
+        checkpoint_path,
+        expected_prefix="resume_sources",
+    )
+    output_path = validate_volume_relative_path(
+        output_path,
+        expected_prefix="act_lerobot_014-place-sponge-in-bowl-diverse-50",
+    )
+    print(
+        "LEROBOT_RESUME "
+        f"gpu={MODAL_GPU} hard_timeout_seconds={MODAL_MAX_RUNTIME_SECONDS} "
+        f"checkpoint_path={checkpoint_path} output_path={output_path} "
+        f"steps={steps} save_freq={save_freq} log_freq={log_freq}"
+    )
+    if preflight_only:
+        print("Preflight only; not launching Modal GPU job.")
+        return
+    run_token = (
+        datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        + "-"
+        + uuid.uuid4().hex[:8]
+    )
+    function_call = resume_dataset_remote.spawn(
+        checkpoint_path=checkpoint_path,
+        output_path=output_path,
+        steps=steps,
+        save_freq=save_freq,
+        log_freq=log_freq,
+        run_token=run_token,
+    )
+    print(f"MODAL_FUNCTION_CALL_ID={function_call.object_id}")
+    print(f"MODAL_RUN_TOKEN={run_token}")
+    print(f"MODAL_HARD_TIMEOUT_SECONDS={MODAL_MAX_RUNTIME_SECONDS}")
+    print("MODAL_OUTPUT_VOLUME=omx-act-aloha-logs")
+    print(f"MODAL_OUTPUT_PATH={output_path}")

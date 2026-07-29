@@ -77,11 +77,6 @@ def parse_args() -> argparse.Namespace:
         default="custom",
         help="Which normal dataset trainer to execute.",
     )
-    parser.add_argument(
-        "--stock-parity",
-        action="store_true",
-        help="Train the custom model with stock LeRobot transformer semantics.",
-    )
     parser.add_argument("--resume-checkpoint", default=None, help="Local checkpoint .pt to upload and resume from.")
     parser.add_argument("--gpu-name", default=os.environ.get("OMX_GPU_NAME", "RTX_4090"))
     parser.add_argument("--min-gpu-ram-mb", type=int, default=20_000)
@@ -429,10 +424,7 @@ def remote_training_command(args: argparse.Namespace) -> str:
         "lerobot": "models.act.train_lerobot",
         "diffusion": "models.act.train_diffusion",
     }[args.runner]
-    parity_suffix = "_stock_parity" if args.runner == "custom" and getattr(args, "stock_parity", False) else ""
-    job_name = args.job_name or (
-        f"act_{args.runner}_train_chunk{args.chunk_size}_steps{args.steps}{parity_suffix}"
-    )
+    job_name = args.job_name or f"act_{args.runner}_train_chunk{args.chunk_size}_steps{args.steps}"
     return f"""bash -lc 'set -euo pipefail
 cd {shlex.quote(args.remote_workspace)}
 . /opt/venv/bin/activate
@@ -447,7 +439,6 @@ export ACT_TRAIN_SAVE_FREQ={int(args.save_freq or args.steps)}
 export ACT_TRAIN_JOB_NAME={json.dumps(job_name)}
 export ACT_TRAIN_DATASET_REPO_ID={json.dumps(args.dataset_repo_id or "")}
 export ACT_TRAIN_SPLIT={json.dumps("" if args.train_split is None else str(args.train_split))}
-export ACT_TRAIN_STOCK_PARITY={"1" if getattr(args, "stock_parity", False) else "0"}
 export ACT_TRAIN_RESUME_CHECKPOINT={json.dumps(getattr(args, "remote_resume_checkpoint", "") or "")}
 python -m pip install --no-cache-dir -e .
 python -m pip install --no-cache-dir --no-deps --force-reinstall git+https://github.com/huggingface/lerobot.git@{LEROBOT_GIT_REF}
