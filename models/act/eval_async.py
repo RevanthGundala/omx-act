@@ -133,6 +133,8 @@ def launch_server(
     log_path: Path | None,
     timeout: float,
     policy_type: str,
+    *,
+    popen=subprocess.Popen,
 ) -> subprocess.Popen:
     """Launch the local policy server and block until its port is accepting connections."""
     if policy_type == "custom_act":
@@ -158,10 +160,15 @@ def launch_server(
     stdout = open(log_path, "w") if log_path else None  # noqa: SIM115 (open for process lifetime)
     if log_path:
         print(f"[eval_async] policy server log -> {log_path}", flush=True)
-    proc = subprocess.Popen(cmd, cwd=str(REPO_ROOT), stdout=stdout,
+    proc = popen(cmd, cwd=str(REPO_ROOT), stdout=stdout,
                             stderr=subprocess.STDOUT if stdout else None)
     deadline = time.time() + timeout
     while time.time() < deadline:
+        if proc.poll() is not None:
+            raise RuntimeError(
+                f"policy server process exited early with code {proc.returncode} "
+                f"before {host}:{port} became ready"
+            )
         with socket.socket() as sock:
             sock.settimeout(1.0)
             if sock.connect_ex((host, port)) == 0:
