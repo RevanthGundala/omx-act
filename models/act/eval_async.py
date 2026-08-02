@@ -778,6 +778,29 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
+def visualize_action_queue_size_if_present(
+    action_queue_size: list[int],
+    *,
+    visualize=visualize_action_queue_size,
+) -> None:
+    """Plot the action-queue-size trace, skipping degenerate/empty queues.
+
+    ``visualize_action_queue_size`` calls ``max(action_queue_size)``, which
+    raises ``ValueError`` on an empty list -- easily reached when a trial is
+    aborted before any step is recorded. This call site sits in
+    ``run_robot_client``'s cleanup ``finally`` block, so an unguarded raise
+    here would replace (mask) whatever exception is already propagating
+    through cleanup, such as a watchdog safety-abort reason.
+    """
+    if not action_queue_size:
+        print(
+            "[eval_async] skipping action queue visualization: no queue samples recorded.",
+            flush=True,
+        )
+        return
+    visualize(action_queue_size)
+
+
 def run_robot_client(
     args: argparse.Namespace,
     policy_path: Path,
@@ -1054,7 +1077,7 @@ def run_robot_client(
         if trace_file is not None:
             trace_file.close()
         if args.visualize_queue and client is not None:
-            visualize_action_queue_size(client.action_queue_size)
+            visualize_action_queue_size_if_present(client.action_queue_size)
 
 
 def main() -> None:
