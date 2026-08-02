@@ -482,10 +482,16 @@ class LockedRobotClient(RobotClient):
         while self.running and self.trial_active.is_set():
             loop_started = clock()
             if stop_requested():
-                reason = "operator"
+                # self.running can flip to False (shutdown_event set by the watchdog
+                # thread) between the while-condition check above and here; without
+                # this re-check a watchdog abort racing an operator/duration stop in
+                # the same iteration would be reported as "operator"/"duration"
+                # instead of "shutdown", and after_trial() would park the arm despite
+                # the abort.
+                reason = "operator" if self.running else "shutdown"
                 break
             if duration_s > 0 and loop_started - started >= duration_s:
-                reason = "duration"
+                reason = "duration" if self.running else "shutdown"
                 break
 
             if self.actions_available():
