@@ -22,6 +22,7 @@ class ACTConfig:
     chunk_size: int = 100
     num_workers: int = 4
     train_split: float = 0.95
+    image_transforms: bool = False
 
     # Model
     d_model: int = 512

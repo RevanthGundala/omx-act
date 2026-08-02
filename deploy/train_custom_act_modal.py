@@ -204,6 +204,7 @@ def train_dataset_remote(
     run_token: str,
     pretrained_checkpoint: str | None,
     resume_checkpoint: str | None,
+    image_transforms: bool,
 ) -> str:
     import json
     import os
@@ -257,6 +258,7 @@ def train_dataset_remote(
             "ACT_TRAIN_CHUNK_SIZE": str(chunk_size),
             "ACT_TRAIN_SAVE_FREQ": str(save_freq),
             "ACT_TRAIN_SPLIT": str(train_split),
+            "ACT_TRAIN_IMAGE_TRANSFORMS": str(image_transforms).lower(),
             "ACT_TRAIN_JOB_NAME": job_name,
             "ACT_TRAIN_OUTPUT_ROOT": str(REMOTE_OUTPUTS / "act_experiments"),
             "ACT_TRAIN_STATUS_PATH": str(
@@ -287,6 +289,7 @@ def train_dataset_remote(
         "training_config "
         f"dataset={dataset_repo_id} steps={steps} chunk_size={chunk_size} "
         f"save_freq={save_freq} train_split={train_split} job_name={job_name} "
+        f"image_transforms={image_transforms} "
         f"pretrained_checkpoint={pretrained_path} resume_checkpoint={resume_path}",
         flush=True,
     )
@@ -452,6 +455,7 @@ def main(
     job_name: str = "act_custom_lerobot_arch_chunk30_steps20000_all50",
     pretrained_checkpoint: str | None = None,
     resume_checkpoint: str | None = None,
+    image_transforms: bool = False,
 ):
     if dataset_repo_id is not None:
         validate_dataset_run(
@@ -473,6 +477,7 @@ def main(
             f"gpu={MODAL_GPU} hard_timeout_seconds={MODAL_MAX_RUNTIME_SECONDS} "
             f"dataset={dataset_repo_id} steps={steps} chunk_size={chunk_size} "
             f"save_freq={save_freq} train_split={train_split} job_name={job_name} "
+            f"image_transforms={image_transforms} "
             f"pretrained_checkpoint={pretrained_checkpoint} "
             f"resume_checkpoint={resume_checkpoint}"
         )
@@ -494,6 +499,7 @@ def main(
             run_token=run_token,
             pretrained_checkpoint=pretrained_checkpoint,
             resume_checkpoint=resume_checkpoint,
+            image_transforms=image_transforms,
         )
         print(f"MODAL_FUNCTION_CALL_ID={function_call.object_id}")
         print(f"MODAL_RUN_TOKEN={run_token}")

@@ -950,11 +950,11 @@ checkpoint. Combined with the first batches, the per-layout results are:
 
 | layout | geometry (bowl; sponge) | unaugmented 20k combined | augmented 20k |
 |---:|---|---:|---:|
-| 1 | left-middle; right-middle horizontal | 5/6 | 4/6 |
-| 2 | right-middle; left-middle vertical | 1/6 | 0/6 |
-| 3 | center-middle; left-top diagonal `/` | 2/6 | 0/6 |
-| 4 | center-top; right-middle diagonal `\` | 2/6 | 0/6 |
-| 5 | left-middle; center-top vertical | 1/6 | 6/6 |
+| 1 | right-middle; left-middle horizontal | 5/6 | 4/6 |
+| 2 | left-middle; right-middle vertical | 1/6 | 0/6 |
+| 3 | center-middle; right-top diagonal `/` | 2/6 | 0/6 |
+| 4 | center-top; left-middle diagonal `\` | 2/6 | 0/6 |
+| 5 | right-middle; center-top vertical | 1/6 | 6/6 |
 | **Total** | | **11/30 (36.7%)** | **10/30 (33.3%)** |
 
 The nearly equal aggregate rates hide a strong model-specific spatial bias. Both
@@ -1068,22 +1068,8 @@ The two jobs cost approximately `$4.86` combined. Independent watchdogs
 downloaded both outputs, stopped their exact Modal apps, and a fresh account
 audit confirmed no active apps or containers remained.
 
-The corrected custom 50k policy was evaluated on the same five-layout,
-six-attempt protocol:
-
-| layout | corrected custom 20k | corrected custom 50k |
-|---:|---:|---:|
-| 1 | 1/6 | 5/6 |
-| 2 | 2/6 | 0/6 |
-| 3 | 4/6 | 3/6 |
-| 4 | 0/6 | 0/6 |
-| 5 | 3/6 | 0/6 |
-| **Total** | **10/30 (33.3%)** | **8/30 (26.7%)** |
-
-Longer training did not improve total success for the corrected custom policy.
-It shifted the policy sharply toward layout 1 while losing all layout-2 and
-layout-5 successes. The lower 50k training loss therefore did not translate to
-better rollout performance. Stock LeRobot 50k live evaluation remains pending.
+Live evaluation of the corrected custom 50k and stock LeRobot 50k checkpoints
+is pending.
 
 ### LeRobot-policy DAgger corrections did not transfer to custom ACT (2026-07-21)
 

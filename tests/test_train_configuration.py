@@ -35,6 +35,19 @@ def test_config_from_env_overrides_output_root(monkeypatch):
     assert config_from_env().output_root == "/outputs/act_experiments"
 
 
+def test_config_from_env_enables_default_image_transforms(monkeypatch):
+    monkeypatch.setenv("ACT_TRAIN_IMAGE_TRANSFORMS", "true")
+
+    assert config_from_env().image_transforms is True
+
+
+def test_config_from_env_rejects_invalid_image_transforms(monkeypatch):
+    monkeypatch.setenv("ACT_TRAIN_IMAGE_TRANSFORMS", "sometimes")
+
+    with pytest.raises(ValueError, match="ACT_TRAIN_IMAGE_TRANSFORMS"):
+        config_from_env()
+
+
 def test_seed_training_controls_numpy_and_torch():
     train_module.seed_training(123)
     first_numpy = np.random.random(4)

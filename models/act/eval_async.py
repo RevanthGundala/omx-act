@@ -25,7 +25,7 @@ import subprocess
 import sys
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -54,6 +54,11 @@ from models.act.eval_common import (
     move_to_joint_state,
     start_state_violations,
 )
+from models.act.rollout_capture import (
+    RolloutArtifactWriter,
+    prompt_for_outcome,
+    write_metadata_atomic,
+)
 from utils.config import CAMERAS, CAMERA_HEIGHT, CAMERA_WIDTH, FOLLOWER_PORT, FPS, JOINT_NAMES
 
 DEFAULT_CKPT = (
@@ -78,6 +83,43 @@ def camera_config(name: str, fourcc: str | None, warmup_s: int) -> OpenCVCameraC
         index_or_path=CAMERAS[name], fps=FPS, width=CAMERA_WIDTH, height=CAMERA_HEIGHT,
         warmup_s=warmup_s, fourcc=fourcc,
     )
+
+
+class TopCameraPreview:
+    WINDOW_NAME = "ACT eval - top camera"
+
+    def __init__(self, camera, *, cv2_module=None) -> None:
+        if cv2_module is None:
+            import cv2 as cv2_module
+
+        self.camera = camera
+        self.cv2 = cv2_module
+        self.closed = False
+        self.shown = False
+
+    def update(self) -> None:
+        if self.closed:
+            return
+        frame = np.asarray(self.camera.read_latest())
+        if frame.ndim != 3 or frame.shape[2] != 3 or frame.dtype != np.uint8:
+            raise ValueError(
+                f"Top camera preview requires HWC uint8 RGB frames, got "
+                f"shape={frame.shape} dtype={frame.dtype}"
+            )
+        display_frame = self.cv2.cvtColor(frame, self.cv2.COLOR_RGB2BGR)
+        self.cv2.imshow(self.WINDOW_NAME, display_frame)
+        self.shown = True
+        key = self.cv2.waitKey(1) & 0xFF
+        if key in (ord("q"), 27):
+            self.close()
+
+    def close(self) -> None:
+        if self.closed:
+            return
+        self.closed = True
+        if self.shown:
+            self.cv2.destroyWindow(self.WINDOW_NAME)
+            self.cv2.waitKey(1)
 
 
 def preflight_cameras(names: list[str], fourcc: str | None, warmup_s: int, retries: int) -> None:
@@ -243,6 +285,34 @@ def start_state_reference(
     return repo_id, revision
 
 
+def apply_wrist_flex_start_override(
+    pose: dict[str, float],
+    statistics: dict[str, np.ndarray],
+    wrist_flex: float | None,
+) -> dict[str, float]:
+    updated = dict(pose)
+    if wrist_flex is None:
+        return updated
+    if not np.isfinite(wrist_flex):
+        raise ValueError("--start-state-wrist-flex must be finite.")
+
+    index = JOINT_NAMES.index("wrist_flex")
+    minimum = float(statistics["min"][index])
+    maximum = float(statistics["max"][index])
+    if not minimum <= wrist_flex <= maximum:
+        raise ValueError(
+            f"--start-state-wrist-flex={wrist_flex:g} is outside dataset start "
+            f"support [{minimum:.2f}, {maximum:.2f}]."
+        )
+    updated["wrist_flex.pos"] = float(wrist_flex)
+    print(
+        f"[eval_async] overriding dataset-start wrist_flex to {wrist_flex:.2f} "
+        f"joint units (dataset support {minimum:.2f}..{maximum:.2f}).",
+        flush=True,
+    )
+    return updated
+
+
 def install_action_smoother(robot, alpha: float) -> None:
     """Wrap ``robot.send_action`` with a per-joint EMA low-pass to damp residual jitter.
 
@@ -258,12 +328,15 @@ def install_action_smoother(robot, alpha: float) -> None:
     state: dict[str, float] = {}
 
     def smoothed_send(action: dict[str, float]):
-        out = {}
-        for k, v in action.items():
-            if "gripper" in k or k not in state:
-                out[k] = v
-            else:
-                out[k] = alpha * v + (1.0 - alpha) * state[k]
+        if getattr(robot, "_act_eval_bypass_action_smoothing", False):
+            out = action
+        else:
+            out = {}
+            for k, v in action.items():
+                if "gripper" in k or k not in state:
+                    out[k] = v
+                else:
+                    out[k] = alpha * v + (1.0 - alpha) * state[k]
         sent = raw_send(out)
         state.update({key: float(value) for key, value in sent.items()})
         return sent
@@ -280,6 +353,11 @@ def install_action_rate_limiter(robot, max_delta: float) -> None:
     warning_state = {"last_print": 0.0}
 
     def limited_send(action: dict[str, float]):
+        # return_home() sets this while it drives its own verified ramp (max_step_delta
+        # already bounds each command); without this check its ramp/timeout math gets
+        # silently re-clamped by a tighter max_delta here and can time out before the
+        # target is reached, even though it is fully reachable given more time.
+        bypass = getattr(robot, "_act_eval_bypass_action_smoothing", False)
         # Clamp against the robot's live position, not the last *requested* value: if a
         # joint stalls (cannot reach its commanded targets -- an overloaded/binding
         # joint), tracking only the echoed request would let the clamp reference
@@ -294,8 +372,11 @@ def install_action_rate_limiter(robot, max_delta: float) -> None:
             value = float(value)
             if not np.isfinite(value):
                 raise ValueError(f"Policy produced a non-finite action for {key}: {value}")
-            prior = live[key]
-            bounded = float(np.clip(value, prior - max_delta, prior + max_delta))
+            if bypass:
+                bounded = value
+            else:
+                prior = live[key]
+                bounded = float(np.clip(value, prior - max_delta, prior + max_delta))
             limited[key] = bounded
             if bounded != value:
                 clipped[key] = (value, bounded)
@@ -309,7 +390,8 @@ def install_action_rate_limiter(robot, max_delta: float) -> None:
                 for key, (requested, bounded) in clipped.items()
             )
             print(
-                f"[eval_async] SAFETY CLAMP active (max {max_delta:g} deg/command): {details}",
+                f"[eval_async] SAFETY CLAMP active "
+                f"(max {max_delta:g} joint units/command): {details}",
                 flush=True,
             )
             warning_state["last_print"] = now
@@ -326,13 +408,18 @@ def return_home(
     label: str,
     *,
     max_step_delta: float | None = None,
-) -> None:
-    """Smoothly interpolate from the current pose to ``target`` over ``duration_s`` at ``fps``."""
+    tolerance: float = 1.0,
+    settle_timeout_s: float = 2.0,
+) -> dict:
+    """Move to ``target`` safely and verify the final pose from motor telemetry."""
     if fps <= 0:
         raise ValueError("fps must be positive.")
     if max_step_delta is not None and max_step_delta <= 0:
         raise ValueError("max_step_delta must be positive when provided.")
-    print(f"\n[eval_async] returning to {label} pose over {duration_s:.1f}s...", flush=True)
+    if tolerance <= 0:
+        raise ValueError("tolerance must be positive.")
+    if settle_timeout_s < 0:
+        raise ValueError("settle_timeout_s must be non-negative.")
     try:
         current = joint_positions(robot)
     except ConnectionError as exc:
@@ -340,20 +427,64 @@ def return_home(
             raise
         print("[eval_async] recovered from a stuck serial port (Ctrl-C landed mid-transaction); retrying.", flush=True)
         current = joint_positions(robot)
+    max_distance = max(abs(target[key] - current[key]) for key in target)
+    rate_limited_duration = (
+        max_distance / (max_step_delta * fps)
+        if max_step_delta is not None
+        else 0.0
+    )
+    ramp_duration = max(duration_s, rate_limited_duration, 1 / fps)
+    print(
+        f"\n[eval_async] returning to {label} pose over at least "
+        f"{ramp_duration:.1f}s (verify within {tolerance:g} joint units)...",
+        flush=True,
+    )
     for k in sorted(target):
         print(f"[eval_async]   {k:18s} {current.get(k, float('nan')):8.2f} -> {target[k]:8.2f} "
               f"(Δ{target[k] - current.get(k, target[k]):+.2f})", flush=True)
     target_vector = np.array([target[f"{name}.pos"] for name in JOINT_NAMES], dtype=np.float32)
-    move_to_joint_state(
-        robot,
-        target=target_vector,
-        timeout=max(duration_s, 1 / fps),
-        ramp_seconds=max(duration_s, 0),
-        hz=fps,
-        max_delta=max_step_delta or 0,
-        tolerance=None,
+    previous_bypass = getattr(robot, "_act_eval_bypass_action_smoothing", False)
+    robot._act_eval_bypass_action_smoothing = True
+    try:
+        result = move_to_joint_state(
+            robot,
+            target=target_vector,
+            timeout=ramp_duration + settle_timeout_s,
+            ramp_seconds=ramp_duration,
+            hz=fps,
+            max_delta=max_step_delta or 0,
+            tolerance=tolerance,
+        )
+    finally:
+        robot._act_eval_bypass_action_smoothing = previous_bypass
+    if not result["reached"]:
+        motor = result["worst_joint"]
+        registers = (
+            "Goal_Position",
+            "Present_Position",
+            "Torque_Enable",
+            "Hardware_Error_Status",
+            "Operating_Mode",
+        )
+        motor_status = {}
+        for register in registers:
+            try:
+                motor_status[register] = robot.bus.read(register, motor, normalize=False)
+            except Exception as exc:  # noqa: BLE001 -- always raise the pose-not-reached error below
+                motor_status[register] = f"<read failed: {exc}>"
+        raise RuntimeError(
+            f"{label} pose was not reached: worst joint={result['worst_joint']} "
+            f"max error={result['max_abs_error']:.2f} joint units after "
+            f"{ramp_duration + settle_timeout_s:.1f}s; raw motor status={motor_status}"
+        )
+    print(
+        f"[eval_async] {label} pose reached "
+        f"(max error {result['max_abs_error']:.2f} joint units).",
+        flush=True,
     )
-    print(f"[eval_async] {label} pose reached.", flush=True)
+    return result
+
+
 def heartbeat(client, interval: float = 2.0) -> None:
     """Periodic liveness line, since the control loop is otherwise silent."""
     start = time.time()
@@ -455,6 +586,9 @@ class LockedRobotClient(RobotClient):
         self.trial_active = threading.Event()
         self._control_loop_started = False
         self.trial_started_at = 0.0
+        self.observation_callback = None
+        self.action_callback = None
+        self.loop_callback = None
 
     def _aggregate_action_queues(self, *args, **kwargs):
         with self.action_queue_lock:
@@ -488,6 +622,13 @@ class LockedRobotClient(RobotClient):
             self.must_go.set()
             self.trial_started_at = time.time()
             self.trial_active.set()
+
+    def control_loop_observation(self, task: str, verbose: bool = False):
+        observation = super().control_loop_observation(task, verbose)
+        callback = self.observation_callback
+        if observation is not None and callback is not None:
+            callback(observation)
+        return observation
 
     def control_trial(
         self,
@@ -524,6 +665,9 @@ class LockedRobotClient(RobotClient):
                 self.control_loop_action(verbose)
             if self._ready_to_send_observation():
                 self.control_loop_observation(task, verbose)
+            loop_callback = getattr(self, "loop_callback", None)
+            if loop_callback is not None:
+                loop_callback()
 
             sleep(max(0.0, self.config.environment_dt - (clock() - loop_started)))
 
@@ -607,7 +751,20 @@ def should_park_after_trial(reason: str) -> bool:
     return reason != "shutdown"
 
 
-def install_trace_logger(robot, trace_file) -> None:
+def trial_has_recorded_actions(action_count: int) -> bool:
+    """Outcome-label eligibility must key off action_count, not observation_count.
+
+    Observations are sent to the policy server on a fixed cadence to request
+    actions, independent of whether any action has arrived and executed yet.
+    A trial that ends (operator stop, duration timeout, or interruption)
+    before the first action chunk ever arrives can have observation_count > 0
+    with action_count == 0 -- the robot never actually did anything, so
+    prompting for a success/failure label on it would be meaningless.
+    """
+    return action_count > 0
+
+
+def install_trace_logger(robot, trace_file=None, entry_callback=None) -> None:
     """Wrap robot.send_action to log qpos + target + actually-sent action per control tick, for
     apples-to-apples comparison against models/act/eval_async_custom.py's trace.
 
@@ -625,17 +782,51 @@ def install_trace_logger(robot, trace_file) -> None:
             qpos = joint_positions(robot)
         except Exception:  # noqa: BLE001 -- trace logging must never crash the control loop
             qpos = None
-        trace_file.write(json.dumps({
+        entry = {
             "step": state["step"],
             "elapsed_s": time.perf_counter() - state["start"],
             "qpos": qpos,
             "target_action": {k: float(v) for k, v in action.items()},
             "sent_action": {k: float(v) for k, v in sent.items()},
-        }) + "\n")
+        }
+        if trace_file is not None:
+            trace_file.write(json.dumps(entry) + "\n")
+            trace_file.flush()
+        if entry_callback is not None:
+            entry_callback(entry)
         state["step"] += 1
         return sent
 
     robot.send_action = traced_send
+
+
+def record_rollout_action_transition(
+    *,
+    client,
+    writer: RolloutArtifactWriter,
+    entry: dict,
+    camera_names: list[str],
+) -> None:
+    """Record an action against its preceding observation, then its next state."""
+    writer.record_action(entry)
+    qpos = entry.get("qpos")
+    if not isinstance(qpos, dict):
+        raise RuntimeError(
+            "Could not capture post-action joint state for RECAP rollout"
+        )
+    frames = {
+        camera: client.robot.cameras[camera].read_latest()
+        for camera in camera_names
+    }
+    writer.record_observation(
+        frames,
+        {
+            "captured_at": datetime.now(timezone.utc).isoformat(),
+            "source": "post_action",
+            "policy_timestep": entry["step"] + 1,
+            "qpos": qpos,
+        },
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -646,6 +837,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--robot-port", default=FOLLOWER_PORT, help="OMX follower serial port")
     p.add_argument("--robot-id", default="omx_follower_arm")
     p.add_argument("--cameras", default="top,wrist", help="comma-separated names from utils.config.CAMERAS")
+    p.add_argument(
+        "--show-top-camera",
+        action="store_true",
+        help="Show the live top-camera feed during each trial; q or Esc closes only the preview.",
+    )
     p.add_argument("--camera-fourcc", default="MJPG", help="FOURCC for all cams ('' to auto-detect; wrist needs MJPG)")
     p.add_argument("--camera-warmup-s", type=int, default=5)
     p.add_argument("--no-camera-preflight", action="store_true", help="skip the camera verify/clear-state step")
@@ -701,7 +897,7 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=2.0,
         help=(
-            "Hard safety limit in degrees between consecutive commands for every joint, "
+            "Hard safety limit in normalized joint units between consecutive commands for every joint, "
             "including the gripper (default: 2.0; must be positive)."
         ),
     )
@@ -729,10 +925,19 @@ def parse_args() -> argparse.Namespace:
         help="Wait for Enter after object repositioning. Defaults to enabled when --trials > 1.",
     )
 
-    p.add_argument("--return-home-s", type=float, default=3.0, help="seconds to park the arm on Ctrl-C (0 disables)")
+    p.add_argument("--return-home-s", type=float, default=3.0, help="minimum seconds to park the arm after a trial or on exit (0 disables)")
+    p.add_argument(
+        "--return-home-settle-timeout-s",
+        type=float,
+        default=6.0,
+        help=(
+            "Additional seconds to hold the final park command while motor telemetry "
+            "converges (default: 6)."
+        ),
+    )
     p.add_argument("--home-target", default="dataset_start", choices=["dataset_start", "mean", "start", "zeros"],
-                   help="where to park on Ctrl-C (see resolve_home_pose; dataset_start recommended)")
-    p.add_argument("--no-return-home", action="store_true", help="do not park the arm on exit")
+                   help="where to park after a trial or on exit (see resolve_home_pose; dataset_start recommended)")
+    p.add_argument("--no-return-home", action="store_true", help="do not park the arm after trials or on exit")
     p.add_argument(
         "--move-to-dataset-start-state",
         action=argparse.BooleanOptionalAction,
@@ -750,8 +955,23 @@ def parse_args() -> argparse.Namespace:
         help="Maximum per-command joint change during the pre-roll start-state move.",
     )
     p.add_argument("--start-state-settle-s", type=float, default=1.0)
-    p.add_argument("--start-state-tolerance", type=float, default=0.5)
+    p.add_argument(
+        "--start-state-tolerance",
+        type=float,
+        default=1.0,
+        help="Maximum verified start/park pose error in normalized joint units (default: 1).",
+    )
     p.add_argument("--start-state-max-z", type=float, default=3.0)
+    p.add_argument(
+        "--start-state-wrist-flex",
+        type=float,
+        default=46.0,
+        help=(
+            "Override only the demonstrated wrist-flex start target. The value "
+            "must remain within the selected dataset's episode-start range "
+            "(default: 46)."
+        ),
+    )
     p.add_argument(
         "--start-state-repo-id",
         default=None,
@@ -774,6 +994,20 @@ def parse_args() -> argparse.Namespace:
         help="Output JSONL trace path (step/qpos/target_action/sent_action), same schema as "
         "models/act/eval_async_custom.py's trace, for apples-to-apples comparison. Use 'auto' for "
         "outputs/eval_traces/act_eval_async_<timestamp>.jsonl or 'none' to disable.",
+    )
+    p.add_argument(
+        "--record-rollout",
+        action="store_true",
+        help=(
+            "For each trial, save synchronized camera MP4s, observations.jsonl, "
+            "actions.jsonl, and metadata.json, then prompt for success/failure."
+        ),
+    )
+    p.add_argument(
+        "--rollout-output-root",
+        type=Path,
+        default=REPO_ROOT / "outputs/eval_rollouts",
+        help="Parent directory used by --record-rollout.",
     )
 
     p.add_argument("--server-address", default="127.0.0.1:8080")
@@ -817,6 +1051,23 @@ def visualize_action_queue_size_if_present(
     visualize(action_queue_size)
 
 
+def run_guarded_cleanup(label: str, action, default=None):
+    """Run a non-critical cleanup step, logging (never raising) on failure.
+
+    Used for UI/file teardown (trial-capture writer close, camera preview
+    close) that sits ahead of the robot shutdown/return-home/disconnect
+    sequence in ``run_robot_client``'s ``finally`` block. Without this guard,
+    an exception from one of those cleanup steps (e.g. a video writer flush
+    error or an OpenCV window-close failure) would propagate and skip parking,
+    disconnect, and torque-disable entirely.
+    """
+    try:
+        return action()
+    except Exception as exc:  # noqa: BLE001 -- cleanup failures must not block shutdown
+        print(f"[eval_async] {label} failed: {exc}", flush=True)
+        return default
+
+
 def run_robot_client(
     args: argparse.Namespace,
     policy_path: Path,
@@ -850,13 +1101,175 @@ def run_robot_client(
 
     client = None
     trace_file = None
+    trace_path = None
     home_pose = None
     home_label = args.home_target
     fallback_pose = None
     parked = False
     watchdog = None
+    session_interrupted = False
+    session_timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    rollout_session_dir = None
+    active_capture = None
+    top_camera_preview = None
+
+    def start_trial_capture(trial: int):
+        nonlocal active_capture, rollout_session_dir
+        if not args.record_rollout:
+            return None
+        if active_capture is not None:
+            raise RuntimeError("A rollout capture is already active")
+        if rollout_session_dir is None:
+            args.rollout_output_root.mkdir(parents=True, exist_ok=True)
+            rollout_session_dir = (
+                args.rollout_output_root
+                / f"act_eval_async_{session_timestamp}"
+            )
+            rollout_session_dir.mkdir(parents=False, exist_ok=False)
+            print(
+                f"[eval_async] rollout artifacts -> {rollout_session_dir}",
+                flush=True,
+            )
+
+        writer = RolloutArtifactWriter(
+            rollout_session_dir / f"trial-{trial:03d}",
+            camera_names,
+            args.fps,
+        )
+        capture = {
+            "trial": trial,
+            "writer": writer,
+            "started_at": datetime.now(timezone.utc),
+            "started_perf": time.perf_counter(),
+        }
+        active_capture = capture
+
+        def record_observation(observation) -> None:
+            frames = {
+                camera: observation[camera]
+                for camera in camera_names
+            }
+            qpos = {
+                key: float(value)
+                for key, value in observation.items()
+                if key.endswith(".pos")
+            }
+            with client.latest_action_lock:
+                policy_timestep = max(client.latest_action, 0)
+            writer.record_observation(
+                frames,
+                {
+                    "captured_at": datetime.now(timezone.utc).isoformat(),
+                    "source": "policy_request",
+                    "policy_timestep": policy_timestep,
+                    "qpos": qpos,
+                },
+            )
+
+        def record_action(entry) -> None:
+            record_rollout_action_transition(
+                client=client,
+                writer=writer,
+                entry=entry,
+                camera_names=camera_names,
+            )
+
+        client.observation_callback = record_observation
+        client.action_callback = record_action
+        return capture
+
+    def detach_trial_capture():
+        nonlocal active_capture
+        if client is not None:
+            client.observation_callback = None
+            client.action_callback = None
+        capture = active_capture
+        active_capture = None
+        if capture is not None:
+            capture["rollout_finished_at"] = datetime.now(timezone.utc)
+            capture["duration_s"] = (
+                time.perf_counter() - capture["started_perf"]
+            )
+            capture["writer"].close()
+        return capture
+
+    def finish_trial_capture(capture, reason: str, outcome_label: str | None) -> None:
+        if capture is None:
+            return
+        writer = capture["writer"]
+        finished_at = datetime.now(timezone.utc)
+        metadata = {
+            "schema_version": 1,
+            "policy_type": args.policy_type,
+            "policy_path": str(policy_path),
+            "task": args.task,
+            "trial": capture["trial"],
+            "outcome_label": outcome_label,
+            "success": (
+                outcome_label == "success"
+                if outcome_label is not None
+                else None
+            ),
+            "exit_reason": reason,
+            "trial_started_at": capture["started_at"].isoformat(),
+            "rollout_finished_at": capture["rollout_finished_at"].isoformat(),
+            "finished_at": finished_at.isoformat(),
+            "duration_s": capture["duration_s"],
+            "control_hz": args.fps,
+            "video_encoded_fps": args.fps,
+            "average_observation_hz": (
+                writer.observation_count / capture["duration_s"]
+                if capture["duration_s"] > 0
+                else 0.0
+            ),
+            "camera_names": list(camera_names),
+            "joint_names": list(client.robot.action_features),
+            "observation_sampling": (
+                "policy requests plus a cached-camera/state observation after "
+                "every executed action"
+            ),
+            "video_timing": (
+                "constant-rate encoding; use observations.jsonl captured_at "
+                "timestamps for real observation timing"
+            ),
+            "observation_count": writer.observation_count,
+            "action_count": writer.action_count,
+            "camera_frame_count": writer.video_recorder.frame_count,
+            "videos": {
+                camera: str(path.relative_to(writer.output_dir))
+                for camera, path in writer.video_paths.items()
+                if path.exists()
+            },
+            "observations_path": writer.observations_path.name,
+            "actions_path": writer.actions_path.name,
+            "session_trace_path": (
+                str(trace_path.resolve())
+                if trace_path is not None
+                else None
+            ),
+            "actions_per_chunk": args.actions_per_chunk,
+            "chunk_size_threshold": args.chunk_size_threshold,
+            "aggregate_fn": args.aggregate_fn,
+            "action_smoothing": args.action_smoothing,
+            "max_joint_delta": args.max_joint_delta,
+        }
+        metadata_path = writer.output_dir / "metadata.json"
+        write_metadata_atomic(metadata_path, metadata)
+        print(
+            f"[eval_async] Trial {capture['trial']} metadata -> {metadata_path}",
+            flush=True,
+        )
+
     try:
         client = LockedRobotClient(client_cfg)  # connects the robot
+        if args.show_top_camera:
+            top_camera_preview = TopCameraPreview(client.robot.cameras["top"])
+            client.loop_callback = top_camera_preview.update
+            print(
+                "[eval_async] showing live top-camera preview "
+                "(q/Esc closes the preview; Ctrl-C or Enter stops the trial).",
+                flush=True,
+            )
         fallback_pose = joint_positions(client.robot)
         camera_view_checker = None
         scene_coverage = None
@@ -890,6 +1303,17 @@ def run_robot_client(
                 revision_override=args.start_state_revision,
                 statistics_loader=dataset_start_statistics,
             )
+            dataset_start_pose = apply_wrist_flex_start_override(
+                dataset_start_pose,
+                statistics,
+                args.start_state_wrist_flex,
+            )
+            if (
+                not args.no_return_home
+                and args.return_home_s > 0
+                and args.home_target == "dataset_start"
+            ):
+                home_pose = dataset_start_pose
         if args.move_to_dataset_start_state:
             assert dataset_start_pose is not None and statistics is not None
             print(
@@ -903,6 +1327,8 @@ def run_robot_client(
                 args.fps,
                 "dataset_start",
                 max_step_delta=args.start_state_max_delta,
+                tolerance=args.start_state_tolerance,
+                settle_timeout_s=args.return_home_settle_timeout_s,
             )
             current = joint_positions(client.robot)
             std = {
@@ -932,7 +1358,8 @@ def run_robot_client(
             )
         install_action_rate_limiter(client.robot, args.max_joint_delta)
         print(
-            f"[eval_async] hard action safety clamp={args.max_joint_delta:g} deg/command "
+            f"[eval_async] hard action safety clamp={args.max_joint_delta:g} "
+            "joint units/command "
             "(all joints, including gripper)",
             flush=True,
         )
@@ -946,7 +1373,17 @@ def run_robot_client(
             trace_path.parent.mkdir(parents=True, exist_ok=True)
             trace_file = trace_path.open("w")
             print(f"[eval_async] saving eval trace to {trace_path}", flush=True)
-            install_trace_logger(client.robot, trace_file)
+        if trace_file is not None or args.record_rollout:
+            def dispatch_trial_action(entry) -> None:
+                callback = client.action_callback
+                if callback is not None:
+                    callback(entry)
+
+            install_trace_logger(
+                client.robot,
+                trace_file,
+                dispatch_trial_action,
+            )
 
         if not args.no_return_home and args.return_home_s > 0:
             if args.home_target == "dataset_start" and dataset_start_pose is not None:
@@ -1015,6 +1452,7 @@ def run_robot_client(
                         )
                 except Exception as exc:  # noqa: BLE001 -- informational only
                     print(f"[eval_async] scene check skipped: {exc!r}", flush=True)
+            start_trial_capture(trial)
             parked = False
             print(
                 f"[eval_async] Trial {trial} running; "
@@ -1024,24 +1462,53 @@ def run_robot_client(
 
         def after_trial(trial: int, reason: str) -> None:
             nonlocal parked
+            capture = detach_trial_capture()
             print(f"[eval_async] Trial {trial} ended: {reason}.", flush=True)
-            if (
-                should_park_after_trial(reason)
-                and home_pose is not None
-                and not args.no_return_home
-                and args.return_home_s > 0
-            ):
-                return_home(
-                    client.robot,
-                    home_pose,
-                    args.return_home_s,
-                    args.fps,
-                    home_label,
-                    max_step_delta=args.start_state_max_delta,
+            try:
+                if (
+                    should_park_after_trial(reason)
+                    and home_pose is not None
+                    and not args.no_return_home
+                    and args.return_home_s > 0
+                ):
+                    return_home(
+                        client.robot,
+                        home_pose,
+                        args.return_home_s,
+                        args.fps,
+                        home_label,
+                        max_step_delta=args.start_state_max_delta,
+                        tolerance=args.start_state_tolerance,
+                        settle_timeout_s=args.return_home_settle_timeout_s,
+                    )
+                    parked = True
+                    if args.start_state_settle_s > 0:
+                        time.sleep(args.start_state_settle_s)
+            except BaseException:
+                finish_trial_capture(
+                    capture,
+                    f"{reason}_parking_failed",
+                    None,
                 )
-                parked = True
-                if args.start_state_settle_s > 0:
-                    time.sleep(args.start_state_settle_s)
+                raise
+            outcome_label = None
+            prompt_interrupted = False
+            if (
+                capture is not None
+                and trial_has_recorded_actions(capture["writer"].action_count)
+                and reason in {"operator", "duration"}
+            ):
+                try:
+                    outcome_label = prompt_for_outcome()
+                except KeyboardInterrupt:
+                    prompt_interrupted = True
+                    print(
+                        "\n[eval_async] outcome prompt canceled; leaving trial unlabeled.",
+                        flush=True,
+                    )
+            finish_trial_capture(capture, reason, outcome_label)
+            if prompt_interrupted:
+                raise KeyboardInterrupt
 
         run_trial_sequence(
             client,
@@ -1057,8 +1524,18 @@ def run_robot_client(
         if watchdog.reason is not None:
             raise RuntimeError(watchdog.reason)
     except KeyboardInterrupt:
+        session_interrupted = True
         print("\n[eval_async] interrupted; stopping policy and parking arm.", flush=True)
     finally:
+        # Capture/preview teardown must never block the robot shutdown below:
+        # an exception here (e.g. a video writer flush error or an OpenCV
+        # window-close failure) would otherwise skip parking, disconnect, and
+        # torque-disable cleanup entirely.
+        pending_capture = run_guarded_cleanup("trial capture cleanup", detach_trial_capture)
+        if client is not None:
+            client.loop_callback = None
+        if top_camera_preview is not None:
+            run_guarded_cleanup("top camera preview close", top_camera_preview.close)
         if client is not None:
             client.shutdown_event.set()
             cleanup_pose = home_pose
@@ -1083,6 +1560,8 @@ def run_robot_client(
                         args.fps,
                         home_label,
                         max_step_delta=args.max_joint_delta,
+                        tolerance=args.start_state_tolerance,
+                        settle_timeout_s=args.return_home_settle_timeout_s,
                     )
                 except (Exception, KeyboardInterrupt) as exc:  # noqa: BLE001
                     print(f"[eval_async] could not return home: {exc}", flush=True)
@@ -1090,6 +1569,24 @@ def run_robot_client(
                 client.stop()
             except Exception as exc:  # noqa: BLE001 -- continue closing logs/server
                 print(f"[eval_async] client stop failed: {exc}", flush=True)
+        if pending_capture is not None:
+            outcome_label = None
+            if (
+                session_interrupted
+                and trial_has_recorded_actions(pending_capture["writer"].action_count)
+            ):
+                try:
+                    outcome_label = prompt_for_outcome()
+                except KeyboardInterrupt:
+                    print(
+                        "\n[eval_async] outcome prompt canceled; leaving trial unlabeled.",
+                        flush=True,
+                    )
+            finish_trial_capture(
+                pending_capture,
+                "keyboard_interrupt" if session_interrupted else "aborted",
+                outcome_label,
+            )
         if trace_file is not None:
             trace_file.close()
         if args.visualize_queue and client is not None:
@@ -1102,12 +1599,16 @@ def main() -> None:
         raise ValueError("--trials must be positive.")
     if args.trial_duration is not None and args.trial_duration <= 0:
         raise ValueError("--trial-duration must be positive when provided.")
+    if args.return_home_settle_timeout_s < 0:
+        raise ValueError("--return-home-settle-timeout-s must be non-negative.")
     if args.camera_reference_count <= 0:
         raise ValueError("--camera-reference-count must be positive.")
     policy_path = Path(args.policy_path).resolve()
     if not policy_path.exists():
         raise FileNotFoundError(f"Policy path not found: {policy_path}")
     camera_names = [c.strip() for c in args.cameras.split(",") if c.strip()]
+    if args.show_top_camera and "top" not in camera_names:
+        raise ValueError("--show-top-camera requires 'top' in --cameras.")
     fourcc = args.camera_fourcc or None
     host, port = args.server_address.split(":")
     if not np.isfinite(args.max_joint_delta) or args.max_joint_delta <= 0:

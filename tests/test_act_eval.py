@@ -13,11 +13,14 @@ from lerobot.policies.factory import get_policy_class
 from configs.act.base import ACTConfig
 from models.act.eval_async import (
     LockedRobotClient,
+    apply_wrist_flex_start_override,
     install_action_rate_limiter,
     install_action_smoother,
     launch_server,
     return_home,
+    run_guarded_cleanup,
     start_state_reference,
+    trial_has_recorded_actions,
     visualize_action_queue_size_if_present,
 )
 from models.act.eval_common import move_to_joint_state, start_state_violations
@@ -31,6 +34,10 @@ class _FakeBus:
 
     def sync_read(self, _register):
         return {name: float(self.state[i]) for i, name in enumerate(JOINT_NAMES)}
+
+    def read(self, _register, _motor, *, normalize=False):
+        assert not normalize
+        return 0
 
 
 class _FakeRobot:
@@ -234,21 +241,162 @@ def test_start_state_reference_uses_seed_override(tmp_path):
     )
 
 
+def test_wrist_flex_start_override_stays_within_dataset_support():
+    pose = {f"{name}.pos": 0.0 for name in JOINT_NAMES}
+    statistics = {
+        "min": np.full(len(JOINT_NAMES), -10.0, dtype=np.float32),
+        "max": np.full(len(JOINT_NAMES), 10.0, dtype=np.float32),
+    }
+
+    updated = apply_wrist_flex_start_override(pose, statistics, 6.0)
+
+    assert updated["wrist_flex.pos"] == 6.0
+    assert pose["wrist_flex.pos"] == 0.0
+
+
+def test_wrist_flex_start_override_rejects_out_of_distribution_target():
+    pose = {f"{name}.pos": 0.0 for name in JOINT_NAMES}
+    statistics = {
+        "min": np.full(len(JOINT_NAMES), -10.0, dtype=np.float32),
+        "max": np.full(len(JOINT_NAMES), 10.0, dtype=np.float32),
+    }
+
+    with pytest.raises(ValueError, match="outside dataset start support"):
+        apply_wrist_flex_start_override(pose, statistics, 11.0)
+
+
 def test_return_home_limits_each_command_even_with_zero_duration():
     robot = _FakeRobot()
-    return_home(
+    result = return_home(
         robot,
         {f"{name}.pos": 5.0 for name in JOINT_NAMES},
         duration_s=0,
         fps=1000,
         label="test",
         max_step_delta=1.0,
+        tolerance=0.01,
+        settle_timeout_s=0,
     )
     commands = np.array(
         [[item[f"{name}.pos"] for name in JOINT_NAMES] for item in robot.commands]
     )
     assert len(commands) == 5
     assert np.max(np.diff(np.vstack([np.zeros(len(JOINT_NAMES)), commands]), axis=0)) <= 1.0
+    assert result["reached"]
+
+
+def test_return_home_bypasses_policy_smoothing_and_reaches_target():
+    robot = _FakeRobot()
+    install_action_smoother(robot, alpha=0.7)
+    install_action_rate_limiter(robot, max_delta=2.0)
+    target = {f"{name}.pos": 100.0 for name in JOINT_NAMES}
+
+    result = return_home(
+        robot,
+        target,
+        duration_s=0,
+        fps=1000,
+        label="test",
+        max_step_delta=1.0,
+        tolerance=0.01,
+        settle_timeout_s=0,
+    )
+
+    commands = np.array(
+        [[item[f"{name}.pos"] for name in JOINT_NAMES] for item in robot.commands]
+    )
+    assert result["reached"]
+    assert np.allclose(robot.bus.state, 100.0)
+    assert np.max(
+        np.abs(np.diff(np.vstack([np.zeros(len(JOINT_NAMES)), commands]), axis=0))
+    ) <= 1.0 + 1e-5
+
+
+def test_return_home_bypasses_rate_limiter_and_reaches_target():
+    """return_home explicitly bypasses the EMA action smoother while ramping (see
+    test_return_home_bypasses_policy_smoothing_and_reaches_target) because its own
+    max_step_delta/timeout math is meant to be authoritative for the park move.
+    install_action_rate_limiter's clamp has no equivalent bypass, so when its
+    max_delta is tighter than return_home's max_step_delta, every ramp command is
+    silently reclamped smaller than return_home assumed -- the arm keeps
+    approaching the target but never gets there within the timeout return_home
+    computed for a larger step size, and a fully reachable target is incorrectly
+    reported as unreached.
+    """
+    robot = _FakeRobot()
+    install_action_rate_limiter(robot, max_delta=0.1)
+    target = {f"{name}.pos": 100.0 for name in JOINT_NAMES}
+
+    result = return_home(
+        robot,
+        target,
+        duration_s=0,
+        fps=1000,
+        label="test",
+        max_step_delta=1.0,
+        tolerance=0.01,
+        settle_timeout_s=0,
+    )
+
+    assert result["reached"]
+    assert np.allclose(robot.bus.state, 100.0)
+
+
+def test_return_home_rejects_false_success_from_stalled_telemetry():
+    class StalledRobot(_FakeRobot):
+        def send_action(self, action):
+            self.commands.append(action)
+            return action
+
+    robot = StalledRobot()
+
+    with pytest.raises(RuntimeError, match="pose was not reached"):
+        return_home(
+            robot,
+            {f"{name}.pos": 2.0 for name in JOINT_NAMES},
+            duration_s=0,
+            fps=1000,
+            label="test",
+            max_step_delta=1.0,
+            tolerance=0.1,
+            settle_timeout_s=0,
+        )
+
+
+def test_return_home_reports_pose_not_reached_despite_telemetry_read_failure():
+    """The diagnostic "pose was not reached" RuntimeError must win even when a
+    follow-up motor telemetry read (Goal_Position/Present_Position/etc.) itself
+    raises -- e.g. the same communication fault that caused the stall also
+    breaks a later register read. Without per-register error handling, that
+    read exception replaces the informative pose-not-reached diagnostic with a
+    much less useful raw bus-read error.
+    """
+
+    class FlakyBus(_FakeBus):
+        def read(self, register, motor, *, normalize=False):
+            if register == "Hardware_Error_Status":
+                raise ConnectionError("simulated bus read failure")
+            return super().read(register, motor, normalize=normalize)
+
+    class StalledRobot(_FakeRobot):
+        def send_action(self, action):
+            self.commands.append(action)
+            return action
+
+    robot = StalledRobot()
+    robot.bus = FlakyBus(robot.bus.state)
+
+    with pytest.raises(RuntimeError, match="pose was not reached"):
+        return_home(
+            robot,
+            {f"{name}.pos": 2.0 for name in JOINT_NAMES},
+            duration_s=0,
+            fps=1000,
+            label="test",
+            max_step_delta=1.0,
+            tolerance=0.1,
+            settle_timeout_s=0,
+        )
 
 
 def test_async_action_rate_limiter_clamps_every_joint_from_live_start():
@@ -397,6 +545,40 @@ def test_visualize_action_queue_size_if_present_forwards_nonempty_queue():
     visualize_action_queue_size_if_present([1, 2, 3], visualize=calls.append)
 
     assert calls == [[1, 2, 3]]
+
+
+def test_run_guarded_cleanup_swallows_exception_and_returns_default():
+    """Cleanup steps that sit ahead of the robot shutdown/return-home/disconnect
+    sequence in run_robot_client's finally block (trial-capture writer close,
+    camera preview close) must never raise: doing so would skip parking,
+    disconnect, and torque-disable entirely.
+    """
+
+    def boom():
+        raise RuntimeError("writer flush failed")
+
+    result = run_guarded_cleanup("trial capture cleanup", boom, default="sentinel")
+
+    assert result == "sentinel"
+
+
+def test_run_guarded_cleanup_returns_action_result_on_success():
+    result = run_guarded_cleanup("trial capture cleanup", lambda: {"trial": 1})
+
+    assert result == {"trial": 1}
+
+
+def test_trial_has_recorded_actions_requires_at_least_one_action():
+    """Outcome-label eligibility must key off action_count, not observation_count:
+    observations are sent to the policy server on a fixed cadence to request
+    actions regardless of whether any action has arrived and executed yet, so a
+    trial that ends before the first action chunk arrives can have
+    observation_count > 0 with action_count == 0 -- the robot never did
+    anything, so it shouldn't be eligible for a success/failure label.
+    """
+    assert trial_has_recorded_actions(0) is False
+    assert trial_has_recorded_actions(1) is True
+    assert trial_has_recorded_actions(5) is True
 
 
 def test_locked_robot_client_disconnects_robot_on_partial_construction_failure():

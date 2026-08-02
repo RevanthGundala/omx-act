@@ -39,12 +39,16 @@ def run_json(command: list[str]):
     return json.loads(result.stdout)
 
 
+def record_value(record: dict, label: str):
+    return record.get(label, record.get(label.lower().replace(" ", "_")))
+
+
 def exact_app_record(app_id: str):
     return next(
         (
             record
             for record in run_json(["modal", "app", "list", "--json"])
-            if record.get("App ID") == app_id
+            if record_value(record, "App ID") == app_id
         ),
         None,
     )
@@ -54,7 +58,7 @@ def exact_containers(app_id: str):
     return [
         record
         for record in run_json(["modal", "container", "list", "--json"])
-        if record.get("App ID") == app_id
+        if record_value(record, "App ID") == app_id
     ]
 
 
@@ -77,7 +81,7 @@ def stop_exact_resource(function_call, app_id: str, log) -> None:
         time.sleep(10)
         app_record = exact_app_record(app_id)
         containers = exact_containers(app_id)
-        state = None if app_record is None else str(app_record.get("State", "")).lower()
+        state = None if app_record is None else str(record_value(app_record, "State") or "").lower()
         if not containers and state not in ACTIVE_APP_STATES:
             return
     raise RuntimeError(f"Could not verify exact Modal app {app_id} stopped.")
@@ -100,9 +104,10 @@ def download_outputs(
             log(f"Could not list LeRobot checkpoints before download: {exc!r}")
             return False
         checkpoint_names = sorted(
-            Path(entry["Filename"]).name
+            Path(record_value(entry, "Filename")).name
             for entry in entries
-            if entry.get("Type") == "dir" and Path(entry["Filename"]).name.isdigit()
+            if record_value(entry, "Type") == "dir"
+            and Path(record_value(entry, "Filename")).name.isdigit()
         )
         if not checkpoint_names:
             log(f"No LeRobot checkpoint found under {checkpoint_root}.")
@@ -147,9 +152,9 @@ def download_outputs(
         log(f"Could not list output runs before download: {exc!r}")
         return False
     run_dirs = sorted(
-        entry["Filename"]
+        record_value(entry, "Filename")
         for entry in entries
-        if entry.get("Type") == "dir"
+        if record_value(entry, "Type") == "dir"
     )
     if not run_dirs:
         log(f"No run directory found under {remote_path}.")
@@ -242,7 +247,7 @@ def main() -> None:
         )
 
         for container in containers:
-            container_id = container.get("Container ID")
+            container_id = record_value(container, "Container ID")
             if not container_id:
                 continue
             telemetry = subprocess.run(
@@ -340,7 +345,7 @@ def main() -> None:
 
     app_record = exact_app_record(args.app_id)
     containers = exact_containers(args.app_id)
-    state = None if app_record is None else str(app_record.get("State", "")).lower()
+    state = None if app_record is None else str(record_value(app_record, "State") or "").lower()
     if containers or state in ACTIVE_APP_STATES:
         raise RuntimeError(
             f"Fresh Modal audit still shows billable resource: app={app_record}, containers={containers}"

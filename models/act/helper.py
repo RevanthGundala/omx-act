@@ -4,6 +4,7 @@ from torch.utils.data import DataLoader, Dataset
 from configs.act.base import ACTConfig
 from data.episode_split import resolve_train_holdout_episodes
 from lerobot.datasets import LeRobotDataset, LeRobotDatasetMetadata
+from lerobot.transforms.transforms import ImageTransforms, ImageTransformsConfig
 
 
 def make_dataloaders(cfg: ACTConfig):
@@ -19,7 +20,11 @@ def make_dataloaders(cfg: ACTConfig):
         flush=True,
     )
 
-    train_dataset = ACTDataset(cfg, episodes=train_episodes)
+    train_dataset = ACTDataset(
+        cfg,
+        episodes=train_episodes,
+        image_transforms=cfg.image_transforms,
+    )
     train_generator = torch.Generator().manual_seed(cfg.seed)
     train_loader = DataLoader(
         dataset=train_dataset,
@@ -31,7 +36,7 @@ def make_dataloaders(cfg: ACTConfig):
     )
     val_loader = None
     if holdout_episodes:
-        val_dataset = ACTDataset(cfg, episodes=holdout_episodes)
+        val_dataset = ACTDataset(cfg, episodes=holdout_episodes, image_transforms=False)
         val_loader = DataLoader(
             dataset=val_dataset,
             batch_size=cfg.batch_size,
@@ -43,7 +48,12 @@ def make_dataloaders(cfg: ACTConfig):
 
 
 class ACTDataset(Dataset):
-    def __init__(self, cfg: ACTConfig, episodes: list[int] | None = None):
+    def __init__(
+        self,
+        cfg: ACTConfig,
+        episodes: list[int] | None = None,
+        image_transforms: bool | None = None,
+    ):
         self.camera_names = cfg.camera_names
         self.chunk_size = cfg.chunk_size
         self.image_mean = torch.tensor([0.485, 0.456, 0.406], dtype=torch.float32).view(3, 1, 1)
@@ -57,10 +67,14 @@ class ACTDataset(Dataset):
 
         fps = metadata.fps
 
+        transforms_enabled = cfg.image_transforms if image_transforms is None else image_transforms
         self.dataset = LeRobotDataset(
             repo_id=cfg.dataset_repo_id,
             revision=cfg.dataset_revision,
             episodes=episodes,
+            image_transforms=ImageTransforms(
+                ImageTransformsConfig(enable=transforms_enabled)
+            ),
             delta_timestamps={
                 "observation.state": [0.0],
                 "action": [i / fps for i in range(cfg.chunk_size)],
@@ -115,4 +129,3 @@ class ACTDataset(Dataset):
             "images": images * self.image_std + self.image_mean,
             "actions": actions * self.action_std + self.action_mean 
         }
-

@@ -1,5 +1,6 @@
 from dataclasses import asdict
 
+import pytest
 import torch
 from lerobot.configs.types import FeatureType, PolicyFeature
 from lerobot.policies.act.modeling_act import ACTTemporalEnsembler
@@ -9,6 +10,10 @@ from models.act.lerobot_policy import (
     CustomACTConfig,
     CustomACTPolicy,
     _adapter_config,
+)
+from models.recap.act_recap import (
+    ACTPolicy as RecapACTPolicy,
+    AdvantageCondition,
 )
 
 
@@ -29,7 +34,11 @@ def _source_config() -> ACTConfig:
     )
 
 
-def _policy_config(source: ACTConfig) -> CustomACTConfig:
+def _policy_config(
+    source: ACTConfig,
+    *,
+    recap: bool = False,
+) -> CustomACTConfig:
     return CustomACTConfig(
         input_features={
             "observation.state": PolicyFeature(FeatureType.STATE, (2,)),
@@ -50,6 +59,7 @@ def _policy_config(source: ACTConfig) -> CustomACTConfig:
         source_model_config=asdict(source),
         dataset_repo_id=source.dataset_repo_id,
         action_space="absolute",
+        recap=recap,
     )
 
 
@@ -80,3 +90,56 @@ def test_exported_adapter_preserves_native_temporal_ensemble_weight():
     config = _adapter_config(source, asdict(source), "cpu", "absolute")
 
     assert config.temporal_ensemble_coeff == source.exp_weight
+
+
+def test_recap_adapter_defaults_to_unconditioned_and_can_select_positive(
+    monkeypatch,
+):
+    source = _source_config()
+    policy = CustomACTPolicy(_policy_config(source, recap=True))
+    assert isinstance(policy.model, RecapACTPolicy)
+    assert policy.advantage_condition is AdvantageCondition.UNCONDITIONED
+    policy._action_queue.append(torch.ones(1))
+    captured = []
+
+    def forward(images, qpos, *, advantage):
+        captured.append(advantage)
+        return (
+            torch.zeros(images.shape[0], source.chunk_size, source.joint_dim),
+            None,
+            None,
+        )
+
+    monkeypatch.setattr(policy.model, "forward", forward)
+    policy.set_advantage_condition("positive")
+    assert not policy._action_queue
+    batch = {
+        "observation.state": torch.zeros(1, source.joint_dim),
+        "observation.images.top": torch.zeros(1, 3, 64, 64),
+    }
+
+    policy.predict_action_chunk(batch)
+
+    assert captured == [AdvantageCondition.POSITIVE]
+    assert policy.advantage_condition is AdvantageCondition.POSITIVE
+
+
+def test_base_adapter_rejects_advantage_conditioning():
+    policy = CustomACTPolicy(_policy_config(_source_config()))
+
+    with pytest.raises(RuntimeError, match="RECAP-exported"):
+        policy.set_advantage_condition(AdvantageCondition.POSITIVE)
+
+
+def test_adapter_config_marks_recap_exports():
+    source = _source_config()
+
+    config = _adapter_config(
+        source,
+        asdict(source),
+        "cpu",
+        "absolute",
+        recap=True,
+    )
+
+    assert config.recap is True

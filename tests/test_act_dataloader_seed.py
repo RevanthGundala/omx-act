@@ -8,8 +8,9 @@ from configs.act.base import ACTConfig
 
 
 class _IndexDataset(Dataset):
-    def __init__(self, _config, episodes):
+    def __init__(self, _config, episodes, image_transforms):
         assert episodes == [0]
+        assert image_transforms is False
         self.values = torch.arange(12)
 
     def __len__(self):

@@ -25,7 +25,11 @@ from lerobot.utils.constants import ACTION, OBS_STATE
 from torch import Tensor
 
 from configs.act.base import ACTConfig
-from models.act.act import ACTPolicy
+from models.act.act import ACTPolicy as BaseACTPolicy
+from models.recap.act_recap import (
+    ACTPolicy as RecapACTPolicy,
+    AdvantageCondition,
+)
 
 IMAGENET_MEAN = torch.tensor([0.485, 0.456, 0.406], dtype=torch.float32).view(3, 1, 1)
 IMAGENET_STD = torch.tensor([0.229, 0.224, 0.225], dtype=torch.float32).view(3, 1, 1)
@@ -38,6 +42,7 @@ class CustomACTConfig(LeRobotACTConfig):
     dataset_repo_id: str = ""
     dataset_revision: str = "main"
     action_space: str = "absolute"
+    recap: bool = False
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -57,7 +62,9 @@ class CustomACTPolicy(PreTrainedPolicy):
         source = {key: value for key, value in config.source_model_config.items() if key in allowed}
         source["camera_names"] = tuple(source["camera_names"])
         self.source_config = ACTConfig(**source)
-        self.model = ACTPolicy(self.source_config)
+        model_class = RecapACTPolicy if config.recap else BaseACTPolicy
+        self.model = model_class(self.source_config)
+        self._advantage_condition = AdvantageCondition.UNCONDITIONED
         self._action_queue: deque[Tensor] = deque(maxlen=config.n_action_steps)
         self.temporal_ensembler = (
             ACTTemporalEnsembler(config.temporal_ensemble_coeff, config.chunk_size)
@@ -92,6 +99,34 @@ class CustomACTPolicy(PreTrainedPolicy):
         if self.temporal_ensembler is not None:
             self.temporal_ensembler.reset()
 
+    @property
+    def advantage_condition(self) -> AdvantageCondition:
+        return self._advantage_condition
+
+    def set_advantage_condition(
+        self,
+        condition: AdvantageCondition | int | str,
+    ) -> None:
+        if not self.config.recap:
+            raise RuntimeError(
+                "Advantage conditioning requires a RECAP-exported custom ACT policy"
+            )
+        if isinstance(condition, str):
+            try:
+                condition = AdvantageCondition[condition.upper()]
+            except KeyError as exc:
+                raise ValueError(
+                    f"Unknown advantage condition: {condition!r}"
+                ) from exc
+        try:
+            resolved = AdvantageCondition(condition)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Invalid advantage condition: {condition!r}"
+            ) from exc
+        self._advantage_condition = resolved
+        self.reset()
+
     def _inputs(self, batch: dict[str, Tensor]) -> tuple[Tensor, Tensor]:
         images = torch.stack(
             [batch[f"observation.images.{camera}"] for camera in self.camera_names],
@@ -102,6 +137,11 @@ class CustomACTPolicy(PreTrainedPolicy):
     @torch.no_grad()
     def predict_action_chunk(self, batch: dict[str, Tensor], **_kwargs) -> Tensor:
         self.eval()
+        if self.config.recap:
+            return self.model(
+                *self._inputs(batch),
+                advantage=self._advantage_condition,
+            )[0]
         return self.model(*self._inputs(batch))[0]
 
     @torch.no_grad()
@@ -118,10 +158,17 @@ class CustomACTPolicy(PreTrainedPolicy):
         if ACTION not in batch:
             raise KeyError(f"missing required training target {ACTION!r}")
         action_mask = None if "action_is_pad" not in batch else ~batch["action_is_pad"].bool()
+        model_kwargs = {}
+        if self.config.recap:
+            model_kwargs["advantage"] = batch.get(
+                "advantage_condition",
+                AdvantageCondition.UNCONDITIONED,
+            )
         actions_hat, mu, log_var = self.model(
             *self._inputs(batch),
             batch[ACTION],
             action_mask,
+            **model_kwargs,
         )
         error = F.l1_loss(actions_hat, batch[ACTION], reduction="none")
         if action_mask is None:
@@ -141,6 +188,7 @@ def export_checkpoint(
     device: str,
     action_space: str,
     overwrite: bool,
+    recap: bool = False,
 ) -> Path:
     if action_space != "absolute":
         raise NotImplementedError(
@@ -159,10 +207,22 @@ def export_checkpoint(
             if item.name in source_dict
         }
     )
-    config = _adapter_config(source, source_dict, device, action_space)
+    config = _adapter_config(
+        source,
+        source_dict,
+        device,
+        action_space,
+        recap=recap,
+    )
     metadata = LeRobotDatasetMetadata(source.dataset_repo_id, revision=source.dataset_revision)
     policy = CustomACTPolicy(config)
-    policy.model.load_state_dict(checkpoint["model_state_dict"])
+    try:
+        policy.model.load_state_dict(checkpoint["model_state_dict"])
+    except RuntimeError as exc:
+        mode = "RECAP" if recap else "base ACT"
+        raise ValueError(
+            f"Checkpoint is incompatible with requested {mode} export"
+        ) from exc
     policy.to(device).eval()
     preprocessor, postprocessor = make_act_pre_post_processors(
         config,
@@ -190,6 +250,7 @@ def export_checkpoint(
                 "source_checkpoint": str(checkpoint_path),
                 "source_step": checkpoint.get("step"),
                 "policy_type": "custom_act",
+                "recap": recap,
                 "action_space": action_space,
                 "source_model_config": source_dict,
             },
@@ -206,6 +267,7 @@ def _adapter_config(
     source_dict: dict,
     device: str,
     action_space: str,
+    recap: bool = False,
 ) -> CustomACTConfig:
     input_features = {"observation.state": PolicyFeature(FeatureType.STATE, (source.joint_dim,))}
     input_features.update(
@@ -234,6 +296,7 @@ def _adapter_config(
         dataset_repo_id=source.dataset_repo_id,
         dataset_revision=source.dataset_revision,
         action_space=action_space,
+        recap=recap,
     )
 
 
@@ -266,6 +329,11 @@ def main() -> None:
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--action-space", choices=["absolute", "delta"], required=True)
     parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument(
+        "--recap",
+        action="store_true",
+        help="Export a models.recap.act_recap checkpoint.",
+    )
     args = parser.parse_args()
     output = export_checkpoint(
         Path(args.checkpoint),
@@ -273,6 +341,7 @@ def main() -> None:
         device=args.device,
         action_space=args.action_space,
         overwrite=args.overwrite,
+        recap=args.recap,
     )
     print(f"Exported custom ACT LeRobot policy to {output}")
 

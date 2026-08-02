@@ -10,9 +10,12 @@ from lerobot.async_inference.helpers import TimedAction
 
 from models.act.eval_async import (
     LockedRobotClient,
+    TopCameraPreview,
     diagnostic_dataset_reference,
+    install_trace_logger,
     load_session_diagnostics,
     prompt_for_trial_start,
+    record_rollout_action_transition,
     resolve_dataset_start_pose,
     run_trial_sequence,
     should_park_after_trial,
@@ -97,6 +100,30 @@ def test_control_trial_stops_without_global_shutdown_and_reuses_receiver_barrier
     assert not client.shutdown_event.is_set()
 
 
+def test_control_trial_updates_live_preview_each_iteration():
+    client = _client_with_trial_state()
+    client.shutdown_event = threading.Event()
+    client.config = SimpleNamespace(environment_dt=0.0)
+    client.start_barrier = SimpleNamespace(wait=lambda: None)
+    client._control_loop_started = False
+    client.actions_available = lambda: False
+    client._ready_to_send_observation = lambda: False
+    updates = []
+    client.loop_callback = lambda: updates.append("preview")
+    client.trial_active.set()
+    stop_checks = iter([False, True])
+
+    reason = client.control_trial(
+        task="test",
+        duration_s=60.0,
+        stop_requested=lambda: next(stop_checks),
+        sleep=lambda _seconds: None,
+    )
+
+    assert reason == "operator"
+    assert updates == ["preview"]
+
+
 def test_control_trial_reports_shutdown_reason_even_when_stop_requested_races_watchdog():
     """should_park_after_trial treats a "shutdown" reason as special precisely because
     a watchdog-triggered abort means something is wrong and after_trial must not move
@@ -129,6 +156,133 @@ def test_control_trial_reports_shutdown_reason_even_when_stop_requested_races_wa
     )
 
     assert reason == "shutdown"
+
+
+def test_top_camera_preview_displays_rgb_and_q_closes_window():
+    rgb = np.array([[[1, 2, 3]]], dtype=np.uint8)
+
+    class FakeCamera:
+        def __init__(self):
+            self.read_count = 0
+
+        def read_latest(self):
+            self.read_count += 1
+            return rgb
+
+    class FakeCV2:
+        COLOR_RGB2BGR = object()
+
+        def __init__(self):
+            self.displayed = []
+            self.destroyed = []
+
+        def cvtColor(self, frame, conversion):
+            assert conversion is self.COLOR_RGB2BGR
+            return frame[..., ::-1].copy()
+
+        def imshow(self, name, frame):
+            self.displayed.append((name, frame))
+
+        def waitKey(self, _delay):
+            return ord("q")
+
+        def destroyWindow(self, name):
+            self.destroyed.append(name)
+
+    camera = FakeCamera()
+    cv2_module = FakeCV2()
+    preview = TopCameraPreview(camera, cv2_module=cv2_module)
+
+    preview.update()
+    preview.update()
+
+    assert camera.read_count == 1
+    assert cv2_module.displayed[0][0] == TopCameraPreview.WINDOW_NAME
+    assert cv2_module.displayed[0][1].tolist() == [[[3, 2, 1]]]
+    assert cv2_module.destroyed == [TopCameraPreview.WINDOW_NAME]
+
+
+def test_locked_client_forwards_policy_observations_to_capture_callback(monkeypatch):
+    client = LockedRobotClient.__new__(LockedRobotClient)
+    observations = []
+    client.observation_callback = observations.append
+    expected = {"top": np.zeros((4, 4, 3), dtype=np.uint8)}
+    monkeypatch.setattr(
+        "lerobot.async_inference.robot_client.RobotClient.control_loop_observation",
+        lambda self, task, verbose=False: expected,
+    )
+
+    actual = client.control_loop_observation("pick")
+
+    assert actual is expected
+    assert observations == [expected]
+
+
+def test_trace_logger_can_dispatch_actions_without_global_trace(monkeypatch):
+    robot = SimpleNamespace(
+        send_action=lambda action: dict(action),
+    )
+    entries = []
+    monkeypatch.setattr(
+        "models.act.eval_async.joint_positions",
+        lambda _robot: {"joint.pos": 1.5},
+    )
+    install_trace_logger(
+        robot,
+        trace_file=None,
+        entry_callback=entries.append,
+    )
+
+    sent = robot.send_action({"joint.pos": 2.0})
+
+    assert sent == {"joint.pos": 2.0}
+    assert len(entries) == 1
+    assert entries[0].pop("elapsed_s") >= 0
+    assert entries[0] == {
+        "step": 0,
+        "qpos": {"joint.pos": 1.5},
+        "target_action": {"joint.pos": 2.0},
+        "sent_action": {"joint.pos": 2.0},
+    }
+
+
+def test_rollout_action_records_preceding_observation_then_post_action_state():
+    calls = []
+
+    class Writer:
+        def record_action(self, entry):
+            calls.append(("action", dict(entry)))
+
+        def record_observation(self, frames, payload):
+            calls.append(("observation", dict(frames), dict(payload)))
+
+    frame = np.zeros((4, 4, 3), dtype=np.uint8)
+    client = SimpleNamespace(
+        robot=SimpleNamespace(
+            cameras={
+                "top": SimpleNamespace(read_latest=lambda: frame),
+            }
+        )
+    )
+    entry = {
+        "step": 7,
+        "qpos": {"joint.pos": 1.5},
+        "sent_action": {"joint.pos": 2.0},
+    }
+
+    record_rollout_action_transition(
+        client=client,
+        writer=Writer(),
+        entry=entry,
+        camera_names=["top"],
+    )
+
+    assert calls[0] == ("action", entry)
+    assert calls[1][0] == "observation"
+    assert calls[1][1]["top"] is frame
+    assert calls[1][2]["source"] == "post_action"
+    assert calls[1][2]["policy_timestep"] == 8
+    assert calls[1][2]["qpos"] == {"joint.pos": 1.5}
 
 
 def test_trial_sequence_reuses_client_and_runs_reset_callbacks():

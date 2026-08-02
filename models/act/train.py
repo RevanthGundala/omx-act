@@ -55,6 +55,12 @@ def compute_loss(model, batch, device, kl_weight):
 def config_from_env() -> ACTConfig:
     base_cfg = ACTConfig(dataset_repo_id=os.environ.get("ACT_TRAIN_DATASET_REPO_ID") or RECORD_DATASET_REPO_ID)
     train_split = os.environ.get("ACT_TRAIN_SPLIT")
+    image_transforms = os.environ.get("ACT_TRAIN_IMAGE_TRANSFORMS")
+    if image_transforms is not None and image_transforms.lower() not in {"true", "false"}:
+        raise ValueError(
+            "ACT_TRAIN_IMAGE_TRANSFORMS must be 'true' or 'false', "
+            f"got {image_transforms!r}."
+        )
     cfg = replace(
         base_cfg,
         job_name=os.environ.get("ACT_TRAIN_JOB_NAME", base_cfg.job_name),
@@ -63,6 +69,11 @@ def config_from_env() -> ACTConfig:
         chunk_size=int(os.environ.get("ACT_TRAIN_CHUNK_SIZE") or base_cfg.chunk_size),
         save_freq=int(os.environ.get("ACT_TRAIN_SAVE_FREQ", base_cfg.save_freq)),
         train_split=float(train_split) if train_split else base_cfg.train_split,
+        image_transforms=(
+            image_transforms.lower() == "true"
+            if image_transforms is not None
+            else base_cfg.image_transforms
+        ),
     )
     if not 0 < cfg.train_split <= 1:
         raise ValueError(f"ACT_TRAIN_SPLIT must be in (0, 1], got {cfg.train_split}.")
@@ -106,6 +117,12 @@ def main():
     train_loader, val_loader = make_dataloaders(cfg)
     start_step = 0
     if resume_checkpoint:
+        checkpoint_transforms = bool(checkpoint["config"].get("image_transforms", False))
+        if checkpoint_transforms != cfg.image_transforms:
+            raise ValueError(
+                "Resume checkpoint image_transforms setting does not match this run: "
+                f"checkpoint={checkpoint_transforms}, run={cfg.image_transforms}."
+            )
         optim.load_state_dict(checkpoint["optimizer_state_dict"])
         start_step = int(checkpoint["step"])
         print(f"Resumed checkpoint {resume_checkpoint} at step {start_step}", flush=True)
