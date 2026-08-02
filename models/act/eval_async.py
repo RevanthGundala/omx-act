@@ -434,7 +434,23 @@ class ActionStreamWatchdog:
 
 class LockedRobotClient(RobotClient):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        try:
+            super().__init__(*args, **kwargs)
+        except BaseException:
+            # RobotClient.__init__ connects the robot (self.robot.connect()) well
+            # before it finishes (gRPC channel setup, RemotePolicyConfig, etc. can
+            # still raise afterward). If construction fails past that point, the
+            # partially-built instance is discarded and nothing else holds a
+            # reference to the now-connected robot -- leaking an open hardware
+            # connection. Disconnect it here before letting the exception
+            # propagate.
+            robot = getattr(self, "robot", None)
+            if robot is not None:
+                try:
+                    robot.disconnect()
+                except Exception:  # noqa: BLE001 -- already unwinding a failure
+                    pass
+            raise
         self.action_queue_lock = threading.RLock()
         self.trial_active = threading.Event()
         self._control_loop_started = False
