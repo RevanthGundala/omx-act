@@ -1,15 +1,18 @@
 import socket
 from dataclasses import asdict
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 import pytest
 import torch
+from lerobot.async_inference.robot_client import RobotClient
 from lerobot.configs.types import FeatureType, PolicyFeature
 from lerobot.policies.factory import get_policy_class
 
 from configs.act.base import ACTConfig
 from models.act.eval_async import (
+    LockedRobotClient,
     install_action_rate_limiter,
     install_action_smoother,
     launch_server,
@@ -361,3 +364,32 @@ def test_visualize_action_queue_size_if_present_forwards_nonempty_queue():
     visualize_action_queue_size_if_present([1, 2, 3], visualize=calls.append)
 
     assert calls == [[1, 2, 3]]
+
+
+def test_locked_robot_client_disconnects_robot_on_partial_construction_failure():
+    """RobotClient.__init__ connects the robot (self.robot.connect()) well before
+    it finishes -- setting up the gRPC channel, RemotePolicyConfig, etc. can still
+    raise afterward. If construction fails past that point, the partially-built
+    instance is discarded and nothing else holds a reference to the now-connected
+    robot, leaking an open hardware connection. LockedRobotClient must disconnect
+    the robot before letting the exception propagate.
+    """
+    disconnected = []
+
+    class FakeRobot:
+        def connect(self):
+            pass
+
+        def disconnect(self):
+            disconnected.append(True)
+
+    def fake_init(self, *args, **kwargs):
+        self.robot = FakeRobot()
+        self.robot.connect()
+        raise RuntimeError("boom after robot.connect()")
+
+    with patch.object(RobotClient, "__init__", fake_init):
+        with pytest.raises(RuntimeError, match="boom after robot.connect"):
+            LockedRobotClient()
+
+    assert disconnected == [True]
