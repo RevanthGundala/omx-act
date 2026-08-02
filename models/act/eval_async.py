@@ -244,6 +244,9 @@ def install_action_smoother(robot, alpha: float) -> None:
     target (no startup lurch). The return_home sweep also goes through this filter,
     but it already interpolates slowly so the added lag is negligible.
     """
+    if not np.isfinite(alpha) or not (0.0 <= alpha <= 1.0):
+        raise ValueError("alpha must be within [0, 1].")
+
     raw_send = robot.send_action
     state: dict[str, float] = {}
 
