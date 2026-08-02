@@ -224,6 +224,38 @@ def test_async_action_rate_limiter_clamps_every_joint_from_live_start():
     assert all(value == pytest.approx(4.0) for value in second.values())
 
 
+def test_async_action_rate_limiter_clamps_against_live_position_not_stale_command():
+    """install_action_rate_limiter's docstring says it limits "every final joint
+    target relative to the previously sent command" -- but it treats its own echoed
+    request as ground truth for "previously sent", never checking whether the arm
+    actually got there. If a joint stalls (cannot reach its commanded targets --
+    exactly the overloaded/binding failure mode this codebase's wrist-flex hardware
+    has shown), the internal clamp reference keeps ratcheting forward every tick
+    while the arm doesn't move, so once free the very next command can jump the arm
+    by far more than max_delta relative to where it physically is -- defeating the
+    entire purpose of the hard safety limit.
+    """
+
+    class StalledRobot(_FakeRobot):
+        def send_action(self, action):
+            self.commands.append(action)
+            return action  # echoes the request; bus.state (the real joint) never moves
+
+    robot = StalledRobot()
+    install_action_rate_limiter(robot, max_delta=2.0)
+
+    target = {f"{name}.pos": 0.0 for name in JOINT_NAMES}
+    for _ in range(20):
+        target = {key: value + 2.0 for key, value in target.items()}
+        robot.send_action(target)
+
+    live_position = robot.bus.state[0]
+    assert live_position == 0.0  # the arm truly never moved
+
+    sent = robot.send_action({f"{name}.pos": 1000.0 for name in JOINT_NAMES})
+    assert abs(sent[f"{JOINT_NAMES[0]}.pos"] - live_position) <= 2.0
+
+
 def test_async_action_rate_limiter_bounds_final_smoothed_command():
     robot = _FakeRobot()
     install_action_smoother(robot, alpha=0.7)
