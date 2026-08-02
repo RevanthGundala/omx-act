@@ -97,6 +97,40 @@ def test_control_trial_stops_without_global_shutdown_and_reuses_receiver_barrier
     assert not client.shutdown_event.is_set()
 
 
+def test_control_trial_reports_shutdown_reason_even_when_stop_requested_races_watchdog():
+    """should_park_after_trial treats a "shutdown" reason as special precisely because
+    a watchdog-triggered abort means something is wrong and after_trial must not move
+    the arm. But control_trial only checks self.running (backed by shutdown_event)
+    once, at the top of each loop iteration; if the watchdog sets shutdown_event
+    later in that same iteration -- e.g. right as stop_requested() or the duration
+    timeout also happens to fire -- the loop reports "operator"/"duration" instead of
+    "shutdown", so after_trial parks the arm despite the watchdog abort.
+    """
+    client = _client_with_trial_state()
+    client.shutdown_event = threading.Event()
+    client.config = SimpleNamespace(environment_dt=0.0)
+    client.start_barrier = SimpleNamespace(wait=lambda: None)
+    client._control_loop_started = False
+    client.actions_available = lambda: False
+    client._ready_to_send_observation = lambda: False
+    client.trial_active.set()
+
+    def stop_requested():
+        # Simulates the watchdog thread firing in the same iteration where the
+        # operator-stop check (or a duration timeout) is also about to fire.
+        client.shutdown_event.set()
+        return True
+
+    reason = client.control_trial(
+        task="test",
+        duration_s=60.0,
+        stop_requested=stop_requested,
+        sleep=lambda _seconds: None,
+    )
+
+    assert reason == "shutdown"
+
+
 def test_trial_sequence_reuses_client_and_runs_reset_callbacks():
     events = []
 
