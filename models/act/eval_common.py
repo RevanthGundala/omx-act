@@ -62,6 +62,10 @@ def start_state_violations(
     tolerance_floor: float,
     max_z: float,
 ) -> dict[str, dict[str, float]]:
+    if not np.isfinite(tolerance_floor) or tolerance_floor < 0:
+        raise ValueError("tolerance_floor must be non-negative and finite.")
+    if not np.isfinite(max_z) or max_z < 0:
+        raise ValueError("max_z must be non-negative and finite.")
     violations = {}
     for key, target_value in target.items():
         allowed = max(tolerance_floor, max_z * std[key])
@@ -97,8 +101,12 @@ def move_to_joint_state(
         tolerance_array = np.asarray(tolerance, dtype=np.float32)
         if tolerance_array.ndim == 0:
             tolerance_array = np.full_like(target, float(tolerance_array))
-        if tolerance_array.shape != target.shape or np.any(tolerance_array <= 0):
-            raise ValueError(f"tolerance must be positive with shape {target.shape}")
+        if (
+            tolerance_array.shape != target.shape
+            or not np.all(np.isfinite(tolerance_array))
+            or np.any(tolerance_array <= 0)
+        ):
+            raise ValueError(f"tolerance must be positive and finite with shape {target.shape}")
 
     initial_state = read_joint_vector(robot)
     command = initial_state.copy()
