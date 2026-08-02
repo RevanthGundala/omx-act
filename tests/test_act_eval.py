@@ -1,3 +1,4 @@
+import socket
 from dataclasses import asdict
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from configs.act.base import ACTConfig
 from models.act.eval_async import (
     install_action_rate_limiter,
     install_action_smoother,
+    launch_server,
     return_home,
     start_state_reference,
 )
@@ -303,3 +305,37 @@ def test_async_action_rate_limiter_rejects_unknown_joint():
 
     with pytest.raises(KeyError, match="unknown joint"):
         robot.send_action({"not_a_joint.pos": 0.0})
+
+
+def test_launch_server_detects_dead_process_despite_port_already_listening():
+    """launch_server's readiness loop only checked whether *something* accepts a
+    connection on host:port, never whether the process it just spawned (proc) was
+    still alive. If an unrelated/stale process already occupies the port -- e.g. a
+    leftover from a previous crashed run -- and the freshly spawned server process
+    dies immediately (for instance because it could not bind that same port), the
+    old code would still report success and hand back an already-dead proc.
+    """
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+        host, port = listener.getsockname()
+
+        class DeadProc:
+            returncode = 1
+
+            def poll(self):
+                return self.returncode
+
+            def terminate(self):
+                pass
+
+        with pytest.raises(RuntimeError, match="exited"):
+            launch_server(
+                host,
+                port,
+                fps=30,
+                log_path=None,
+                timeout=1.0,
+                policy_type="custom_act",
+                popen=lambda *args, **kwargs: DeadProc(),
+            )
