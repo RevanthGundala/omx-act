@@ -184,6 +184,39 @@ def test_start_state_violations_use_per_joint_dataset_support():
     assert violations["narrow.pos"] == pytest.approx({"error": 1.0, "allowed": 0.5})
 
 
+def test_move_to_joint_state_rejects_non_finite_tolerance():
+    # A non-finite tolerance (e.g. from --start-state-tolerance inf) makes
+    # `abs(error) <= tolerance` vacuously true, so the very first telemetry read
+    # would be reported as "reached" with zero commands sent, completely
+    # bypassing pose verification. This must be rejected up front instead.
+    robot = _FakeRobot(np.zeros(len(JOINT_NAMES), dtype=np.float32))
+    with pytest.raises(ValueError, match="finite"):
+        move_to_joint_state(
+            robot,
+            target=np.ones(len(JOINT_NAMES), dtype=np.float32) * 100,
+            timeout=1,
+            ramp_seconds=1,
+            hz=30,
+            max_delta=1,
+            tolerance=float("inf"),
+        )
+    assert robot.commands == []
+
+
+def test_start_state_violations_rejects_non_finite_tolerance_floor():
+    # tolerance_floor=inf makes `allowed = max(inf, ...)` infinite, so
+    # `error > allowed` can never be true and every violation is silently
+    # swallowed. This must be rejected instead of returning a clean result.
+    with pytest.raises(ValueError, match="finite"):
+        start_state_violations(
+            {"wide.pos": 999.0},
+            {"wide.pos": 10.0},
+            {"wide.pos": 2.0},
+            tolerance_floor=float("inf"),
+            max_z=3.0,
+        )
+
+
 def test_start_state_reference_uses_seed_override(tmp_path):
     policy_path = tmp_path / "pretrained_model"
     policy_path.mkdir()
