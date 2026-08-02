@@ -262,32 +262,35 @@ def install_action_smoother(robot, alpha: float) -> None:
 
 
 def install_action_rate_limiter(robot, max_delta: float) -> None:
-    """Limit every final joint target relative to the previously sent command."""
+    """Limit every final joint target relative to the robot's live position."""
     if not np.isfinite(max_delta) or max_delta <= 0:
         raise ValueError("max_delta must be a positive finite value.")
 
     raw_send = robot.send_action
-    previous = joint_positions(robot)
     warning_state = {"last_print": 0.0}
 
     def limited_send(action: dict[str, float]):
+        # Clamp against the robot's live position, not the last *requested* value: if a
+        # joint stalls (cannot reach its commanded targets -- an overloaded/binding
+        # joint), tracking only the echoed request would let the clamp reference
+        # ratchet forward every tick while the arm doesn't move, so once free the arm
+        # could be commanded to jump by far more than max_delta relative to reality.
+        live = joint_positions(robot)
         limited = {}
         clipped = {}
         for key, value in action.items():
-            if key not in previous:
+            if key not in live:
                 raise KeyError(f"Policy produced an action for unknown joint {key!r}.")
             value = float(value)
             if not np.isfinite(value):
                 raise ValueError(f"Policy produced a non-finite action for {key}: {value}")
-            prior = previous[key]
+            prior = live[key]
             bounded = float(np.clip(value, prior - max_delta, prior + max_delta))
             limited[key] = bounded
             if bounded != value:
                 clipped[key] = (value, bounded)
 
         sent = raw_send(limited)
-        for key, value in sent.items():
-            previous[key] = float(value)
 
         now = time.monotonic()
         if clipped and now - warning_state["last_print"] >= 1.0:
