@@ -270,6 +270,23 @@ def test_async_action_rate_limiter_bounds_final_smoothed_command():
     assert np.max(np.abs(np.diff(np.vstack([np.zeros(len(JOINT_NAMES)), commands]), axis=0))) <= 2.0
 
 
+def test_action_smoother_rejects_alpha_outside_unit_interval():
+    """install_action_rate_limiter validates max_delta ("must be a positive finite
+    value"); install_action_smoother has no equivalent check on alpha, even though
+    its own docstring formula (sent = alpha*target + (1-alpha)*prev) is only a valid
+    low-pass blend -- guaranteed to stay between target and prev -- for alpha in
+    [0, 1]. Outside that range the EMA extrapolates instead of blends, which matters
+    because main() installs the smoother *before* the rate limiter, so the limiter's
+    clamped output becomes the smoother's input: an out-of-range alpha would let the
+    smoother's extrapolated output blow past --max-joint-delta's "Hard safety limit
+    ... between consecutive commands for every joint" (e.g. alpha=-10.0 turns a
+    command already clamped to 2.0 units away into one 20 units away).
+    """
+    robot = _FakeRobot()
+    with pytest.raises(ValueError, match="alpha"):
+        install_action_smoother(robot, alpha=-10.0)
+
+
 def test_async_action_rate_limiter_rejects_nonfinite_policy_action():
     robot = _FakeRobot()
     install_action_rate_limiter(robot, max_delta=2.0)
