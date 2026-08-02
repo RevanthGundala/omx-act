@@ -15,6 +15,7 @@ from models.act.eval_async import (
     launch_server,
     return_home,
     start_state_reference,
+    visualize_action_queue_size_if_present,
 )
 from models.act.eval_common import move_to_joint_state, start_state_violations
 from models.act.lerobot_policy import CustomACTConfig, CustomACTPolicy, export_checkpoint
@@ -339,3 +340,24 @@ def test_launch_server_detects_dead_process_despite_port_already_listening():
                 policy_type="custom_act",
                 popen=lambda *args, **kwargs: DeadProc(),
             )
+
+
+def test_visualize_action_queue_size_if_present_skips_empty_queue():
+    """The real visualize_action_queue_size calls max() on the list, which raises
+    ValueError on an empty queue. This call sits in run_robot_client's cleanup
+    finally block, so an unguarded raise there would mask whatever exception is
+    already propagating out of cleanup (e.g. a watchdog safety-abort reason).
+    """
+    calls = []
+
+    visualize_action_queue_size_if_present([], visualize=calls.append)
+
+    assert calls == []
+
+
+def test_visualize_action_queue_size_if_present_forwards_nonempty_queue():
+    calls = []
+
+    visualize_action_queue_size_if_present([1, 2, 3], visualize=calls.append)
+
+    assert calls == [[1, 2, 3]]
