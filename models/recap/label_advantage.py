@@ -17,15 +17,33 @@ as a dataset column. The critic is retrained on every RECAP iteration, so a
 materialized column would force a full dataset rebuild each time, while this pass
 is one no-grad forward over the frames plus vectorized arithmetic.
 
-``UNCONDITIONED`` is deliberately not emitted at the default settings. In the
-paper the unconditioned state is a classifier-free-guidance dropout token: the
-indicator is binary ("Advantage: positive" / "Advantage: negative", Sec. V-B) and
-is *randomly omitted* during training so that both a conditional and an
-unconditional model are available at inference. Assigning it to near-zero
-advantages would double-book the token, so the default deadband of 0 gives a
-strict sign split and leaves conditioning dropout to the policy trainer. The
-paper's own threshold is the 30th percentile of the value function's predictions
-for the task (Sec. IV-B, Sec. V-D) rather than a symmetric band around zero.
+``UNCONDITIONED`` is never emitted on the default path. In the paper the
+unconditioned state is a classifier-free-guidance dropout token: the indicator is
+binary ("Advantage: positive" / "Advantage: negative", Sec. V-B) and is *randomly
+omitted* during training so both a conditional and an unconditional model are
+available at inference. Assigning it to near-zero advantages would double-book the
+token, so conditioning dropout is left to the policy trainer.
+
+The indicator threshold is a **percentile of the advantage distribution**, taken
+per task, not a fixed epsilon. Sec. IV-B thresholds the advantage directly,
+``delta(A(o, a, l) > eps_l)``, so ``eps_l`` carries advantage units. Sec. V-D
+describes it as "the 30% percentile of values predicted by the value function",
+but Appendix A gives the operational definition: the threshold is chosen "such
+that approximately 30% of the demonstration data has positive advantage". Only
+the advantage reading is dimensionally coherent - values are normalized to
+(-1, 0) while advantages concentrate near 0, so an absolute value-percentile
+around -0.7 would mark essentially every transition positive.
+
+Direction: the paper's 30% is the fraction labeled POSITIVE, so eps_l sits at the
+*70th* percentile of advantages. Appendix A confirms the sign of the relation on
+its own terms - it "increase[s] the threshold such that only approximately 10% of
+the data has positive advantage", and a higher threshold can only reduce the
+positive fraction. This module is therefore parameterized by the target positive
+fraction rather than by a raw percentile, so the direction cannot be misread.
+
+A fixed absolute threshold, optionally with a symmetric deadband, is kept for
+debugging and ablations via the ``threshold`` and ``deadband`` arguments, but it
+is not the default.
 
 Example:
     RECAP_CRITIC_CHECKPOINT=outputs/act_experiments/recap_critic/<run>/checkpoints/last.pt \
@@ -58,7 +76,54 @@ from utils.config import RECORD_DATASET_REPO_ID
 DEFAULT_N_STEP = 5
 # 0 gives an exhaustive sign split, matching the paper's binary indicator.
 DEFAULT_DEADBAND = 0.0
+# The paper sets the indicator threshold eps_l from a percentile rather than
+# fixing it at zero (Sec. IV-B, Appendix A). A learned critic is rarely calibrated
+# well enough for A > 0 to be meaningful: a systematically biased critic pushes
+# nearly every transition to one label, which makes the conditioning token carry
+# no information. A percentile keeps the positive/negative split usable whatever
+# the bias. Parameterized as the target POSITIVE fraction, which is what Appendix
+# A actually pins down (~30% positive in pre-training, ~40% in fine-tuning).
+DEFAULT_POSITIVE_FRACTION = 0.30
 
+
+def task_percentile_thresholds(
+    advantages: torch.Tensor,
+    task_index: torch.Tensor | None = None,
+    positive_fraction: float = DEFAULT_POSITIVE_FRACTION,
+) -> torch.Tensor:
+    """Resolve eps_l per task so that ``positive_fraction`` of it scores POSITIVE.
+
+    eps_l is the ``1 - positive_fraction`` quantile of the task's advantages, so
+    a target of 0.30 puts eps_l at the 70th percentile and leaves ~30% above it.
+
+    A quantile is a global statistic, so the whole advantage vector has to exist
+    before any label can be assigned; it cannot be derived per sample or per
+    batch. The paper takes the threshold per task ("for the task l", Sec. V-D),
+    so the quantile is computed within each ``task_index`` group and broadcast
+    back over that group's frames.
+
+    Units: Sec. IV-B applies the threshold to the advantage itself,
+    ``delta(A(o, a, l) > eps_l)``, and Appendix A fixes it by the fraction of
+    data with positive *advantage*, so the quantile is taken over advantages
+    rather than over the critic's value predictions.
+    """
+    if not math.isfinite(positive_fraction) or not 0.0 <= positive_fraction <= 1.0:
+        raise ValueError(f"positive_fraction must be in [0, 1], got {positive_fraction}")
+    if advantages.numel() == 0:
+        raise ValueError("Cannot take a percentile of an empty advantage tensor")
+    quantile = 1.0 - positive_fraction
+    if task_index is None:
+        return torch.full_like(advantages, float(torch.quantile(advantages.double(), quantile)))
+    if task_index.shape != advantages.shape:
+        raise ValueError(
+            f"task_index must be aligned per frame, got {tuple(task_index.shape)} "
+            f"for {tuple(advantages.shape)} advantages"
+        )
+    thresholds = torch.empty_like(advantages)
+    for task in torch.unique(task_index):
+        selected = task_index == task
+        thresholds[selected] = float(torch.quantile(advantages[selected].double(), quantile))
+    return thresholds
 
 def episode_layout(dataset: LeRobotDataset) -> dict[str, torch.Tensor]:
     """Recover per-frame episode boundaries and rewards from a RECAP dataset.
@@ -78,6 +143,12 @@ def episode_layout(dataset: LeRobotDataset) -> dict[str, torch.Tensor]:
     rewards = torch.as_tensor(columns["reward"]).float()
     stored_returns = torch.as_tensor(columns["return_to_go"]).float()
     terminal = torch.as_tensor(columns["terminal"]).bool()
+    # The paper thresholds per task, so carry the task grouping alongside.
+    task_index = (
+        torch.as_tensor(columns["task_index"]).long()
+        if "task_index" in columns.column_names
+        else torch.zeros(len(dataset), dtype=torch.long)
+    )
     num_frames = len(dataset)
     if episode_index.shape != (num_frames,):
         raise ValueError(f"Expected {num_frames} flat frames, got {tuple(episode_index.shape)}")
@@ -108,6 +179,7 @@ def episode_layout(dataset: LeRobotDataset) -> dict[str, torch.Tensor]:
         "episode_index": episode_index,
         "frame_index": frame_index,
         "episode_end": episode_end,
+        "task_index": task_index,
         "rewards": rewards,
         "returns_to_go": returns_to_go,
     }
@@ -147,20 +219,30 @@ def n_step_advantages(
 
 def advantage_conditions(
     advantages: torch.Tensor,
+    threshold: torch.Tensor | float = 0.0,
     deadband: float = DEFAULT_DEADBAND,
 ) -> torch.Tensor:
     """Map scalar advantages onto AdvantageCondition class IDs.
 
-    A deadband of 0 reproduces the paper's indicator 1(A > epsilon) with
-    epsilon = 0 and never emits UNCONDITIONED. A positive deadband is a
+    Implements the paper's indicator 1(A > eps_l), where ``threshold`` is eps_l
+    and may be a scalar or one value per frame (per-task thresholds). A deadband
+    of 0 is exhaustive and never emits UNCONDITIONED. A positive deadband is a
     deviation from the paper that parks ambiguous transitions on the
-    unconditioned token.
+    unconditioned token, which otherwise belongs to conditioning dropout.
     """
     if not math.isfinite(deadband) or deadband < 0:
         raise ValueError(f"deadband must be finite and non-negative, got {deadband}")
+    threshold = torch.as_tensor(threshold, dtype=advantages.dtype)
+    if threshold.ndim and threshold.shape != advantages.shape:
+        raise ValueError(
+            f"threshold must be scalar or aligned per frame, got {tuple(threshold.shape)} "
+            f"for {tuple(advantages.shape)} advantages"
+        )
+    if not torch.isfinite(threshold).all():
+        raise ValueError("threshold must be finite")
     conditions = torch.full(advantages.shape, int(AdvantageCondition.UNCONDITIONED), dtype=torch.long)
-    conditions[advantages > deadband] = int(AdvantageCondition.POSITIVE)
-    conditions[advantages <= -deadband] = int(AdvantageCondition.NEGATIVE)
+    conditions[advantages > threshold + deadband] = int(AdvantageCondition.POSITIVE)
+    conditions[advantages <= threshold - deadband] = int(AdvantageCondition.NEGATIVE)
     return conditions
 
 
@@ -206,18 +288,38 @@ def label_dataset(
     value_max: float,
     n_step: int = DEFAULT_N_STEP,
     deadband: float = DEFAULT_DEADBAND,
+    positive_fraction: float | None = DEFAULT_POSITIVE_FRACTION,
+    threshold: float | None = None,
     batch_size: int = 8,
     num_workers: int = 0,
 ) -> dict[str, torch.Tensor]:
+    """Label every transition, resolving eps_l from a per-task positive fraction.
+
+    The advantage vector is built in full before any threshold is taken, because
+    a quantile is a global statistic over the labeled set. Pass ``threshold`` to
+    pin eps_l to an absolute value instead (useful for debugging); it takes
+    precedence over ``positive_fraction``.
+    """
     layout = episode_layout(dataset.dataset)
     values = critic_values(
         model, dataset, device, value_min, value_max, batch_size=batch_size, num_workers=num_workers
     )
+    # First pass: every advantage. Second pass: the threshold that needs them all.
     advantages = n_step_advantages(layout["returns_to_go"], values, layout["episode_end"], n_step)
+    if threshold is None:
+        if positive_fraction is None:
+            raise ValueError("Provide either a positive_fraction or an absolute threshold")
+        thresholds = task_percentile_thresholds(
+            advantages, layout["task_index"], positive_fraction
+        )
+    else:
+        thresholds = torch.full_like(advantages, float(threshold))
     return {
         "values": values,
         "advantages": advantages,
-        "conditions": advantage_conditions(advantages, deadband),
+        "conditions": advantage_conditions(advantages, thresholds, deadband),
+        "thresholds": thresholds,
+        "task_index": layout["task_index"],
     }
 
 
@@ -237,6 +339,11 @@ def main():
         raise ValueError("Set RECAP_CRITIC_CHECKPOINT to a checkpoint from models/recap/train_critic.py")
     n_step = int(os.environ.get("RECAP_ADVANTAGE_N_STEP", DEFAULT_N_STEP))
     deadband = float(os.environ.get("RECAP_ADVANTAGE_DEADBAND", DEFAULT_DEADBAND))
+    positive_fraction = float(
+        os.environ.get("RECAP_ADVANTAGE_POSITIVE_FRACTION", DEFAULT_POSITIVE_FRACTION)
+    )
+    absolute = os.environ.get("RECAP_ADVANTAGE_THRESHOLD")
+    threshold = float(absolute) if absolute is not None else None
     device_name = os.environ.get("RECAP_DEVICE")
     if device_name is None:
         device_name = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
@@ -252,6 +359,8 @@ def main():
         value_max,
         n_step=n_step,
         deadband=deadband,
+        positive_fraction=positive_fraction,
+        threshold=threshold,
         batch_size=cfg.batch_size,
         num_workers=cfg.num_workers,
     )
@@ -259,6 +368,11 @@ def main():
     conditions = labels["conditions"]
     counts = {
         condition.name: int((conditions == int(condition)).sum()) for condition in AdvantageCondition
+    }
+    task_index = labels["task_index"]
+    task_thresholds = {
+        str(int(task)): float(labels["thresholds"][task_index == task][0])
+        for task in torch.unique(task_index)
     }
     output_path = Path(
         os.environ.get("RECAP_ADVANTAGE_OUTPUT", dataset.dataset.root / "advantage_labels.json")
@@ -270,6 +384,8 @@ def main():
                 "critic_checkpoint": str(checkpoint_path),
                 "n_step": n_step,
                 "deadband": deadband,
+                "positive_fraction": None if threshold is not None else positive_fraction,
+                "thresholds_by_task": task_thresholds,
                 "value_min": value_min,
                 "value_max": value_max,
                 "counts": counts,
@@ -279,9 +395,14 @@ def main():
         )
         + "\n"
     )
+    positive = counts[AdvantageCondition.POSITIVE.name]
     print(f"Dataset: {cfg.dataset_repo_id}@{cfg.dataset_revision} ({len(conditions)} transitions)")
-    print(f"n_step={n_step} deadband={deadband:g} advantage_mean={float(labels['advantages'].mean()):.3f}")
-    print(f"Labels: {counts}")
+    source = "absolute" if threshold is not None else f"positive_fraction={positive_fraction:g}"
+    print(
+        f"n_step={n_step} eps_l per task={task_thresholds} ({source}) "
+        f"deadband={deadband:g} advantage_mean={float(labels['advantages'].mean()):.3f}"
+    )
+    print(f"Labels: {counts} (positive share {positive / max(1, len(conditions)):.1%})")
     print(f"Wrote {output_path}")
 
 

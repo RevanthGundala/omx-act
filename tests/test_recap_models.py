@@ -544,6 +544,19 @@ def test_advantage_labeling_end_to_end_on_cpu(tmp_path):
         int(AdvantageCondition.POSITIVE),
         int(AdvantageCondition.NEGATIVE),
     }
+    # The default path resolves eps_l from the target positive fraction rather
+    # than leaving it at zero, and both labels are represented.
+    assert labels["thresholds"].shape == (8,)
+    assert int((labels["conditions"] == AdvantageCondition.POSITIVE).sum()) > 0
+    assert int((labels["conditions"] == AdvantageCondition.NEGATIVE).sum()) > 0
+    assert torch.allclose(
+        labels["thresholds"],
+        label_advantage.task_percentile_thresholds(
+            labels["advantages"],
+            labels["task_index"],
+            label_advantage.DEFAULT_POSITIVE_FRACTION,
+        ),
+    )
     # The critic stays in eval mode under no_grad, so scoring is deterministic
     # and the advantages are exactly the boundary-aware arithmetic.
     layout = label_advantage.episode_layout(dataset.dataset)
@@ -577,3 +590,134 @@ def test_n_step_advantage_rejects_misaligned_inputs():
             _EPISODE_END,
             n_step=2,
         )
+
+
+def test_percentile_threshold_hits_the_requested_positive_fraction():
+    advantages = torch.arange(100, dtype=torch.float32)
+
+    for positive_fraction in (0.1, 0.3, 0.4, 0.7):
+        thresholds = label_advantage.task_percentile_thresholds(
+            advantages,
+            positive_fraction=positive_fraction,
+        )
+        conditions = label_advantage.advantage_conditions(advantages, thresholds)
+        positive = int((conditions == AdvantageCondition.POSITIVE).sum())
+        assert positive == round(positive_fraction * 100)
+
+    # eps_l for a 30% positive target sits at the 70th percentile, not the 30th.
+    assert float(
+        label_advantage.task_percentile_thresholds(
+            advantages,
+            positive_fraction=0.3,
+        )[0]
+    ) == pytest.approx(float(torch.quantile(advantages.double(), 0.7)))
+
+
+def test_percentile_threshold_still_splits_a_miscalibrated_all_positive_critic():
+    # A critic biased so badly that every advantage is positive: a sign split
+    # collapses to a single label and the conditioning token carries nothing.
+    advantages = torch.arange(1, 101, dtype=torch.float32)
+    assert torch.all(advantages > 0)
+
+    sign_split = label_advantage.advantage_conditions(advantages, 0.0)
+    assert set(sign_split.tolist()) == {int(AdvantageCondition.POSITIVE)}
+
+    thresholds = label_advantage.task_percentile_thresholds(
+        advantages,
+        positive_fraction=0.3,
+    )
+    conditions = label_advantage.advantage_conditions(advantages, thresholds)
+    assert int((conditions == AdvantageCondition.POSITIVE).sum()) == 30
+    assert int((conditions == AdvantageCondition.NEGATIVE).sum()) == 70
+    assert float(thresholds[0]) > 0
+
+
+def test_percentile_threshold_is_a_global_statistic_not_a_per_batch_one():
+    advantages = torch.arange(100, dtype=torch.float32)
+
+    whole = label_advantage.task_percentile_thresholds(advantages, positive_fraction=0.3)
+    halves = torch.cat(
+        [
+            label_advantage.task_percentile_thresholds(
+                advantages[:50],
+                positive_fraction=0.3,
+            ),
+            label_advantage.task_percentile_thresholds(
+                advantages[50:],
+                positive_fraction=0.3,
+            ),
+        ]
+    )
+
+    # Thresholding batch-by-batch would force 30% positive inside every batch,
+    # which is a different labeling than 30% positive over the whole set.
+    assert not torch.allclose(whole, halves)
+    assert torch.all(whole == whole[0])
+    batched = label_advantage.advantage_conditions(advantages, halves)
+    assert int((batched == AdvantageCondition.POSITIVE).sum()) == 30
+    assert not torch.equal(
+        label_advantage.advantage_conditions(advantages, whole),
+        batched,
+    )
+
+
+def test_percentile_thresholds_are_computed_per_task():
+    # Two tasks on wildly different advantage scales, as different-length or
+    # different-difficulty tasks would be.
+    slow = torch.linspace(-10.0, -1.0, 50)
+    fast = torch.linspace(100.0, 200.0, 50)
+    advantages = torch.cat([slow, fast])
+    task_index = torch.cat([torch.zeros(50), torch.ones(50)]).long()
+
+    per_task = label_advantage.task_percentile_thresholds(
+        advantages,
+        task_index,
+        positive_fraction=0.3,
+    )
+    per_task_conditions = label_advantage.advantage_conditions(advantages, per_task)
+
+    assert float(per_task[0]) < 0 < float(per_task[-1])
+    for task in (0, 1):
+        selected = task_index == task
+        positive = int(
+            (per_task_conditions[selected] == AdvantageCondition.POSITIVE).sum()
+        )
+        assert positive == 15
+
+    # One shared threshold would hand the whole low-scale task a single label.
+    pooled = label_advantage.task_percentile_thresholds(advantages, positive_fraction=0.3)
+    pooled_conditions = label_advantage.advantage_conditions(advantages, pooled)
+    assert int((pooled_conditions[task_index == 0] == AdvantageCondition.POSITIVE).sum()) == 0
+
+
+def test_percentile_threshold_rejects_out_of_range_fractions():
+    advantages = torch.arange(10, dtype=torch.float32)
+
+    for invalid in (-0.1, 1.5, float("nan")):
+        with pytest.raises(ValueError, match="positive_fraction"):
+            label_advantage.task_percentile_thresholds(
+                advantages,
+                positive_fraction=invalid,
+            )
+    with pytest.raises(ValueError, match="empty"):
+        label_advantage.task_percentile_thresholds(torch.empty(0))
+    with pytest.raises(ValueError, match="aligned per frame"):
+        label_advantage.task_percentile_thresholds(
+            advantages,
+            torch.zeros(3, dtype=torch.long),
+        )
+
+
+def test_absolute_threshold_mode_remains_available_for_debugging():
+    advantages = torch.tensor([-1.0, 0.0, 1.0, 5.0])
+
+    pinned = label_advantage.advantage_conditions(advantages, threshold=1.0)
+
+    assert pinned.tolist() == [
+        AdvantageCondition.NEGATIVE,
+        AdvantageCondition.NEGATIVE,
+        AdvantageCondition.NEGATIVE,
+        AdvantageCondition.POSITIVE,
+    ]
+    with pytest.raises(ValueError, match="aligned per frame"):
+        label_advantage.advantage_conditions(advantages, torch.zeros(2))
