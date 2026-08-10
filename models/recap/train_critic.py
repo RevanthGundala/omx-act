@@ -88,8 +88,10 @@ def compute_loss(model, batch, device, value_min: float, value_max: float):
 class CriticDataset(Dataset):
     """Observation plus Monte Carlo return-to-go; the critic never sees actions."""
 
-    def __init__(self, cfg: ACTConfig):
-        metadata = LeRobotDatasetMetadata(repo_id=cfg.dataset_repo_id, revision=cfg.dataset_revision)
+    def __init__(self, cfg: ACTConfig, root: str | Path | None = None):
+        metadata = LeRobotDatasetMetadata(
+            repo_id=cfg.dataset_repo_id, revision=cfg.dataset_revision, root=root
+        )
         self.camera_names = cfg.camera_names
         self.qpos_mean = torch.as_tensor(metadata.stats["observation.state"]["mean"], dtype=torch.float32)
         self.qpos_std = torch.as_tensor(
@@ -98,6 +100,7 @@ class CriticDataset(Dataset):
         self.dataset = LeRobotDataset(
             repo_id=cfg.dataset_repo_id,
             revision=cfg.dataset_revision,
+            root=root,
             image_transforms=ImageTransforms(ImageTransformsConfig(enable=cfg.image_transforms)),
         )
         self.value_min, self.value_max = load_return_range(self.dataset.root)

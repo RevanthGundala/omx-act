@@ -1,16 +1,19 @@
 from dataclasses import replace
 import json
 
+from lerobot.datasets import LeRobotDataset
+import numpy as np
 import pytest
 import torch
 
 from configs.act.base import ACTConfig
 from models.act.act import ACTPolicy as BaseACTPolicy
 from models.act.attention import Attention as BaseAttention
-from models.recap import train_critic
+from models.recap import label_advantage, train_critic
 from models.recap.act_critic import ACTCritic
 from models.recap.act_recap import ACTPolicy as RecapACTPolicy, AdvantageCondition
 from models.recap.attention import Attention as RecapAttention
+from models.recap.build_dataset import build_features, recap_rewards
 
 
 def _config() -> ACTConfig:
@@ -289,3 +292,288 @@ def test_critic_train_step_reduces_loss_on_cpu():
     assert predicted.shape == (2,)
     assert torch.all(predicted >= value_min)
     assert torch.all(predicted <= value_max)
+
+
+def _labeling_config() -> ACTConfig:
+    return replace(_config(), joint_dim=2, chunk_size=2, camera_names=("top",))
+
+
+def _build_recap_dataset(root, repo_id, episodes):
+    """Two-episode RECAP dataset written straight through build_dataset's schema."""
+    features = build_features(
+        camera_names=("top",),
+        joint_names=("a", "b"),
+        frame_shape=(64, 64, 3),
+        use_videos=False,
+    )
+    dataset = LeRobotDataset.create(
+        repo_id=repo_id,
+        fps=10,
+        features=features,
+        root=root,
+        use_videos=False,
+    )
+    max_episode_steps = max(steps for steps, _ in episodes)
+    failure_penalty = float(max_episode_steps + 1)
+    for episode_index, (steps, success) in enumerate(episodes):
+        rewards, returns_to_go = recap_rewards(
+            steps,
+            success=success,
+            failure_penalty=failure_penalty,
+        )
+        for step in range(steps):
+            dataset.add_frame(
+                {
+                    "observation.state": np.array(
+                        [episode_index, step],
+                        dtype=np.float32,
+                    ),
+                    "action": np.array([0.1 * step, 0.2 * step], dtype=np.float32),
+                    "reward": np.array([rewards[step]], dtype=np.float32),
+                    "return_to_go": np.array(
+                        [returns_to_go[step]],
+                        dtype=np.float32,
+                    ),
+                    "terminal": np.array([step == steps - 1], dtype=np.bool_),
+                    "success": np.array([success], dtype=np.bool_),
+                    "source.observation_index": np.array([step], dtype=np.int64),
+                    "source.observation_frame_index": np.array([step], dtype=np.int64),
+                    "source.action_index": np.array([step], dtype=np.int64),
+                    "observation.images.top": np.full(
+                        (64, 64, 3),
+                        (episode_index * 40 + step * 10) % 256,
+                        dtype=np.uint8,
+                    ),
+                    "task": "Place the sponge in the bowl",
+                }
+            )
+        dataset.save_episode()
+    dataset.finalize()
+    (root / "recap_manifest.json").write_text(
+        json.dumps(
+            {
+                "failure_penalty": failure_penalty,
+                "max_episode_steps": max_episode_steps,
+            }
+        )
+    )
+    return dataset
+
+
+# Episodes of length 3 (success) and 5 (failure) concatenated into one flat index.
+_EPISODE_END = torch.tensor([3, 3, 3, 8, 8, 8, 8, 8])
+_RETURNS_TO_GO = torch.tensor(
+    [-2.0, -1.0, 0.0, -14.0, -13.0, -12.0, -11.0, -10.0]
+)
+_VALUES = torch.tensor([-5.0, -4.0, -3.0, -2.0, -1.0, -6.0, -7.0, -8.0])
+
+
+def test_n_step_window_never_crosses_an_episode_boundary():
+    advantages = label_advantage.n_step_advantages(
+        _RETURNS_TO_GO,
+        _VALUES,
+        _EPISODE_END,
+        n_step=2,
+    )
+
+    # Hand-computed with gamma = 1; frames 1 and 2 sit within two steps of the
+    # next episode's frames, so a flat idx + n would read across the boundary.
+    assert advantages.tolist() == pytest.approx(
+        [0.0, 3.0, 3.0, -6.0, -8.0, -4.0, -4.0, -2.0]
+    )
+
+    # Rewriting only the second episode's values must not move the first
+    # episode's advantages.
+    perturbed = _VALUES.clone()
+    perturbed[3:] += 100.0
+    shifted = label_advantage.n_step_advantages(
+        _RETURNS_TO_GO,
+        perturbed,
+        _EPISODE_END,
+        n_step=2,
+    )
+    assert torch.allclose(shifted[:3], advantages[:3])
+    assert not torch.allclose(shifted[3:], advantages[3:])
+
+
+def test_n_step_advantage_truncates_to_remaining_return_without_bootstrap():
+    advantages = label_advantage.n_step_advantages(
+        _RETURNS_TO_GO,
+        _VALUES,
+        _EPISODE_END,
+        n_step=2,
+    )
+    monte_carlo = _RETURNS_TO_GO - _VALUES
+
+    # Frames within n steps of their terminal step use the exact remaining
+    # Monte Carlo return and drop the bootstrap term entirely.
+    truncated = [1, 2, 6, 7]
+    assert torch.allclose(advantages[truncated], monte_carlo[truncated])
+    bootstrapped = [0, 3, 4, 5]
+    assert not torch.allclose(advantages[bootstrapped], monte_carlo[bootstrapped])
+
+    # n at least as long as the longest episode recovers the paper's own
+    # Monte Carlo estimator A = R_t - V(o_t) everywhere.
+    assert torch.allclose(
+        label_advantage.n_step_advantages(
+            _RETURNS_TO_GO,
+            _VALUES,
+            _EPISODE_END,
+            n_step=5,
+        ),
+        monte_carlo,
+    )
+
+
+def test_n_step_advantage_rejects_non_positive_window():
+    with pytest.raises(ValueError, match="at least 1"):
+        label_advantage.n_step_advantages(
+            _RETURNS_TO_GO,
+            _VALUES,
+            _EPISODE_END,
+            n_step=0,
+        )
+
+
+def test_advantage_conditions_split_on_sign_and_widen_with_a_deadband():
+    advantages = torch.tensor([2.0, -2.0, 0.0, 0.05, -0.05])
+
+    strict = label_advantage.advantage_conditions(advantages, deadband=0.0)
+    # The paper's indicator is binary, so the default never emits the
+    # unconditioned token that classifier-free-guidance dropout owns.
+    assert strict.tolist() == [
+        AdvantageCondition.POSITIVE,
+        AdvantageCondition.NEGATIVE,
+        AdvantageCondition.NEGATIVE,
+        AdvantageCondition.POSITIVE,
+        AdvantageCondition.NEGATIVE,
+    ]
+    assert int((strict == AdvantageCondition.UNCONDITIONED).sum()) == 0
+
+    banded = label_advantage.advantage_conditions(advantages, deadband=0.1)
+    assert banded.tolist() == [
+        AdvantageCondition.POSITIVE,
+        AdvantageCondition.NEGATIVE,
+        AdvantageCondition.UNCONDITIONED,
+        AdvantageCondition.UNCONDITIONED,
+        AdvantageCondition.UNCONDITIONED,
+    ]
+
+    with pytest.raises(ValueError, match="non-negative"):
+        label_advantage.advantage_conditions(advantages, deadband=-0.1)
+
+
+def test_episode_layout_reads_boundaries_and_returns_from_the_dataset(tmp_path):
+    root = tmp_path / "dataset"
+    _build_recap_dataset(root, "owner/recap_layout", [(3, True), (5, False)])
+    dataset = LeRobotDataset("owner/recap_layout", root=root)
+
+    layout = label_advantage.episode_layout(dataset)
+
+    assert layout["episode_end"].tolist() == _EPISODE_END.tolist()
+    assert layout["frame_index"].tolist() == [0, 1, 2, 0, 1, 2, 3, 4]
+    assert layout["episode_index"].tolist() == [0, 0, 0, 1, 1, 1, 1, 1]
+    assert layout["rewards"].tolist() == [
+        -1.0,
+        -1.0,
+        0.0,
+        -1.0,
+        -1.0,
+        -1.0,
+        -1.0,
+        -6.0,
+    ]
+    # Returns restart at every episode boundary rather than accumulating across
+    # the flat index.
+    assert layout["returns_to_go"].tolist() == [
+        -2.0,
+        -1.0,
+        0.0,
+        -10.0,
+        -9.0,
+        -8.0,
+        -7.0,
+        -6.0,
+    ]
+
+
+def test_advantage_labeling_end_to_end_on_cpu(tmp_path):
+    torch.manual_seed(0)
+    root = tmp_path / "dataset"
+    _build_recap_dataset(root, "owner/recap_labels", [(3, True), (5, False)])
+    cfg = replace(_labeling_config(), dataset_repo_id="owner/recap_labels")
+    device = torch.device("cpu")
+    value_min, value_max = train_critic.load_return_range(root)
+
+    critic = ACTCritic(cfg, pretrained_backbone=False, num_bins=train_critic.NUM_BINS)
+    checkpoint_dir = tmp_path / "checkpoints"
+    checkpoint_dir.mkdir()
+    train_critic.save_checkpoint(
+        checkpoint_dir,
+        1,
+        critic,
+        torch.optim.AdamW(critic.parameters(), lr=1e-4),
+        cfg,
+        None,
+        value_min,
+        value_max,
+    )
+
+    loaded, loaded_min, loaded_max = label_advantage.load_critic(
+        checkpoint_dir / "last.pt", device
+    )
+    assert (loaded_min, loaded_max) == (value_min, value_max)
+    assert not loaded.training
+
+    dataset = train_critic.CriticDataset(cfg, root=root)
+    labels = label_advantage.label_dataset(
+        loaded,
+        dataset,
+        device,
+        loaded_min,
+        loaded_max,
+        n_step=2,
+        batch_size=3,
+    )
+
+    assert labels["values"].shape == (8,)
+    assert torch.all(labels["values"] >= value_min)
+    assert torch.all(labels["values"] <= value_max)
+    assert labels["conditions"].dtype == torch.long
+    assert set(labels["conditions"].tolist()) <= {
+        int(AdvantageCondition.POSITIVE),
+        int(AdvantageCondition.NEGATIVE),
+    }
+    # The critic stays in eval mode under no_grad, so scoring is deterministic
+    # and the advantages are exactly the boundary-aware arithmetic.
+    layout = label_advantage.episode_layout(dataset.dataset)
+    assert torch.allclose(
+        labels["advantages"],
+        label_advantage.n_step_advantages(
+            layout["returns_to_go"],
+            labels["values"],
+            layout["episode_end"],
+            n_step=2,
+        ),
+    )
+    assert labels["advantages"].isfinite().all()
+
+    # Labels drive the advantage-conditioned policy without further conversion.
+    policy = RecapACTPolicy(cfg, pretrained_backbone=False).eval()
+    with torch.inference_mode():
+        predicted = policy(
+            torch.randn(8, 1, 3, 64, 64),
+            torch.randn(8, 2),
+            advantage=labels["conditions"],
+        )[0]
+    assert predicted.shape == (8, 2, 2)
+
+
+def test_n_step_advantage_rejects_misaligned_inputs():
+    with pytest.raises(ValueError, match="aligned per frame"):
+        label_advantage.n_step_advantages(
+            _RETURNS_TO_GO,
+            _VALUES[:-1],
+            _EPISODE_END,
+            n_step=2,
+        )
