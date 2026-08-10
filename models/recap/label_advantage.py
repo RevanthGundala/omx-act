@@ -29,17 +29,20 @@ per task, not a fixed epsilon. Sec. IV-B thresholds the advantage directly,
 ``delta(A(o, a, l) > eps_l)``, so ``eps_l`` carries advantage units. Sec. V-D
 describes it as "the 30% percentile of values predicted by the value function",
 but Appendix A gives the operational definition: the threshold is chosen "such
-that approximately 30% of the demonstration data has positive advantage". Only
-the advantage reading is dimensionally coherent - values are normalized to
-(-1, 0) while advantages concentrate near 0, so an absolute value-percentile
-around -0.7 would mark essentially every transition positive.
+that approximately 30% of the demonstration data has positive advantage" during
+pre-training, and "such that approximately 40% of the evaluation rollouts in each
+iteration have positive advantage" during fine-tuning. Only the advantage reading
+is dimensionally coherent - values are normalized to (-1, 0) while advantages
+concentrate near 0, so an absolute value-percentile around -0.7 would mark
+essentially every transition positive.
 
-Direction: the paper's 30% is the fraction labeled POSITIVE, so eps_l sits at the
-*70th* percentile of advantages. Appendix A confirms the sign of the relation on
-its own terms - it "increase[s] the threshold such that only approximately 10% of
-the data has positive advantage", and a higher threshold can only reduce the
-positive fraction. This module is therefore parameterized by the target positive
-fraction rather than by a raw percentile, so the direction cannot be misread.
+Direction: those percentages are the fraction labeled POSITIVE, so eps_l sits in
+the *upper* tail - the default 40% target puts it at the 60th percentile of
+advantages. Appendix A confirms the sign of the relation on its own terms: it
+"increase[s] the threshold such that only approximately 10% of the data has
+positive advantage", and a higher threshold can only reduce the positive
+fraction. This module is therefore parameterized by the target positive fraction
+rather than by a raw percentile, so the direction cannot be misread.
 
 A fixed absolute threshold, optionally with a symmetric deadband, is kept for
 debugging and ablations via the ``threshold`` and ``deadband`` arguments, but it
@@ -82,8 +85,15 @@ DEFAULT_DEADBAND = 0.0
 # nearly every transition to one label, which makes the conditioning token carry
 # no information. A percentile keeps the positive/negative split usable whatever
 # the bias. Parameterized as the target POSITIVE fraction, which is what Appendix
-# A actually pins down (~30% positive in pre-training, ~40% in fine-tuning).
-DEFAULT_POSITIVE_FRACTION = 0.30
+# A actually pins down.
+#
+# 0.40 is the paper's fine-tuning value: "During fine-tuning we generally set the
+# threshold such that approximately 40% of the evaluation rollouts in each
+# iteration have positive advantage" (Appendix A). This labeler scores evaluation
+# rollouts inside the RECAP improvement loop, so that is the matching regime.
+# Appendix A's other figure, ~30% positive, is the PRE-TRAINING value and applies
+# to labeling the demonstration corpus instead.
+DEFAULT_POSITIVE_FRACTION = 0.40
 
 
 def task_percentile_thresholds(
@@ -94,7 +104,7 @@ def task_percentile_thresholds(
     """Resolve eps_l per task so that ``positive_fraction`` of it scores POSITIVE.
 
     eps_l is the ``1 - positive_fraction`` quantile of the task's advantages, so
-    a target of 0.30 puts eps_l at the 70th percentile and leaves ~30% above it.
+    a target of 0.40 puts eps_l at the 60th percentile and leaves ~40% above it.
 
     A quantile is a global statistic, so the whole advantage vector has to exist
     before any label can be assigned; it cannot be derived per sample or per
