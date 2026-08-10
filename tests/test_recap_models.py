@@ -1,4 +1,5 @@
 from dataclasses import replace
+import json
 
 import pytest
 import torch
@@ -6,6 +7,7 @@ import torch
 from configs.act.base import ACTConfig
 from models.act.act import ACTPolicy as BaseACTPolicy
 from models.act.attention import Attention as BaseAttention
+from models.recap import train_critic
 from models.recap.act_critic import ACTCritic
 from models.recap.act_recap import ACTPolicy as RecapACTPolicy, AdvantageCondition
 from models.recap.attention import Attention as RecapAttention
@@ -184,3 +186,106 @@ def test_recap_critic_can_initialize_from_base_act_decoder():
         "act_proj.weight",
         "act_proj.bias",
     ]
+
+
+def test_critic_return_range_is_derived_from_recap_manifest(tmp_path):
+    (tmp_path / "recap_manifest.json").write_text(
+        json.dumps({"failure_penalty": 201.0, "max_episode_steps": 200})
+    )
+
+    value_min, value_max = train_critic.load_return_range(tmp_path)
+
+    # Worst case is the longest episode failing on its final step.
+    assert value_min == pytest.approx(-(200 - 1) - 201.0)
+    assert value_max == 0.0
+
+
+def test_critic_return_normalization_maps_into_unit_range_and_round_trips():
+    value_min, value_max = -400.0, 0.0
+    raw = torch.tensor([-400.0, -250.5, -1.0, 0.0])
+
+    normalized = train_critic.normalize_return(raw, value_min, value_max)
+
+    assert float(normalized.min()) >= -1.0
+    assert float(normalized.max()) <= 0.0
+    assert normalized[0].item() == pytest.approx(-1.0)
+    assert normalized[-1].item() == pytest.approx(0.0)
+    assert torch.allclose(
+        train_critic.denormalize_return(normalized, value_min, value_max), raw
+    )
+
+
+def test_critic_return_bins_stay_in_range_for_extreme_and_typical_returns(monkeypatch):
+    value_min, value_max = -400.0, 0.0
+    raw = torch.tensor([-1e6, -400.0, -399.0, -200.0, -1.0, 0.0, 1e6])
+    model = ACTCritic(
+        replace(_config(), chunk_size=2),
+        pretrained_backbone=False,
+        num_bins=train_critic.NUM_BINS,
+    ).eval()
+    batch = {
+        "images": torch.randn(len(raw), 1, 3, 64, 64),
+        "qpos": torch.randn(len(raw), 6),
+        "return_to_go": raw,
+    }
+
+    # The discretization is inlined into compute_loss, so capture the bin
+    # indices it hands to cross-entropy.
+    captured = {}
+    real_cross_entropy = train_critic.F.cross_entropy
+
+    def spy(logits, targets, *args, **kwargs):
+        captured["targets"] = targets
+        return real_cross_entropy(logits, targets, *args, **kwargs)
+
+    monkeypatch.setattr(train_critic.F, "cross_entropy", spy)
+    with torch.no_grad():
+        train_critic.compute_loss(model, batch, torch.device("cpu"), value_min, value_max)
+
+    bins = captured["targets"]
+    assert bins.dtype == torch.long
+    assert bins.shape == (len(raw),)
+    assert int(bins.min()) >= 0
+    assert int(bins.max()) <= train_critic.NUM_BINS - 1
+    assert bins[1].item() == 0
+    assert bins[-2].item() == train_critic.NUM_BINS - 1
+    # Out-of-range returns clamp onto the extreme bins rather than escaping them.
+    assert bins[0].item() == 0
+    assert bins[-1].item() == train_critic.NUM_BINS - 1
+    assert torch.all(bins.diff() >= 0)
+
+
+def test_critic_train_step_reduces_loss_on_cpu():
+    torch.manual_seed(0)
+    model = ACTCritic(
+        replace(_config(), chunk_size=2),
+        pretrained_backbone=False,
+        num_bins=train_critic.NUM_BINS,
+    ).train()
+    optim = torch.optim.AdamW(model.parameters(), lr=1e-3)
+    device = torch.device("cpu")
+    value_min, value_max = -400.0, 0.0
+    batch = {
+        "images": torch.randn(2, 1, 3, 64, 64),
+        "qpos": torch.randn(2, 6),
+        "return_to_go": torch.tensor([-400.0, 0.0]),
+    }
+
+    losses = []
+    for _ in range(4):
+        optim.zero_grad(set_to_none=True)
+        loss, distribution = train_critic.compute_loss(
+            model, batch, device, value_min, value_max
+        )
+        loss.backward()
+        optim.step()
+        losses.append(loss.item())
+
+    assert distribution.logits.shape == (2, train_critic.NUM_BINS)
+    assert losses[-1] < losses[0]
+
+    with torch.no_grad():
+        predicted = train_critic.expected_return(distribution, value_min, value_max)
+    assert predicted.shape == (2,)
+    assert torch.all(predicted >= value_min)
+    assert torch.all(predicted <= value_max)
