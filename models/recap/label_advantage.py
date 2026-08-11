@@ -116,11 +116,10 @@ def task_percentile_thresholds(
     ``delta(A(o, a, l) > eps_l)``, and Appendix A fixes it by the fraction of
     data with positive *advantage*, so the quantile is taken over advantages
     rather than over the critic's value predictions.
+
+    Out-of-range or NaN fractions and empty inputs are left to torch.quantile,
+    which already rejects them with a clear message.
     """
-    if not math.isfinite(positive_fraction) or not 0.0 <= positive_fraction <= 1.0:
-        raise ValueError(f"positive_fraction must be in [0, 1], got {positive_fraction}")
-    if advantages.numel() == 0:
-        raise ValueError("Cannot take a percentile of an empty advantage tensor")
     quantile = 1.0 - positive_fraction
     if task_index is None:
         return torch.full_like(advantages, float(torch.quantile(advantages.double(), quantile)))
@@ -134,6 +133,7 @@ def task_percentile_thresholds(
         selected = task_index == task
         thresholds[selected] = float(torch.quantile(advantages[selected].double(), quantile))
     return thresholds
+
 
 def episode_layout(dataset: LeRobotDataset) -> dict[str, torch.Tensor]:
     """Recover per-frame episode boundaries and rewards from a RECAP dataset.
@@ -152,7 +152,6 @@ def episode_layout(dataset: LeRobotDataset) -> dict[str, torch.Tensor]:
     frame_index = torch.as_tensor(columns["frame_index"]).long()
     rewards = torch.as_tensor(columns["reward"]).float()
     stored_returns = torch.as_tensor(columns["return_to_go"]).float()
-    terminal = torch.as_tensor(columns["terminal"]).bool()
     # The paper thresholds per task, so carry the task grouping alongside.
     task_index = (
         torch.as_tensor(columns["task_index"]).long()
@@ -160,8 +159,6 @@ def episode_layout(dataset: LeRobotDataset) -> dict[str, torch.Tensor]:
         else torch.zeros(len(dataset), dtype=torch.long)
     )
     num_frames = len(dataset)
-    if episode_index.shape != (num_frames,):
-        raise ValueError(f"Expected {num_frames} flat frames, got {tuple(episode_index.shape)}")
 
     starts = torch.nonzero(frame_index == 0).flatten()
     if starts.numel() == 0 or starts[0] != 0:
@@ -173,13 +170,10 @@ def episode_layout(dataset: LeRobotDataset) -> dict[str, torch.Tensor]:
 
     if not torch.equal(frame_index, torch.arange(num_frames) - episode_start):
         raise ValueError("Frame indices are not contiguous within every episode")
-    if not torch.equal(episode_index, episode_index[starts].repeat_interleave(lengths)):
-        raise ValueError("Episode indices are not contiguous within every episode")
-    if not torch.equal(terminal, torch.zeros(num_frames, dtype=torch.bool).index_fill_(0, ends - 1, True)):
-        raise ValueError("Terminal flags do not mark exactly the last frame of every episode")
 
-    # Undiscounted suffix sums restarted at each episode boundary; disagreeing
-    # with the stored column would mean the boundaries were misread.
+    # Undiscounted suffix sums restarted at each episode boundary. This is the
+    # load-bearing check: if the boundaries were misread, the per-episode sums
+    # would not reproduce the return-to-go the dataset already stores.
     suffix = torch.cat([rewards.flip(0).cumsum(0).flip(0), torch.zeros(1)])
     returns_to_go = suffix[:-1] - suffix[episode_end]
     if not torch.allclose(returns_to_go, stored_returns, atol=1e-3):

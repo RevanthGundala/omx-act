@@ -690,16 +690,17 @@ def test_percentile_thresholds_are_computed_per_task():
     assert int((pooled_conditions[task_index == 0] == AdvantageCondition.POSITIVE).sum()) == 0
 
 
-def test_percentile_threshold_rejects_out_of_range_fractions():
+def test_percentile_threshold_rejects_invalid_inputs():
     advantages = torch.arange(10, dtype=torch.float32)
 
+    # Range and emptiness are delegated to torch.quantile rather than restated.
     for invalid in (-0.1, 1.5, float("nan")):
-        with pytest.raises(ValueError, match="positive_fraction"):
+        with pytest.raises(RuntimeError, match="q must be in the range"):
             label_advantage.task_percentile_thresholds(
                 advantages,
                 positive_fraction=invalid,
             )
-    with pytest.raises(ValueError, match="empty"):
+    with pytest.raises(RuntimeError, match="non-empty"):
         label_advantage.task_percentile_thresholds(torch.empty(0))
     with pytest.raises(ValueError, match="aligned per frame"):
         label_advantage.task_percentile_thresholds(
