@@ -1,4 +1,4 @@
-from dataclasses import replace
+from dataclasses import asdict, replace
 import json
 
 from lerobot.datasets import LeRobotDataset
@@ -905,3 +905,61 @@ def test_recap_policies_default_to_positive_conditioning_at_inference(monkeypatc
     assert resolve_advantage_condition(int(AdvantageCondition.NEGATIVE)) is AdvantageCondition.NEGATIVE
     with pytest.raises(ValueError, match="Invalid advantage condition"):
         resolve_advantage_condition(7)
+
+
+def test_policy_config_is_inherited_from_the_warm_start_checkpoint(tmp_path, monkeypatch):
+    # The real baseline used chunk_size=30 and train_split=1.0, neither of which
+    # is the ACTConfig default, and recorded a container-absolute output_root.
+    source = replace(
+        _labeling_config(),
+        chunk_size=30,
+        train_split=1.0,
+        dataset_repo_id="owner/baseline",
+        save_freq=2000,
+        num_train_steps=20000,
+        job_name="act_custom_baseline",
+        output_root="/outputs/act_experiments",
+    )
+    checkpoint_path = tmp_path / "baseline.pt"
+    torch.save(
+        {
+            "model_state_dict": BaseACTPolicy(source, pretrained_backbone=False).state_dict(),
+            "config": {**asdict(source), "an_unknown_future_field": 1},
+        },
+        checkpoint_path,
+    )
+    monkeypatch.setenv("RECAP_POLICY_PRETRAINED_CHECKPOINT", str(checkpoint_path))
+    monkeypatch.delenv("RECAP_POLICY_STEPS", raising=False)
+    monkeypatch.delenv("RECAP_POLICY_DATASET_REPO_ID", raising=False)
+    monkeypatch.delenv("RECAP_POLICY_OUTPUT_ROOT", raising=False)
+
+    cfg = train_policy.config_from_env()
+
+    # Architecture and data handling must match, or warm_start cannot load the
+    # weights and the comparison against the baseline is not controlled.
+    assert cfg.chunk_size == 30
+    assert cfg.train_split == 1.0
+    assert cfg.dataset_repo_id == "owner/baseline"
+    assert cfg.learning_rate == source.learning_rate
+    # Run identity is this run's, not the baseline's.
+    assert cfg.job_name == "recap_policy"
+    # Inheriting a container-absolute output_root would be unwritable elsewhere.
+    assert cfg.output_root == ACTConfig.output_root
+
+    # The inherited config is what makes the warm start loadable.
+    train_policy.warm_start(
+        RecapACTPolicy(cfg, pretrained_backbone=False),
+        checkpoint_path,
+        torch.device("cpu"),
+    )
+
+    monkeypatch.setenv("RECAP_POLICY_STEPS", "10000")
+    assert train_policy.config_from_env().num_train_steps == 10000
+
+
+def test_policy_config_rejects_a_checkpoint_without_a_config(tmp_path):
+    path = tmp_path / "bare.pt"
+    torch.save({"model_state_dict": {}}, path)
+
+    with pytest.raises(ValueError, match="no config dictionary"):
+        train_policy.config_from_checkpoint(path)

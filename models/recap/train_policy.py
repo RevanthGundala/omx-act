@@ -21,7 +21,7 @@ Example:
 
 from __future__ import annotations
 
-from dataclasses import asdict, replace
+from dataclasses import asdict, fields, replace
 from datetime import datetime
 import json
 import os
@@ -140,14 +140,42 @@ def warm_start(model: ACTPolicy, checkpoint_path: str | Path, device: torch.devi
     return model
 
 
+def config_from_checkpoint(checkpoint_path: str | Path) -> ACTConfig:
+    """Rebuild the architecture and hyperparameters a checkpoint was trained with.
+
+    The advantage-conditioned policy is a warm start of an existing ACT run, so
+    inheriting that run's config is what keeps the comparison controlled and what
+    makes the weights loadable at all. The baseline used chunk_size=30 and
+    train_split=1.0, neither of which is the ACTConfig default.
+    """
+    checkpoint = torch.load(Path(checkpoint_path), map_location="cpu", weights_only=False)
+    raw = checkpoint.get("config")
+    if not isinstance(raw, dict):
+        raise ValueError(f"Checkpoint {checkpoint_path} has no config dictionary")
+    allowed = {item.name for item in fields(ACTConfig)}
+    source = {key: value for key, value in raw.items() if key in allowed}
+    if "camera_names" in source:
+        source["camera_names"] = tuple(source["camera_names"])
+    return ACTConfig(**source)
+
+
 def config_from_env() -> ACTConfig:
-    base_cfg = ACTConfig(
-        dataset_repo_id=os.environ.get("RECAP_POLICY_DATASET_REPO_ID") or RECORD_DATASET_REPO_ID
-    )
+    pretrained = os.environ.get("RECAP_POLICY_PRETRAINED_CHECKPOINT")
+    if pretrained:
+        base_cfg = config_from_checkpoint(pretrained)
+    else:
+        base_cfg = ACTConfig(
+            dataset_repo_id=os.environ.get("RECAP_POLICY_DATASET_REPO_ID") or RECORD_DATASET_REPO_ID
+        )
+    dataset_repo_id = os.environ.get("RECAP_POLICY_DATASET_REPO_ID")
+    if dataset_repo_id:
+        base_cfg = replace(base_cfg, dataset_repo_id=dataset_repo_id)
     return replace(
         base_cfg,
         job_name=os.environ.get("RECAP_POLICY_JOB_NAME", "recap_policy"),
-        output_root=os.environ.get("RECAP_POLICY_OUTPUT_ROOT", base_cfg.output_root),
+        # Never inherit the checkpoint's output_root: a run made on Modal records
+        # a container-absolute path that would be unwritable elsewhere.
+        output_root=os.environ.get("RECAP_POLICY_OUTPUT_ROOT", ACTConfig.output_root),
         num_train_steps=int(os.environ.get("RECAP_POLICY_STEPS", base_cfg.num_train_steps)),
         save_freq=int(os.environ.get("RECAP_POLICY_SAVE_FREQ", base_cfg.save_freq)),
     )
@@ -214,6 +242,10 @@ def main():
     stage = "improvement loop" if conditions is not None else "SFT (indicator fixed to POSITIVE)"
     print(f"Dataset: {cfg.dataset_repo_id}@{cfg.dataset_revision}")
     print(f"Stage: {stage}; conditioning dropout={dropout:g}")
+    print(
+        f"Inherited architecture: chunk_size={cfg.chunk_size} cameras={cfg.camera_names} "
+        f"train_split={cfg.train_split} lr={cfg.learning_rate:g} steps={cfg.num_train_steps}"
+    )
     print(f"Output: {run_dir}")
 
     model.train()
