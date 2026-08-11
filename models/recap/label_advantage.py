@@ -44,9 +44,8 @@ positive advantage", and a higher threshold can only reduce the positive
 fraction. This module is therefore parameterized by the target positive fraction
 rather than by a raw percentile, so the direction cannot be misread.
 
-A fixed absolute threshold, optionally with a symmetric deadband, is kept for
-debugging and ablations via the ``threshold`` and ``deadband`` arguments, but it
-is not the default.
+A fixed absolute threshold is kept for debugging and ablations via the
+``threshold`` argument, but it is not the default.
 
 Example:
     RECAP_CRITIC_CHECKPOINT=outputs/act_experiments/recap_critic/<run>/checkpoints/last.pt \
@@ -57,7 +56,6 @@ from __future__ import annotations
 
 from dataclasses import replace
 import json
-import math
 import os
 from pathlib import Path
 
@@ -77,8 +75,6 @@ from utils.config import RECORD_DATASET_REPO_ID
 # critic's value improved faster than the clock over n steps. A short window keeps
 # credit assignment local, a long one trades critic bias for variance.
 DEFAULT_N_STEP = 5
-# 0 gives an exhaustive sign split, matching the paper's binary indicator.
-DEFAULT_DEADBAND = 0.0
 # The paper sets the indicator threshold eps_l from a percentile rather than
 # fixing it at zero (Sec. IV-B, Appendix A). A learned critic is rarely calibrated
 # well enough for A > 0 to be meaningful: a systematically biased critic pushes
@@ -224,18 +220,15 @@ def n_step_advantages(
 def advantage_conditions(
     advantages: torch.Tensor,
     threshold: torch.Tensor | float = 0.0,
-    deadband: float = DEFAULT_DEADBAND,
 ) -> torch.Tensor:
     """Map scalar advantages onto AdvantageCondition class IDs.
 
     Implements the paper's indicator 1(A > eps_l), where ``threshold`` is eps_l
-    and may be a scalar or one value per frame (per-task thresholds). A deadband
-    of 0 is exhaustive and never emits UNCONDITIONED. A positive deadband is a
-    deviation from the paper that parks ambiguous transitions on the
-    unconditioned token, which otherwise belongs to conditioning dropout.
+    and may be a scalar or one value per frame (per-task thresholds). The split
+    is exhaustive and binary, so UNCONDITIONED is never emitted here: it marks
+    the conditioning dropout the policy trainer applies at random (Sec. V-B),
+    which is a different mechanism from thresholding an advantage.
     """
-    if not math.isfinite(deadband) or deadband < 0:
-        raise ValueError(f"deadband must be finite and non-negative, got {deadband}")
     threshold = torch.as_tensor(threshold, dtype=advantages.dtype)
     if threshold.ndim and threshold.shape != advantages.shape:
         raise ValueError(
@@ -244,10 +237,11 @@ def advantage_conditions(
         )
     if not torch.isfinite(threshold).all():
         raise ValueError("threshold must be finite")
-    conditions = torch.full(advantages.shape, int(AdvantageCondition.UNCONDITIONED), dtype=torch.long)
-    conditions[advantages > threshold + deadband] = int(AdvantageCondition.POSITIVE)
-    conditions[advantages <= threshold - deadband] = int(AdvantageCondition.NEGATIVE)
-    return conditions
+    return torch.where(
+        advantages > threshold,
+        torch.full_like(advantages, int(AdvantageCondition.POSITIVE), dtype=torch.long),
+        torch.full_like(advantages, int(AdvantageCondition.NEGATIVE), dtype=torch.long),
+    )
 
 
 def load_critic(checkpoint_path: str | Path, device: torch.device) -> tuple[ACTCritic, float, float]:
@@ -291,7 +285,6 @@ def label_dataset(
     value_min: float,
     value_max: float,
     n_step: int = DEFAULT_N_STEP,
-    deadband: float = DEFAULT_DEADBAND,
     positive_fraction: float | None = DEFAULT_POSITIVE_FRACTION,
     threshold: float | None = None,
     batch_size: int = 8,
@@ -321,7 +314,7 @@ def label_dataset(
     return {
         "values": values,
         "advantages": advantages,
-        "conditions": advantage_conditions(advantages, thresholds, deadband),
+        "conditions": advantage_conditions(advantages, thresholds),
         "thresholds": thresholds,
         "task_index": layout["task_index"],
     }
@@ -342,7 +335,6 @@ def main():
     if not checkpoint_path:
         raise ValueError("Set RECAP_CRITIC_CHECKPOINT to a checkpoint from models/recap/train_critic.py")
     n_step = int(os.environ.get("RECAP_ADVANTAGE_N_STEP", DEFAULT_N_STEP))
-    deadband = float(os.environ.get("RECAP_ADVANTAGE_DEADBAND", DEFAULT_DEADBAND))
     positive_fraction = float(
         os.environ.get("RECAP_ADVANTAGE_POSITIVE_FRACTION", DEFAULT_POSITIVE_FRACTION)
     )
@@ -362,7 +354,6 @@ def main():
         value_min,
         value_max,
         n_step=n_step,
-        deadband=deadband,
         positive_fraction=positive_fraction,
         threshold=threshold,
         batch_size=cfg.batch_size,
@@ -387,7 +378,6 @@ def main():
                 "dataset_repo_id": cfg.dataset_repo_id,
                 "critic_checkpoint": str(checkpoint_path),
                 "n_step": n_step,
-                "deadband": deadband,
                 "positive_fraction": None if threshold is not None else positive_fraction,
                 "thresholds_by_task": task_thresholds,
                 "value_min": value_min,
@@ -404,7 +394,7 @@ def main():
     source = "absolute" if threshold is not None else f"positive_fraction={positive_fraction:g}"
     print(
         f"n_step={n_step} eps_l per task={task_thresholds} ({source}) "
-        f"deadband={deadband:g} advantage_mean={float(labels['advantages'].mean()):.3f}"
+        f"advantage_mean={float(labels['advantages'].mean()):.3f}"
     )
     print(f"Labels: {counts} (positive share {positive / max(1, len(conditions)):.1%})")
     print(f"Wrote {output_path}")

@@ -435,32 +435,33 @@ def test_n_step_advantage_rejects_non_positive_window():
         )
 
 
-def test_advantage_conditions_split_on_sign_and_widen_with_a_deadband():
+def test_advantage_conditions_are_binary_and_never_emit_unconditioned():
     advantages = torch.tensor([2.0, -2.0, 0.0, 0.05, -0.05])
 
-    strict = label_advantage.advantage_conditions(advantages, deadband=0.0)
-    # The paper's indicator is binary, so the default never emits the
-    # unconditioned token that classifier-free-guidance dropout owns.
-    assert strict.tolist() == [
+    conditions = label_advantage.advantage_conditions(advantages)
+
+    # The paper's indicator is binary, 1(A > eps_l), so labeling never produces
+    # the unconditioned token. That token marks the policy trainer's random
+    # conditioning dropout (Sec. V-B), which has nothing to do with advantages.
+    assert conditions.tolist() == [
         AdvantageCondition.POSITIVE,
         AdvantageCondition.NEGATIVE,
         AdvantageCondition.NEGATIVE,
         AdvantageCondition.POSITIVE,
         AdvantageCondition.NEGATIVE,
     ]
-    assert int((strict == AdvantageCondition.UNCONDITIONED).sum()) == 0
+    assert int((conditions == AdvantageCondition.UNCONDITIONED).sum()) == 0
 
-    banded = label_advantage.advantage_conditions(advantages, deadband=0.1)
-    assert banded.tolist() == [
+    # A shifted threshold moves the split without inventing a third state.
+    shifted = label_advantage.advantage_conditions(advantages, threshold=0.1)
+    assert shifted.tolist() == [
         AdvantageCondition.POSITIVE,
         AdvantageCondition.NEGATIVE,
-        AdvantageCondition.UNCONDITIONED,
-        AdvantageCondition.UNCONDITIONED,
-        AdvantageCondition.UNCONDITIONED,
+        AdvantageCondition.NEGATIVE,
+        AdvantageCondition.NEGATIVE,
+        AdvantageCondition.NEGATIVE,
     ]
-
-    with pytest.raises(ValueError, match="non-negative"):
-        label_advantage.advantage_conditions(advantages, deadband=-0.1)
+    assert int((shifted == AdvantageCondition.UNCONDITIONED).sum()) == 0
 
 
 def test_episode_layout_reads_boundaries_and_returns_from_the_dataset(tmp_path):
