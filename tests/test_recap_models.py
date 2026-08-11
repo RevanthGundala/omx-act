@@ -877,3 +877,31 @@ def test_load_conditions_reads_the_labeler_sidecar(tmp_path):
     path.write_text(json.dumps({"conditions": [0, 5]}))
     with pytest.raises(ValueError, match="out-of-range"):
         train_policy.load_conditions(path)
+
+
+def test_recap_policies_default_to_positive_conditioning_at_inference(monkeypatch):
+    from models.act.lerobot_policy import (
+        ADVANTAGE_ENV_VAR,
+        default_advantage_condition,
+        resolve_advantage_condition,
+    )
+
+    monkeypatch.delenv(ADVANTAGE_ENV_VAR, raising=False)
+    # Deployment asks for POSITIVE; defaulting to UNCONDITIONED would evaluate
+    # the marginal policy the conditioning is meant to steer away from.
+    assert default_advantage_condition(True) is AdvantageCondition.POSITIVE
+    # A non-RECAP checkpoint has no advantage token to condition on.
+    assert default_advantage_condition(False) is AdvantageCondition.UNCONDITIONED
+
+    monkeypatch.setenv(ADVANTAGE_ENV_VAR, "negative")
+    assert default_advantage_condition(True) is AdvantageCondition.NEGATIVE
+    assert default_advantage_condition(False) is AdvantageCondition.UNCONDITIONED
+
+    monkeypatch.setenv(ADVANTAGE_ENV_VAR, "bogus")
+    with pytest.raises(ValueError, match="Unknown advantage condition"):
+        default_advantage_condition(True)
+
+    assert resolve_advantage_condition("POSITIVE") is AdvantageCondition.POSITIVE
+    assert resolve_advantage_condition(int(AdvantageCondition.NEGATIVE)) is AdvantageCondition.NEGATIVE
+    with pytest.raises(ValueError, match="Invalid advantage condition"):
+        resolve_advantage_condition(7)

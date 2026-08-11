@@ -92,13 +92,18 @@ def test_exported_adapter_preserves_native_temporal_ensemble_weight():
     assert config.temporal_ensemble_coeff == source.exp_weight
 
 
-def test_recap_adapter_defaults_to_unconditioned_and_can_select_positive(
+def test_recap_adapter_defaults_to_positive_and_can_select_another_token(
     monkeypatch,
 ):
+    from models.act.lerobot_policy import ADVANTAGE_ENV_VAR
+
+    monkeypatch.delenv(ADVANTAGE_ENV_VAR, raising=False)
     source = _source_config()
     policy = CustomACTPolicy(_policy_config(source, recap=True))
     assert isinstance(policy.model, RecapACTPolicy)
-    assert policy.advantage_condition is AdvantageCondition.UNCONDITIONED
+    # Deployment conditions on POSITIVE, so that is the default a RECAP
+    # checkpoint evaluates with unless an ablation overrides it.
+    assert policy.advantage_condition is AdvantageCondition.POSITIVE
     policy._action_queue.append(torch.ones(1))
     captured = []
 
@@ -111,7 +116,7 @@ def test_recap_adapter_defaults_to_unconditioned_and_can_select_positive(
         )
 
     monkeypatch.setattr(policy.model, "forward", forward)
-    policy.set_advantage_condition("positive")
+    policy.set_advantage_condition("negative")
     assert not policy._action_queue
     batch = {
         "observation.state": torch.zeros(1, source.joint_dim),
@@ -120,8 +125,22 @@ def test_recap_adapter_defaults_to_unconditioned_and_can_select_positive(
 
     policy.predict_action_chunk(batch)
 
-    assert captured == [AdvantageCondition.POSITIVE]
-    assert policy.advantage_condition is AdvantageCondition.POSITIVE
+    assert captured == [AdvantageCondition.NEGATIVE]
+    assert policy.advantage_condition is AdvantageCondition.NEGATIVE
+
+
+def test_recap_adapter_honors_the_advantage_environment_override(monkeypatch):
+    from models.act.lerobot_policy import ADVANTAGE_ENV_VAR
+
+    source = _source_config()
+    # eval_async passes the token to the server process this way.
+    monkeypatch.setenv(ADVANTAGE_ENV_VAR, "unconditioned")
+    policy = CustomACTPolicy(_policy_config(source, recap=True))
+    assert policy.advantage_condition is AdvantageCondition.UNCONDITIONED
+
+    # A non-RECAP checkpoint has no token to condition on and ignores the override.
+    baseline = CustomACTPolicy(_policy_config(source, recap=False))
+    assert baseline.advantage_condition is AdvantageCondition.UNCONDITIONED
 
 
 def test_base_adapter_rejects_advantage_conditioning():

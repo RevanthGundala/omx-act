@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import select
 import socket
 import subprocess
@@ -47,6 +48,7 @@ from models.act.camera_alignment import (
     load_session_diagnostics,
     resolve_dataset_start_pose,
 )
+from models.act.lerobot_policy import ADVANTAGE_ENV_VAR
 from models.act.eval_common import (
     clear_stuck_port,
     dataset_start_statistics,
@@ -175,6 +177,7 @@ def launch_server(
     log_path: Path | None,
     timeout: float,
     policy_type: str,
+    advantage: str | None = None,
     *,
     popen=subprocess.Popen,
 ) -> subprocess.Popen:
@@ -198,12 +201,17 @@ def launch_server(
             f"--port={port}",
             f"--fps={fps}",
         ]
+    # The policy is constructed inside the server process, so the conditioning
+    # token has to travel with the environment rather than as a local default.
+    env = None
+    if advantage:
+        env = {**os.environ, ADVANTAGE_ENV_VAR: advantage}
     print(f"[eval_async] launching policy server: {' '.join(cmd)}", flush=True)
     stdout = open(log_path, "w") if log_path else None  # noqa: SIM115 (open for process lifetime)
     if log_path:
         print(f"[eval_async] policy server log -> {log_path}", flush=True)
     proc = popen(cmd, cwd=str(REPO_ROOT), stdout=stdout,
-                            stderr=subprocess.STDOUT if stdout else None)
+                            stderr=subprocess.STDOUT if stdout else None, env=env)
     deadline = time.time() + timeout
     while time.time() < deadline:
         if proc.poll() is not None:
@@ -833,6 +841,15 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--policy-path", default=str(DEFAULT_CKPT), help="pretrained_model checkpoint dir")
     p.add_argument("--policy-type", default="act")
+    p.add_argument(
+        "--advantage",
+        default="positive",
+        choices=["positive", "negative", "unconditioned"],
+        help=(
+            "Advantage token a RECAP policy is conditioned on. Deployment asks for "
+            "positive; the others are for ablations. Ignored by non-RECAP checkpoints."
+        ),
+    )
     p.add_argument("--task", default="Place the sponge in the bowl")
     p.add_argument("--robot-port", default=FOLLOWER_PORT, help="OMX follower serial port")
     p.add_argument("--robot-id", default="omx_follower_arm")
@@ -1201,6 +1218,7 @@ def run_robot_client(
         metadata = {
             "schema_version": 1,
             "policy_type": args.policy_type,
+            "advantage": args.advantage,
             "policy_path": str(policy_path),
             "task": args.task,
             "trial": capture["trial"],
@@ -1635,6 +1653,7 @@ def main() -> None:
             server_log_path,
             args.server_start_timeout,
             args.policy_type,
+            args.advantage,
         )
 
     try:

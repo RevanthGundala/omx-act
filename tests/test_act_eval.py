@@ -608,3 +608,56 @@ def test_locked_robot_client_disconnects_robot_on_partial_construction_failure()
             LockedRobotClient()
 
     assert disconnected == [True]
+
+
+def test_launch_server_forwards_the_advantage_token_to_the_server_process():
+    """The policy is built inside the server subprocess, so the requested
+    conditioning token has to cross the process boundary. If it does not, a RECAP
+    checkpoint silently evaluates as UNCONDITIONED -- the marginal policy averaged
+    over good and bad experience -- which looks like "RECAP did not help".
+    """
+    from models.act.lerobot_policy import ADVANTAGE_ENV_VAR
+
+    captured = {}
+
+    class DeadProc:
+        returncode = 1
+
+        def poll(self):
+            return self.returncode
+
+        def terminate(self):
+            pass
+
+    def fake_popen(*args, **kwargs):
+        captured["env"] = kwargs.get("env")
+        return DeadProc()
+
+    with pytest.raises(RuntimeError, match="exited"):
+        launch_server(
+            "127.0.0.1",
+            1,
+            fps=30,
+            log_path=None,
+            timeout=0.1,
+            policy_type="custom_act",
+            advantage="positive",
+            popen=fake_popen,
+        )
+    assert captured["env"][ADVANTAGE_ENV_VAR] == "positive"
+    # The rest of the environment must survive, or the server loses PATH/venv.
+    assert "PATH" in captured["env"]
+
+    # Without an explicit token the environment is left untouched, so the policy
+    # falls back to its own default rather than inheriting a stale value.
+    with pytest.raises(RuntimeError, match="exited"):
+        launch_server(
+            "127.0.0.1",
+            1,
+            fps=30,
+            log_path=None,
+            timeout=0.1,
+            policy_type="custom_act",
+            popen=fake_popen,
+        )
+    assert captured["env"] is None
