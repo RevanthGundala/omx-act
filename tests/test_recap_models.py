@@ -9,7 +9,7 @@ import torch
 from configs.act.base import ACTConfig
 from models.act.act import ACTPolicy as BaseACTPolicy
 from models.act.attention import Attention as BaseAttention
-from models.recap import label_advantage, train_critic
+from models.recap import label_advantage, train_critic, train_policy
 from models.recap.act_critic import ACTCritic
 from models.recap.act_recap import ACTPolicy as RecapACTPolicy, AdvantageCondition
 from models.recap.attention import Attention as RecapAttention
@@ -723,3 +723,157 @@ def test_absolute_threshold_mode_remains_available_for_debugging():
     ]
     with pytest.raises(ValueError, match="aligned per frame"):
         label_advantage.advantage_conditions(advantages, torch.zeros(2))
+
+
+class _StubACTDataset:
+    """Minimal stand-in for models.act.helper.ACTDataset (which needs data/)."""
+
+    def __init__(self, num_samples: int):
+        self.num_samples = num_samples
+
+    def __len__(self):
+        return self.num_samples
+
+    def __getitem__(self, idx):
+        return {
+            "qpos": torch.zeros(2),
+            "images": torch.zeros(1, 3, 8, 8),
+            "actions": torch.zeros(2, 2),
+            "action_mask": torch.ones(2, dtype=torch.bool),
+        }
+
+
+def test_advantage_dataset_keys_labels_by_global_frame_index():
+    # An episode-filtered ACT dataset yields positions 0..2 for global frames
+    # 5, 6, 7, so positional lookup would silently read the wrong labels.
+    conditions = torch.tensor(
+        [
+            AdvantageCondition.NEGATIVE,
+            AdvantageCondition.NEGATIVE,
+            AdvantageCondition.NEGATIVE,
+            AdvantageCondition.NEGATIVE,
+            AdvantageCondition.NEGATIVE,
+            AdvantageCondition.POSITIVE,
+            AdvantageCondition.NEGATIVE,
+            AdvantageCondition.POSITIVE,
+        ]
+    )
+    dataset = train_policy.AdvantageDataset(
+        _StubACTDataset(3),
+        conditions,
+        frame_ids=torch.tensor([5, 6, 7]),
+    )
+
+    labels = [int(dataset[index]["advantage_condition"]) for index in range(3)]
+
+    assert labels == [
+        AdvantageCondition.POSITIVE,
+        AdvantageCondition.NEGATIVE,
+        AdvantageCondition.POSITIVE,
+    ]
+    # Positional lookup would have produced the first three labels instead.
+    assert labels != [int(conditions[index]) for index in range(3)]
+
+
+def test_advantage_dataset_pins_positive_for_the_sft_stage():
+    dataset = train_policy.AdvantageDataset(
+        _StubACTDataset(4),
+        conditions=None,
+        frame_ids=torch.arange(4),
+    )
+
+    labels = [int(dataset[index]["advantage_condition"]) for index in range(4)]
+
+    assert labels == [int(AdvantageCondition.POSITIVE)] * 4
+
+
+def test_advantage_dataset_rejects_labels_that_do_not_cover_the_dataset():
+    with pytest.raises(ValueError, match="relabel"):
+        train_policy.AdvantageDataset(
+            _StubACTDataset(2),
+            conditions=torch.zeros(4, dtype=torch.long),
+            frame_ids=torch.tensor([3, 9]),
+        )
+
+
+def test_conditioning_dropout_replaces_the_requested_share():
+    conditions = torch.full((2000,), int(AdvantageCondition.POSITIVE), dtype=torch.long)
+    generator = torch.Generator().manual_seed(0)
+
+    dropped = train_policy.apply_conditioning_dropout(conditions, 0.30, generator)
+
+    share = float((dropped == AdvantageCondition.UNCONDITIONED).float().mean())
+    assert share == pytest.approx(0.30, abs=0.03)
+    # Whatever is not dropped keeps its original label.
+    kept = dropped != AdvantageCondition.UNCONDITIONED
+    assert torch.all(dropped[kept] == AdvantageCondition.POSITIVE)
+
+    # SFT runs with dropout disabled, which must be an exact no-op.
+    assert torch.equal(
+        train_policy.apply_conditioning_dropout(conditions, 0.0, generator),
+        conditions,
+    )
+    with pytest.raises(ValueError, match="dropout must be"):
+        train_policy.apply_conditioning_dropout(conditions, 1.5, generator)
+
+
+def test_policy_warm_start_accepts_base_act_weights_and_trains_the_token(tmp_path):
+    torch.manual_seed(0)
+    cfg = _labeling_config()
+    base = BaseACTPolicy(cfg, pretrained_backbone=False)
+    checkpoint_path = tmp_path / "bc.pt"
+    torch.save({"model_state_dict": base.state_dict(), "config": {}}, checkpoint_path)
+
+    model = RecapACTPolicy(cfg, pretrained_backbone=False)
+    train_policy.warm_start(model, checkpoint_path, torch.device("cpu"))
+
+    # Everything except the advantage token carries over from behavior cloning.
+    assert torch.equal(
+        model.decoder.joint_proj.weight,
+        base.decoder.joint_proj.weight,
+    )
+
+    model.train()
+    batch = {
+        "qpos": torch.randn(2, 2),
+        "images": torch.randn(2, 1, 3, 64, 64),
+        "actions": torch.randn(2, 2, 2),
+        "action_mask": torch.ones(2, 2, dtype=torch.bool),
+        "advantage_condition": torch.tensor(
+            [AdvantageCondition.POSITIVE, AdvantageCondition.UNCONDITIONED]
+        ),
+    }
+    loss, action_loss, kl_loss = train_policy.compute_loss(
+        model, batch, torch.device("cpu"), cfg.kl_weight
+    )
+    loss.backward()
+
+    assert torch.isfinite(loss) and torch.isfinite(action_loss) and torch.isfinite(kl_loss)
+    assert model.decoder.adv_proj.weight.grad is not None
+    assert torch.any(model.decoder.adv_proj.weight.grad != 0)
+
+
+def test_policy_warm_start_rejects_a_checkpoint_missing_real_parameters(tmp_path):
+    cfg = _labeling_config()
+    state = BaseACTPolicy(cfg, pretrained_backbone=False).state_dict()
+    del state["decoder.joint_proj.weight"]
+    checkpoint_path = tmp_path / "broken.pt"
+    torch.save({"model_state_dict": state, "config": {}}, checkpoint_path)
+
+    with pytest.raises(ValueError, match="missing non-advantage parameters"):
+        train_policy.warm_start(
+            RecapACTPolicy(cfg, pretrained_backbone=False),
+            checkpoint_path,
+            torch.device("cpu"),
+        )
+
+
+def test_load_conditions_reads_the_labeler_sidecar(tmp_path):
+    path = tmp_path / "advantage_labels.json"
+    path.write_text(json.dumps({"conditions": [0, 1, 1, 0]}))
+
+    assert train_policy.load_conditions(path).tolist() == [0, 1, 1, 0]
+
+    path.write_text(json.dumps({"conditions": [0, 5]}))
+    with pytest.raises(ValueError, match="out-of-range"):
+        train_policy.load_conditions(path)
