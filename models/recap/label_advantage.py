@@ -6,11 +6,12 @@ followed it rather than from a Q(o, a). Sec. III gives the n-step form
 
     A_n(o_t, a_t) = sum_{k=0}^{n-1} r_{t+k} + V(o_{t+n}) - V(o_t)
 
-and states the setting is undiscounted, so gamma = 1 throughout. When the window
-runs past the end of an episode the sum is truncated at the terminal step and the
-bootstrap term is dropped, which leaves the exact remaining Monte Carlo return;
-setting ``n_step >= max_episode_steps`` therefore reproduces the paper's own
-estimator A = R_t - V(o_t) (Sec. IV-A) exactly.
+and states the setting is undiscounted, so gamma = 1 throughout. Appendix F uses
+N = 50 during post-training, which is the regime this labeler runs in, and falls
+back to N = T (full Monte Carlo) only for pre-training. When the window runs past
+the end of an episode the sum is truncated at the terminal step and the bootstrap
+term is dropped, which leaves the exact remaining Monte Carlo return; setting
+``n_step >= max_episode_steps`` therefore reproduces that N = T estimator exactly.
 
 Labels are produced in a single pass and held in memory rather than written back
 as a dataset column. The critic is retrained on every RECAP iteration, so a
@@ -69,26 +70,7 @@ from models.recap.act_recap import AdvantageCondition
 from models.recap.train_critic import NUM_BINS, CriticDataset, expected_return
 from utils.config import RECORD_DATASET_REPO_ID
 
-# The paper defines the n-step estimator but never fixes a finite n, using the
-# full Monte Carlo return in practice. Rewards are a constant -1 per step, so for
-# an untruncated window A_n = -n + V(o_{t+n}) - V(o_t): the label asks whether the
-# critic's value improved faster than the clock over n steps. A short window keeps
-# credit assignment local, a long one trades critic bias for variance.
-DEFAULT_N_STEP = 5
-# The paper sets the indicator threshold eps_l from a percentile rather than
-# fixing it at zero (Sec. IV-B, Appendix A). A learned critic is rarely calibrated
-# well enough for A > 0 to be meaningful: a systematically biased critic pushes
-# nearly every transition to one label, which makes the conditioning token carry
-# no information. A percentile keeps the positive/negative split usable whatever
-# the bias. Parameterized as the target POSITIVE fraction, which is what Appendix
-# A actually pins down.
-#
-# 0.40 is the paper's fine-tuning value: "During fine-tuning we generally set the
-# threshold such that approximately 40% of the evaluation rollouts in each
-# iteration have positive advantage" (Appendix A). This labeler scores evaluation
-# rollouts inside the RECAP improvement loop, so that is the matching regime.
-# Appendix A's other figure, ~30% positive, is the PRE-TRAINING value and applies
-# to labeling the demonstration corpus instead.
+DEFAULT_N_STEP = 50
 DEFAULT_POSITIVE_FRACTION = 0.40
 
 
