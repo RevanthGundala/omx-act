@@ -24,8 +24,6 @@ from lerobot.transforms.transforms import ImageTransforms, ImageTransformsConfig
 from models.recap.act_critic import ACTCritic
 from utils.config import RECORD_DATASET_REPO_ID
 
-# Sec. IV-A: the empirical return is discretized into B = 201 bins.
-NUM_BINS = 201
 IMAGE_MEAN = torch.tensor([0.485, 0.456, 0.406], dtype=torch.float32).view(3, 1, 1)
 IMAGE_STD = torch.tensor([0.229, 0.224, 0.225], dtype=torch.float32).view(3, 1, 1)
 
@@ -58,7 +56,7 @@ def denormalize_return(values, value_min: float, value_max: float):
     return values * (value_max - value_min) + value_max
 
 
-def bin_centers(value_min: float, value_max: float, num_bins: int = NUM_BINS, device=None):
+def bin_centers(value_min: float, value_max: float, num_bins: int = ACTConfig.recap_num_bins, device=None):
     index = torch.arange(num_bins, dtype=torch.float32, device=device)
     return denormalize_return(-1.0 + (index + 0.5) / num_bins, value_min, value_max)
 
@@ -151,7 +149,7 @@ def save_checkpoint(checkpoint_dir, step, model, optim, cfg, metrics, value_min,
         "model_state_dict": model.state_dict(),
         "optimizer_state_dict": optim.state_dict(),
         "metrics": metrics,
-        "num_bins": NUM_BINS,
+        "num_bins": cfg.recap_num_bins,
         "value_min": value_min,
         "value_max": value_max,
     }
@@ -180,7 +178,7 @@ def main():
         num_workers=cfg.num_workers,
         pin_memory=torch.cuda.is_available(),
     )
-    model = ACTCritic(cfg, pretrained_backbone=True, num_bins=NUM_BINS).to(device)
+    model = ACTCritic(cfg, pretrained_backbone=True, num_bins=cfg.recap_num_bins).to(device)
     optim = torch.optim.AdamW(model.parameters(), lr=cfg.learning_rate, weight_decay=cfg.weight_decay)
 
     run_dir = Path(cfg.output_root) / cfg.job_name / datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -191,7 +189,7 @@ def main():
     save_freq = max(1, min(cfg.save_freq, cfg.num_train_steps // 2))
 
     print(f"Dataset: {cfg.dataset_repo_id}@{cfg.dataset_revision}")
-    print(f"Return range: [{value_min:g}, {value_max:g}] -> (-1, 0) over {NUM_BINS} bins")
+    print(f"Return range: [{value_min:g}, {value_max:g}] -> (-1, 0) over {cfg.recap_num_bins} bins")
     print(f"Output: {run_dir}")
 
     model.train()

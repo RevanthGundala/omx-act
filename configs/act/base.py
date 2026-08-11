@@ -55,6 +55,12 @@ class ACTConfig:
     dropout: float = 0.1
     seed: int = 1000
 
+    # RECAP (arXiv:2511.14759)
+    recap_num_bins: int = 201  # Sec. IV-A discretizes the return into B = 201 bins.
+    recap_n_step: int = 50  # Appendix F: "We use N = 50 lookahead" during post-training.
+    recap_positive_fraction: float = 0.40  # Appendix F targets ~40% positive when fine-tuning.
+    recap_conditioning_dropout: float = 0.30  # Appendix F drops the indicator 30% of the time.
+
     # Logging/checkpointing
     log_freq: int = 100
     eval_freq: int = 1000

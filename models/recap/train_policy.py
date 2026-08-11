@@ -36,9 +36,6 @@ from configs.act.base import ACTConfig
 from models.recap.act_recap import ACTPolicy, AdvantageCondition
 from utils.config import RECORD_DATASET_REPO_ID
 
-# Appendix F: "we randomly drop out the conditioning on the advantage indicator
-# 30% of the time", so both the conditional and unconditional policy are learned.
-DEFAULT_DROPOUT = 0.30
 # The advantage token is the only thing a base ACT checkpoint cannot supply.
 ADVANTAGE_PARAMETERS = ("decoder.adv_proj.weight", "decoder.adv_proj.bias", "decoder.adv_pos_emb.weight")
 
@@ -187,7 +184,7 @@ def main():
     labels_path = os.environ.get("RECAP_POLICY_LABELS")
     conditions = load_conditions(labels_path) if labels_path else None
     # SFT pins the indicator to True, so dropout only applies once real labels do.
-    default_dropout = DEFAULT_DROPOUT if conditions is not None else 0.0
+    default_dropout = cfg.recap_conditioning_dropout if conditions is not None else 0.0
     dropout = float(os.environ.get("RECAP_POLICY_DROPOUT", default_dropout))
 
     train_loader, _ = make_dataloaders(cfg)

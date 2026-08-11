@@ -224,7 +224,7 @@ def test_critic_return_bins_stay_in_range_for_extreme_and_typical_returns(monkey
     model = ACTCritic(
         replace(_config(), chunk_size=2),
         pretrained_backbone=False,
-        num_bins=train_critic.NUM_BINS,
+        num_bins=ACTConfig.recap_num_bins,
     ).eval()
     batch = {
         "images": torch.randn(len(raw), 1, 3, 64, 64),
@@ -249,12 +249,12 @@ def test_critic_return_bins_stay_in_range_for_extreme_and_typical_returns(monkey
     assert bins.dtype == torch.long
     assert bins.shape == (len(raw),)
     assert int(bins.min()) >= 0
-    assert int(bins.max()) <= train_critic.NUM_BINS - 1
+    assert int(bins.max()) <= ACTConfig.recap_num_bins - 1
     assert bins[1].item() == 0
-    assert bins[-2].item() == train_critic.NUM_BINS - 1
+    assert bins[-2].item() == ACTConfig.recap_num_bins - 1
     # Out-of-range returns clamp onto the extreme bins rather than escaping them.
     assert bins[0].item() == 0
-    assert bins[-1].item() == train_critic.NUM_BINS - 1
+    assert bins[-1].item() == ACTConfig.recap_num_bins - 1
     assert torch.all(bins.diff() >= 0)
 
 
@@ -263,7 +263,7 @@ def test_critic_train_step_reduces_loss_on_cpu():
     model = ACTCritic(
         replace(_config(), chunk_size=2),
         pretrained_backbone=False,
-        num_bins=train_critic.NUM_BINS,
+        num_bins=ACTConfig.recap_num_bins,
     ).train()
     optim = torch.optim.AdamW(model.parameters(), lr=1e-3)
     device = torch.device("cpu")
@@ -284,7 +284,7 @@ def test_critic_train_step_reduces_loss_on_cpu():
         optim.step()
         losses.append(loss.item())
 
-    assert distribution.logits.shape == (2, train_critic.NUM_BINS)
+    assert distribution.logits.shape == (2, ACTConfig.recap_num_bins)
     assert losses[-1] < losses[0]
 
     with torch.no_grad():
@@ -506,7 +506,7 @@ def test_advantage_labeling_end_to_end_on_cpu(tmp_path):
     device = torch.device("cpu")
     value_min, value_max = train_critic.load_return_range(root)
 
-    critic = ACTCritic(cfg, pretrained_backbone=False, num_bins=train_critic.NUM_BINS)
+    critic = ACTCritic(cfg, pretrained_backbone=False, num_bins=ACTConfig.recap_num_bins)
     checkpoint_dir = tmp_path / "checkpoints"
     checkpoint_dir.mkdir()
     train_critic.save_checkpoint(
@@ -555,7 +555,7 @@ def test_advantage_labeling_end_to_end_on_cpu(tmp_path):
         label_advantage.task_percentile_thresholds(
             labels["advantages"],
             labels["task_index"],
-            label_advantage.DEFAULT_POSITIVE_FRACTION,
+            ACTConfig.recap_positive_fraction,
         ),
     )
     # The critic stays in eval mode under no_grad, so scoring is deterministic

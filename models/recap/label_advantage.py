@@ -67,17 +67,13 @@ from configs.act.base import ACTConfig
 from lerobot.datasets import LeRobotDataset
 from models.recap.act_critic import ACTCritic
 from models.recap.act_recap import AdvantageCondition
-from models.recap.train_critic import NUM_BINS, CriticDataset, expected_return
+from models.recap.train_critic import CriticDataset, expected_return
 from utils.config import RECORD_DATASET_REPO_ID
-
-DEFAULT_N_STEP = 50
-DEFAULT_POSITIVE_FRACTION = 0.40
-
 
 def task_percentile_thresholds(
     advantages: torch.Tensor,
     task_index: torch.Tensor | None = None,
-    positive_fraction: float = DEFAULT_POSITIVE_FRACTION,
+    positive_fraction: float = ACTConfig.recap_positive_fraction,
 ) -> torch.Tensor:
     """Resolve eps_l per task so that ``positive_fraction`` of it scores POSITIVE.
 
@@ -171,7 +167,7 @@ def n_step_advantages(
     returns_to_go: torch.Tensor,
     values: torch.Tensor,
     episode_end: torch.Tensor,
-    n_step: int = DEFAULT_N_STEP,
+    n_step: int = ACTConfig.recap_n_step,
 ) -> torch.Tensor:
     """Undiscounted n-step advantage, truncated at the terminal step.
 
@@ -230,7 +226,7 @@ def load_critic(checkpoint_path: str | Path, device: torch.device) -> tuple[ACTC
     """Rebuild a trained critic along with the value range it was trained on."""
     checkpoint = torch.load(Path(checkpoint_path), map_location=device, weights_only=True)
     cfg = ACTConfig(**checkpoint["config"])
-    model = ACTCritic(cfg, pretrained_backbone=False, num_bins=checkpoint.get("num_bins", NUM_BINS))
+    model = ACTCritic(cfg, pretrained_backbone=False, num_bins=checkpoint.get("num_bins", cfg.recap_num_bins))
     model.load_state_dict(checkpoint["model_state_dict"])
     # Decode with the checkpoint's own range so labels match how it was trained.
     return model.to(device).eval(), float(checkpoint["value_min"]), float(checkpoint["value_max"])
@@ -266,8 +262,8 @@ def label_dataset(
     device: torch.device,
     value_min: float,
     value_max: float,
-    n_step: int = DEFAULT_N_STEP,
-    positive_fraction: float | None = DEFAULT_POSITIVE_FRACTION,
+    n_step: int = ACTConfig.recap_n_step,
+    positive_fraction: float | None = ACTConfig.recap_positive_fraction,
     threshold: float | None = None,
     batch_size: int = 8,
     num_workers: int = 0,
@@ -316,9 +312,9 @@ def main():
     checkpoint_path = os.environ.get("RECAP_CRITIC_CHECKPOINT")
     if not checkpoint_path:
         raise ValueError("Set RECAP_CRITIC_CHECKPOINT to a checkpoint from models/recap/train_critic.py")
-    n_step = int(os.environ.get("RECAP_ADVANTAGE_N_STEP", DEFAULT_N_STEP))
+    n_step = int(os.environ.get("RECAP_ADVANTAGE_N_STEP", cfg.recap_n_step))
     positive_fraction = float(
-        os.environ.get("RECAP_ADVANTAGE_POSITIVE_FRACTION", DEFAULT_POSITIVE_FRACTION)
+        os.environ.get("RECAP_ADVANTAGE_POSITIVE_FRACTION", cfg.recap_positive_fraction)
     )
     absolute = os.environ.get("RECAP_ADVANTAGE_THRESHOLD")
     threshold = float(absolute) if absolute is not None else None
