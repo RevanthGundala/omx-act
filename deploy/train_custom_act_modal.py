@@ -23,9 +23,17 @@ import uuid
 import modal
 
 try:
-    from modal_training_common import validate_dataset_run, validate_pretrained_checkpoint_path
+    from modal_training_common import (
+        validate_dataset_run,
+        validate_pretrained_checkpoint_path,
+        validate_volume_relative_path,
+    )
 except ModuleNotFoundError:
-    from deploy.modal_training_common import validate_dataset_run, validate_pretrained_checkpoint_path
+    from deploy.modal_training_common import (
+        validate_dataset_run,
+        validate_pretrained_checkpoint_path,
+        validate_volume_relative_path,
+    )
 
 
 REMOTE_WORKSPACE = Path("/workspace")
@@ -348,6 +356,150 @@ def train_dataset_remote(
             "output_root": str(REMOTE_OUTPUTS / "act_experiments" / job_name),
             "pretrained_checkpoint": str(pretrained_path) if pretrained_path is not None else None,
             "resume_checkpoint": str(resume_path) if resume_path is not None else None,
+        },
+        sort_keys=True,
+    )
+
+
+@app.function(
+    gpu=MODAL_GPU,
+    # Bounded by the shared hard runtime rather than a day, so an unattended
+    # RECAP run cannot bill indefinitely if the local client disconnects.
+    timeout=MODAL_MAX_RUNTIME_SECONDS,
+    memory=65_536,
+    volumes={REMOTE_OUTPUTS: vol},
+    secrets=[hf_secret],
+)
+def train_recap_policy_remote(
+    pretrained_checkpoint: str,
+    steps: int = 10_000,
+    save_freq: int = 2_000,
+    job_name: str = "recap_policy",
+    labels_path: str | None = None,
+    dropout: str | None = None,
+) -> str:
+    """Train the advantage-conditioned RECAP policy.
+
+    Architecture and optimization hyperparameters are inherited from
+    ``pretrained_checkpoint`` by models.recap.train_policy, so this entrypoint
+    only carries run identity and budget. Omitting ``labels_path`` runs the SFT
+    stage with the indicator fixed to POSITIVE.
+    """
+    import json
+    import os
+    import subprocess
+    import sys
+    import threading
+
+    pretrained_checkpoint = validate_pretrained_checkpoint_path(pretrained_checkpoint)
+    if pretrained_checkpoint is None:
+        raise ValueError("pretrained_checkpoint is required for RECAP policy training.")
+    pretrained_path = REMOTE_OUTPUTS / pretrained_checkpoint
+    if not pretrained_path.is_file():
+        raise FileNotFoundError(
+            f"Warm-start checkpoint is missing from Modal volume: {pretrained_path}"
+        )
+    labels_full_path = ""
+    if labels_path:
+        labels_full_path = str(REMOTE_OUTPUTS / validate_volume_relative_path(labels_path))
+        if not Path(labels_full_path).is_file():
+            raise FileNotFoundError(f"Advantage labels are missing: {labels_full_path}")
+
+    run_token = uuid.uuid4().hex
+    environment = {
+        "PYTHONUNBUFFERED": "1",
+        "HF_TOKEN": os.environ.get("HF_TOKEN", ""),
+        "HUGGINGFACE_HUB_TOKEN": os.environ.get("HF_TOKEN", ""),
+        "RECAP_DEVICE": "cuda",
+        "RECAP_POLICY_PRETRAINED_CHECKPOINT": str(pretrained_path),
+        "RECAP_POLICY_STEPS": str(steps),
+        "RECAP_POLICY_SAVE_FREQ": str(save_freq),
+        "RECAP_POLICY_JOB_NAME": job_name,
+        "RECAP_POLICY_OUTPUT_ROOT": str(REMOTE_OUTPUTS / "act_experiments"),
+    }
+    if labels_full_path:
+        environment["RECAP_POLICY_LABELS"] = labels_full_path
+    if dropout is not None:
+        environment["RECAP_POLICY_DROPOUT"] = str(dropout)
+    os.environ.update(environment)
+
+    sys.path.insert(0, str(REMOTE_WORKSPACE))
+    os.chdir(REMOTE_WORKSPACE)
+
+    import torch
+
+    print("=== CUDA PREFLIGHT ===", flush=True)
+    print(f"run_token={run_token}", flush=True)
+    print(f"torch={torch.__version__} cuda_runtime={torch.version.cuda}", flush=True)
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA is not available; refusing CPU fallback on a paid GPU job.")
+    print(
+        f"gpu={torch.cuda.get_device_name(0)} "
+        f"vram_gb={torch.cuda.get_device_properties(0).total_memory / 1e9:.1f}",
+        flush=True,
+    )
+    stage = "improvement_loop" if labels_full_path else "sft_positive"
+    print(
+        f"recap_config stage={stage} pretrained={pretrained_path} steps={steps} "
+        f"save_freq={save_freq} job_name={job_name} labels={labels_full_path or None}",
+        flush=True,
+    )
+
+    monitor_dir = REMOTE_OUTPUTS / "modal_monitors"
+    monitor_dir.mkdir(parents=True, exist_ok=True)
+    telemetry_path = monitor_dir / f"{run_token}_recap.jsonl"
+    stop_monitor = threading.Event()
+
+    def sample_gpu() -> None:
+        while not stop_monitor.is_set():
+            timestamp = datetime.now(timezone.utc).isoformat()
+            try:
+                result = subprocess.run(
+                    [
+                        "nvidia-smi",
+                        "--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu",
+                        "--format=csv,noheader,nounits",
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                values = [value.strip() for value in result.stdout.strip().split(",")]
+                entry = {
+                    "timestamp": timestamp,
+                    "gpu_name": values[0],
+                    "utilization_percent": float(values[1]),
+                    "memory_used_mib": float(values[2]),
+                    "memory_total_mib": float(values[3]),
+                    "temperature_c": float(values[4]),
+                }
+            except Exception as exc:
+                entry = {"timestamp": timestamp, "telemetry_error": repr(exc)}
+            with telemetry_path.open("a") as file:
+                file.write(json.dumps(entry, sort_keys=True) + "\n")
+            print(f"GPU_TELEMETRY {json.dumps(entry, sort_keys=True)}", flush=True)
+            # Commit so checkpoints survive if the container is torn down.
+            vol.commit()
+            stop_monitor.wait(VOLUME_COMMIT_INTERVAL_SECONDS)
+
+    monitor_thread = threading.Thread(target=sample_gpu, name="gpu-telemetry", daemon=True)
+    monitor_thread.start()
+    try:
+        from models.recap.train_policy import main as train_main
+
+        train_main()
+    finally:
+        stop_monitor.set()
+        monitor_thread.join(timeout=10)
+        vol.commit()
+    return json.dumps(
+        {
+            "status": "complete",
+            "run_token": run_token,
+            "stage": stage,
+            "job_name": job_name,
+            "output_root": str(REMOTE_OUTPUTS / "act_experiments" / job_name),
+            "pretrained_checkpoint": str(pretrained_path),
         },
         sort_keys=True,
     )
