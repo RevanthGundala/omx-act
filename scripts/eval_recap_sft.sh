@@ -9,7 +9,7 @@ cd "$(dirname "$0")/.."
 
 POLICY="outputs/recap_sft_10k/pretrained_model"
 TASK="Place the sponge on the hot pad"
-TRIALS="${TRIALS:-10}"
+TRIALS="${TRIALS:-15}"
 ADVANTAGE="${ADVANTAGE:-positive}"
 
 if [ ! -d "$POLICY" ]; then
