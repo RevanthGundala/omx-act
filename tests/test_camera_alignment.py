@@ -1,3 +1,5 @@
+import io
+
 import cv2
 import numpy as np
 
@@ -6,7 +8,13 @@ from models.act.camera_alignment import (
     CameraAlignmentChecker,
     estimate_camera_transform,
     prepare_diagnostic_references,
+    print_camera_view_check,
 )
+
+
+class _TTYStringIO(io.StringIO):
+    def isatty(self):
+        return True
 
 
 def _background(seed: int = 0) -> np.ndarray:
@@ -38,8 +46,8 @@ def test_camera_alignment_ignores_moved_objects_when_background_is_stable():
     result = checker.check(_with_objects(background, 90))
 
     assert result["status"] == "pass"
-    assert abs(result["dx_px"]) < 2
-    assert abs(result["dy_px"]) < 2
+    assert abs(result["center_dx_px"]) < 2
+    assert abs(result["center_dy_px"]) < 2
     assert abs(result["rotation_deg"]) < 0.5
     assert abs(result["scale"] - 1) < 0.01
 
@@ -56,6 +64,8 @@ def test_camera_alignment_recovers_known_background_transform():
 
     assert estimate is not None
     assert estimate.inliers >= 30
+    assert abs(estimate.center_dx_px - 12) < 1
+    assert abs(estimate.center_dy_px + 8) < 1
     assert abs(estimate.rotation_deg + expected_angle) < 0.75
     assert abs(estimate.scale - expected_scale) < 0.02
 
@@ -104,3 +114,39 @@ def test_scene_coverage_loads_when_camera_alignment_is_disabled(monkeypatch):
 
     assert checker is None
     assert coverage[2] == 5
+
+
+def test_camera_view_check_colors_warning_verdict_yellow():
+    class WarningChecker:
+        thresholds = {
+            "center_dx_px": 10.0,
+            "center_dy_px": 10.0,
+            "rotation_deg": 1.5,
+            "scale_delta": 0.03,
+        }
+
+        def check(self, _image):
+            return {
+                "status": "warn",
+                "verdict": "CAMERA VIEW WARN: shifted",
+                "matched_references": 12,
+                "total_references": 12,
+                "inliers": 100,
+                "center_dx_px": -3.0,
+                "center_dy_px": -5.0,
+                "rotation_deg": 7.58,
+                "scale": 0.998,
+            }
+
+    output = _TTYStringIO()
+
+    print_camera_view_check(
+        WarningChecker(),
+        np.zeros((10, 10, 3), dtype=np.uint8),
+        label="test",
+        output=output,
+    )
+
+    assert "\033[1;33mCAMERA VIEW WARN" in output.getvalue()
+    assert "camera roll is +7.58deg" in output.getvalue()
+    assert "center_shift=(-3.0,-5.0)px" in output.getvalue()

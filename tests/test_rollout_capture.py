@@ -4,6 +4,7 @@ import json
 import numpy as np
 import pytest
 
+import models.act.rollout_capture as rollout_capture
 from models.act.rollout_capture import (
     RolloutArtifactWriter,
     RolloutVideoRecorder,
@@ -50,6 +51,26 @@ def test_outcome_prompt_leaves_noninteractive_run_unlabeled():
         stream=io.StringIO("s\n"),
         output=io.StringIO(),
     ) is None
+
+
+def test_outcome_prompt_refreshes_idle_callback_while_waiting(monkeypatch):
+    stream = InteractiveStringIO("s\n")
+    waits = iter([([], [], []), ([stream], [], [])])
+    monkeypatch.setattr(
+        rollout_capture.select,
+        "select",
+        lambda *_args: next(waits),
+    )
+    updates = []
+
+    outcome = prompt_for_outcome(
+        stream=stream,
+        output=io.StringIO(),
+        idle_callback=lambda: updates.append("preview"),
+    )
+
+    assert outcome == "success"
+    assert updates == ["preview", "preview"]
 
 
 def test_rollout_video_recorder_keeps_camera_frames_synchronized(tmp_path):

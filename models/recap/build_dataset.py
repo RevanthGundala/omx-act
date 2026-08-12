@@ -44,7 +44,7 @@ class RolloutTrial:
     metadata: dict
     observations: tuple[dict, ...]
     actions: tuple[dict, ...]
-    frames: dict[str, tuple[np.ndarray, ...]]
+    frames: dict[str, tuple[np.ndarray, ...]] | None = None
 
     @property
     def success(self) -> bool:
@@ -134,7 +134,7 @@ def decode_video(path: Path) -> tuple[np.ndarray, ...]:
     return tuple(frames)
 
 
-def load_trial(trial_dir: Path) -> RolloutTrial:
+def load_trial(trial_dir: Path, *, decode_frames: bool = False) -> RolloutTrial:
     trial_dir = trial_dir.resolve()
     metadata = json.loads((trial_dir / "metadata.json").read_text())
     outcome = metadata.get("outcome_label")
@@ -207,27 +207,79 @@ def load_trial(trial_dir: Path) -> RolloutTrial:
     videos = metadata.get("videos")
     if not isinstance(videos, dict) or set(videos) != set(camera_names):
         raise ValueError(f"{trial_dir} video metadata does not match camera_names")
-    frames = {
-        camera: decode_video(
-            _resolve_trial_file(trial_dir, videos[camera])
-        )
-        for camera in camera_names
-    }
-    expected_frames = len(observations)
-    for camera, camera_frames in frames.items():
-        if len(camera_frames) != expected_frames:
-            raise ValueError(
-                f"{trial_dir} camera {camera!r} has {len(camera_frames)} frames; "
-                f"expected {expected_frames}"
-            )
+    for camera in camera_names:
+        _resolve_trial_file(trial_dir, videos[camera])
 
     return RolloutTrial(
         root=trial_dir,
         metadata=metadata,
         observations=observations,
         actions=actions,
-        frames=frames,
+        frames=decode_trial_frames_from_parts(
+            trial_dir,
+            metadata,
+            camera_names,
+            len(observations),
+        )
+        if decode_frames
+        else None,
     )
+
+
+def decode_trial_frames_from_parts(
+    trial_dir: Path,
+    metadata: dict,
+    camera_names: tuple[str, ...],
+    expected_frames: int,
+) -> dict[str, tuple[np.ndarray, ...]]:
+    """Decode every camera video, enforcing the observation frame count."""
+    videos = metadata["videos"]
+    frames = {}
+    for camera in camera_names:
+        camera_frames = decode_video(_resolve_trial_file(trial_dir, videos[camera]))
+        if len(camera_frames) != expected_frames:
+            raise ValueError(
+                f"{trial_dir} camera {camera!r} has {len(camera_frames)} frames; "
+                f"expected {expected_frames}"
+            )
+        frames[camera] = camera_frames
+    return frames
+
+
+def decode_trial_frames(trial: RolloutTrial) -> dict[str, tuple[np.ndarray, ...]]:
+    """Return cached frames when present, otherwise decode them on demand."""
+    if trial.frames is not None:
+        return trial.frames
+    return decode_trial_frames_from_parts(
+        trial.root,
+        trial.metadata,
+        trial.camera_names,
+        len(trial.observations),
+    )
+
+
+def probe_camera_frame_shapes(trial: RolloutTrial) -> dict[str, tuple[int, ...]]:
+    """Read one frame per camera so schema checks stay memory-cheap."""
+    if trial.frames is not None:
+        return {
+            camera: tuple(frames[0].shape)
+            for camera, frames in trial.frames.items()
+        }
+    shapes = {}
+    for camera in trial.camera_names:
+        path = _resolve_trial_file(trial.root, trial.metadata["videos"][camera])
+        capture = cv2.VideoCapture(str(path))
+        if not capture.isOpened():
+            capture.release()
+            raise RuntimeError(f"Could not open rollout video: {path}")
+        try:
+            ok, frame = capture.read()
+        finally:
+            capture.release()
+        if not ok:
+            raise RuntimeError(f"Rollout video has no frames: {path}")
+        shapes[camera] = tuple(frame.shape)
+    return shapes
 
 
 def load_trials(
@@ -291,27 +343,28 @@ def recap_rewards(
 
 def validate_compatible_trials(trials: list[RolloutTrial]) -> tuple:
     first = trials[0]
-    first_frame = first.frames[first.camera_names[0]][0]
+    first_shapes = probe_camera_frame_shapes(first)
+    first_frame_shape = first_shapes[first.camera_names[0]]
     signature = (
         first.camera_names,
         first.joint_names,
         int(first.metadata["control_hz"]),
-        tuple(first_frame.shape),
+        first_frame_shape,
     )
     for trial in trials[1:]:
-        frame_shape = trial.frames[trial.camera_names[0]][0].shape
+        shapes = probe_camera_frame_shapes(trial)
         candidate = (
             trial.camera_names,
             trial.joint_names,
             int(trial.metadata["control_hz"]),
-            tuple(frame_shape),
+            shapes[trial.camera_names[0]],
         )
         if candidate != signature:
             raise ValueError(
                 f"Incompatible rollout schemas: {first.root} and {trial.root}"
             )
         for camera in trial.camera_names:
-            if trial.frames[camera][0].shape != first_frame.shape:
+            if shapes[camera] != first_frame_shape:
                 raise ValueError(
                     f"Camera frame shapes differ in {trial.root}"
                 )
@@ -409,6 +462,7 @@ def build_dataset(
 
     episode_summaries = []
     for episode_index, trial in enumerate(trials):
+        trial_frames = decode_trial_frames(trial)
         rewards, returns_to_go = recap_rewards(
             len(trial.actions),
             success=trial.success,
@@ -461,11 +515,12 @@ def build_dataset(
                 "task": trial.metadata["task"],
             }
             for camera in camera_names:
-                frame[f"observation.images.{camera}"] = trial.frames[camera][
+                frame[f"observation.images.{camera}"] = trial_frames[camera][
                     source_frame
                 ]
             target.add_frame(frame)
         target.save_episode()
+        del trial_frames
         episode_summaries.append(
             {
                 "episode_index": episode_index,

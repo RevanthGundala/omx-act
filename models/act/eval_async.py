@@ -57,6 +57,7 @@ from models.act.eval_common import (
 from models.act.rollout_capture import (
     RolloutArtifactWriter,
     prompt_for_outcome,
+    readline_with_idle_callback,
     write_metadata_atomic,
 )
 from utils.config import CAMERAS, CAMERA_HEIGHT, CAMERA_WIDTH, FOLLOWER_PORT, FPS, JOINT_NAMES
@@ -86,27 +87,57 @@ def camera_config(name: str, fourcc: str | None, warmup_s: int) -> OpenCVCameraC
 
 
 class TopCameraPreview:
-    WINDOW_NAME = "ACT eval - top camera"
+    """Live preview of one or more eval cameras in a single window."""
 
-    def __init__(self, camera, *, cv2_module=None) -> None:
+    WINDOW_NAME = "ACT eval - cameras"
+
+    def __init__(self, camera, *, cv2_module=None, extra_cameras=None) -> None:
         if cv2_module is None:
             import cv2 as cv2_module
 
         self.camera = camera
+        # Ordered name -> camera for every additional feed shown beside the top
+        # view, so the operator can watch the grasp from the wrist too.
+        self.extra_cameras = dict(extra_cameras or {})
         self.cv2 = cv2_module
         self.closed = False
         self.shown = False
 
+    def _read(self, camera, label: str) -> np.ndarray:
+        frame = np.asarray(camera.read_latest())
+        if frame.ndim != 3 or frame.shape[2] != 3 or frame.dtype != np.uint8:
+            raise ValueError(
+                f"{label} camera preview requires HWC uint8 RGB frames, got "
+                f"shape={frame.shape} dtype={frame.dtype}"
+            )
+        return self.cv2.cvtColor(frame, self.cv2.COLOR_RGB2BGR)
+
+    def _label(self, frame: np.ndarray, text: str) -> np.ndarray:
+        self.cv2.putText(
+            frame,
+            text,
+            (10, 25),
+            self.cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (0, 255, 0),
+            2,
+        )
+        return frame
+
     def update(self) -> None:
         if self.closed:
             return
-        frame = np.asarray(self.camera.read_latest())
-        if frame.ndim != 3 or frame.shape[2] != 3 or frame.dtype != np.uint8:
-            raise ValueError(
-                f"Top camera preview requires HWC uint8 RGB frames, got "
-                f"shape={frame.shape} dtype={frame.dtype}"
-            )
-        display_frame = self.cv2.cvtColor(frame, self.cv2.COLOR_RGB2BGR)
+        panels = [self._label(self._read(self.camera, "top"), "top")]
+        for name, camera in self.extra_cameras.items():
+            panel = self._label(self._read(camera, name), name)
+            if panel.shape[0] != panels[0].shape[0]:
+                scale = panels[0].shape[0] / panel.shape[0]
+                panel = self.cv2.resize(
+                    panel,
+                    (int(panel.shape[1] * scale), panels[0].shape[0]),
+                )
+            panels.append(panel)
+        display_frame = panels[0] if len(panels) == 1 else np.hstack(panels)
         self.cv2.imshow(self.WINDOW_NAME, display_frame)
         self.shown = True
         key = self.cv2.waitKey(1) & 0xFF
@@ -289,27 +320,50 @@ def apply_wrist_flex_start_override(
     pose: dict[str, float],
     statistics: dict[str, np.ndarray],
     wrist_flex: float | None,
+    wrist_flex_offset: float = 0.0,
 ) -> dict[str, float]:
     updated = dict(pose)
-    if wrist_flex is None:
+    if not np.isfinite(wrist_flex_offset):
+        raise ValueError("--start-state-wrist-flex-offset must be finite.")
+    if wrist_flex is not None and wrist_flex_offset != 0.0:
+        raise ValueError(
+            "--start-state-wrist-flex and --start-state-wrist-flex-offset "
+            "are mutually exclusive."
+        )
+    if wrist_flex is None and wrist_flex_offset == 0.0:
         return updated
-    if not np.isfinite(wrist_flex):
+    if wrist_flex is not None and not np.isfinite(wrist_flex):
         raise ValueError("--start-state-wrist-flex must be finite.")
 
     index = JOINT_NAMES.index("wrist_flex")
     minimum = float(statistics["min"][index])
     maximum = float(statistics["max"][index])
-    if not minimum <= wrist_flex <= maximum:
+    current = float(updated["wrist_flex.pos"])
+    target = current + wrist_flex_offset if wrist_flex is None else float(wrist_flex)
+    if not minimum <= target <= maximum:
+        option = (
+            f"--start-state-wrist-flex-offset={wrist_flex_offset:g}"
+            if wrist_flex is None
+            else f"--start-state-wrist-flex={wrist_flex:g}"
+        )
         raise ValueError(
-            f"--start-state-wrist-flex={wrist_flex:g} is outside dataset start "
+            f"{option} produces wrist_flex={target:g}, outside dataset start "
             f"support [{minimum:.2f}, {maximum:.2f}]."
         )
-    updated["wrist_flex.pos"] = float(wrist_flex)
-    print(
-        f"[eval_async] overriding dataset-start wrist_flex to {wrist_flex:.2f} "
-        f"joint units (dataset support {minimum:.2f}..{maximum:.2f}).",
-        flush=True,
-    )
+    updated["wrist_flex.pos"] = target
+    if wrist_flex is None:
+        print(
+            f"[eval_async] shifting dataset-start wrist_flex {current:.2f}->{target:.2f} "
+            f"({wrist_flex_offset:+.2f} joint units; dataset support "
+            f"{minimum:.2f}..{maximum:.2f}).",
+            flush=True,
+        )
+    else:
+        print(
+            f"[eval_async] overriding dataset-start wrist_flex to {target:.2f} "
+            f"joint units (dataset support {minimum:.2f}..{maximum:.2f}).",
+            flush=True,
+        )
     return updated
 
 
@@ -410,6 +464,8 @@ def return_home(
     max_step_delta: float | None = None,
     tolerance: float = 1.0,
     settle_timeout_s: float = 2.0,
+    wrist_flex_seat_offset: float = 3.0,
+    loop_callback=None,
 ) -> dict:
     """Move to ``target`` safely and verify the final pose from motor telemetry."""
     if fps <= 0:
@@ -454,6 +510,8 @@ def return_home(
             hz=fps,
             max_delta=max_step_delta or 0,
             tolerance=tolerance,
+            loop_callback=loop_callback,
+            wrist_flex_seat_offset=wrist_flex_seat_offset,
         )
     finally:
         robot._act_eval_bypass_action_smoothing = previous_bypass
@@ -564,6 +622,8 @@ class ActionStreamWatchdog:
 
 
 class LockedRobotClient(RobotClient):
+    REPLAN_RETRY_SECONDS = 0.25
+
     def __init__(self, *args, **kwargs):
         try:
             super().__init__(*args, **kwargs)
@@ -583,6 +643,9 @@ class LockedRobotClient(RobotClient):
                     pass
             raise
         self.action_queue_lock = threading.RLock()
+        self._replan_lock = threading.Lock()
+        self._replan_in_flight = False
+        self._replan_requested_at = 0.0
         self.trial_active = threading.Event()
         self._control_loop_started = False
         self.trial_started_at = 0.0
@@ -604,7 +667,25 @@ class LockedRobotClient(RobotClient):
                 ):
                     return
             # Keep the lock across upstream's deque snapshot and queue swap.
-            return super()._aggregate_action_queues(*args, **kwargs)
+            result = super()._aggregate_action_queues(*args, **kwargs)
+        with self._replan_lock:
+            self._replan_in_flight = False
+            self._replan_requested_at = 0.0
+        return result
+
+    def _ready_to_send_observation(self):
+        if not super()._ready_to_send_observation():
+            return False
+        now = time.monotonic()
+        with self._replan_lock:
+            if (
+                self._replan_in_flight
+                and now - self._replan_requested_at < self.REPLAN_RETRY_SECONDS
+            ):
+                return False
+            self._replan_in_flight = True
+            self._replan_requested_at = now
+            return True
 
     def pause_trial(self) -> None:
         self.trial_active.clear()
@@ -615,6 +696,9 @@ class LockedRobotClient(RobotClient):
     def prepare_trial(self) -> None:
         self.pause_trial()
         self.stub.Ready(services_pb2.Empty())
+        with self._replan_lock:
+            self._replan_in_flight = False
+            self._replan_requested_at = 0.0
         with self.action_queue_lock:
             with self.latest_action_lock:
                 self.latest_action = -1
@@ -716,6 +800,7 @@ def prompt_for_trial_start(
     trial: int,
     total_trials: int,
     stream=sys.stdin,
+    idle_callback=None,
 ) -> bool:
     if not stream.isatty():
         print(
@@ -729,7 +814,30 @@ def prompt_for_trial_start(
         "then press Enter to start...",
         flush=True,
     )
-    return bool(stream.readline())
+    return bool(readline_with_idle_callback(stream, idle_callback))
+
+
+def wait_with_idle_callback(
+    duration_s: float,
+    idle_callback,
+    *,
+    fps: float,
+    clock=time.perf_counter,
+    sleep=time.sleep,
+) -> None:
+    if duration_s <= 0:
+        return
+    if idle_callback is None:
+        sleep(duration_s)
+        return
+    deadline = clock() + duration_s
+    interval = 1.0 / fps
+    while True:
+        idle_callback()
+        remaining = deadline - clock()
+        if remaining <= 0:
+            return
+        sleep(min(interval, remaining))
 
 
 def trial_stop_instructions(
@@ -762,6 +870,13 @@ def trial_has_recorded_actions(action_count: int) -> bool:
     prompting for a success/failure label on it would be meaningless.
     """
     return action_count > 0
+
+
+def should_prompt_for_outcome(reason: str, action_count: int) -> bool:
+    return (
+        reason in {"operator", "duration"}
+        and trial_has_recorded_actions(action_count)
+    )
 
 
 def install_trace_logger(robot, trace_file=None, entry_callback=None) -> None:
@@ -840,7 +955,16 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--show-top-camera",
         action="store_true",
-        help="Show the live top-camera feed during each trial; q or Esc closes only the preview.",
+        help="Show the live camera feed during each trial; q or Esc closes only the preview.",
+    )
+    p.add_argument(
+        "--preview-cameras",
+        type=lambda v: [c.strip() for c in v.split(",") if c.strip()],
+        default=["top", "wrist"],
+        help=(
+            "Comma-separated cameras shown side by side by --show-top-camera "
+            "(default: top,wrist). The top view is always included."
+        ),
     )
     p.add_argument("--camera-fourcc", default="MJPG", help="FOURCC for all cams ('' to auto-detect; wrist needs MJPG)")
     p.add_argument("--camera-warmup-s", type=int, default=5)
@@ -895,10 +1019,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--max-joint-delta",
         type=float,
-        default=2.0,
+        default=40.0,
         help=(
             "Hard safety limit in normalized joint units between consecutive commands for every joint, "
-            "including the gripper (default: 2.0; must be positive)."
+            "including the gripper (default: 40; must be positive)."
         ),
     )
     p.add_argument("--visualize-queue", action="store_true", help="plot action-queue size on exit")
@@ -962,14 +1086,24 @@ def parse_args() -> argparse.Namespace:
         help="Maximum verified start/park pose error in normalized joint units (default: 1).",
     )
     p.add_argument("--start-state-max-z", type=float, default=3.0)
-    p.add_argument(
+    wrist_flex_start = p.add_mutually_exclusive_group()
+    wrist_flex_start.add_argument(
         "--start-state-wrist-flex",
         type=float,
-        default=46.0,
+        default=None,
         help=(
-            "Override only the demonstrated wrist-flex start target. The value "
-            "must remain within the selected dataset's episode-start range "
-            "(default: 46)."
+            "Optional override for the demonstrated wrist-flex start target. "
+            "By default, use the selected dataset's actual episode-start mean."
+        ),
+    )
+    wrist_flex_start.add_argument(
+        "--start-state-wrist-flex-offset",
+        type=float,
+        default=2.0,
+        help=(
+            "Offset added to the demonstrated wrist-flex episode-start mean for "
+            "the pre-roll move and dataset-start parking only; policy actions are "
+            "unchanged. The shifted target must remain within dataset support."
         ),
     )
     p.add_argument(
@@ -1252,6 +1386,8 @@ def run_robot_client(
             "aggregate_fn": args.aggregate_fn,
             "action_smoothing": args.action_smoothing,
             "max_joint_delta": args.max_joint_delta,
+            "start_state_wrist_flex": args.start_state_wrist_flex,
+            "start_state_wrist_flex_offset": args.start_state_wrist_flex_offset,
         }
         metadata_path = writer.output_dir / "metadata.json"
         write_metadata_atomic(metadata_path, metadata)
@@ -1263,10 +1399,28 @@ def run_robot_client(
     try:
         client = LockedRobotClient(client_cfg)  # connects the robot
         if args.show_top_camera:
-            top_camera_preview = TopCameraPreview(client.robot.cameras["top"])
+            extra_previews = {
+                name: client.robot.cameras[name]
+                for name in args.preview_cameras
+                if name != "top" and name in client.robot.cameras
+            }
+            missing = [
+                name
+                for name in args.preview_cameras
+                if name != "top" and name not in client.robot.cameras
+            ]
+            if missing:
+                raise KeyError(
+                    f"--preview-cameras requested cameras that are not connected: {missing}"
+                )
+            top_camera_preview = TopCameraPreview(
+                client.robot.cameras["top"],
+                extra_cameras=extra_previews,
+            )
             client.loop_callback = top_camera_preview.update
+            shown = ", ".join(["top", *extra_previews])
             print(
-                "[eval_async] showing live top-camera preview "
+                f"[eval_async] showing live camera preview: {shown} "
                 "(q/Esc closes the preview; Ctrl-C or Enter stops the trial).",
                 flush=True,
             )
@@ -1307,6 +1461,7 @@ def run_robot_client(
                 dataset_start_pose,
                 statistics,
                 args.start_state_wrist_flex,
+                args.start_state_wrist_flex_offset,
             )
             if (
                 not args.no_return_home
@@ -1329,6 +1484,11 @@ def run_robot_client(
                 max_step_delta=args.start_state_max_delta,
                 tolerance=args.start_state_tolerance,
                 settle_timeout_s=args.return_home_settle_timeout_s,
+                loop_callback=(
+                    top_camera_preview.update
+                    if top_camera_preview is not None
+                    else None
+                ),
             )
             current = joint_positions(client.robot)
             std = {
@@ -1348,7 +1508,15 @@ def run_robot_client(
                 )
             print(f"[eval_async] demonstrated start-state support reached: {current}", flush=True)
             if args.start_state_settle_s > 0:
-                time.sleep(args.start_state_settle_s)
+                wait_with_idle_callback(
+                    args.start_state_settle_s,
+                    (
+                        top_camera_preview.update
+                        if top_camera_preview is not None
+                        else None
+                    ),
+                    fps=args.fps,
+                )
 
         if args.action_smoothing < 1.0:
             install_action_smoother(client.robot, args.action_smoothing)
@@ -1424,6 +1592,11 @@ def run_robot_client(
                 prompt_for_trial_start(
                     trial=trial,
                     total_trials=args.trials,
+                    idle_callback=(
+                        top_camera_preview.update
+                        if top_camera_preview is not None
+                        else None
+                    ),
                 )
             if "top" in client.robot.cameras:
                 try:
@@ -1480,10 +1653,23 @@ def run_robot_client(
                         max_step_delta=args.start_state_max_delta,
                         tolerance=args.start_state_tolerance,
                         settle_timeout_s=args.return_home_settle_timeout_s,
+                        loop_callback=(
+                            top_camera_preview.update
+                            if top_camera_preview is not None
+                            else None
+                        ),
                     )
                     parked = True
                     if args.start_state_settle_s > 0:
-                        time.sleep(args.start_state_settle_s)
+                        wait_with_idle_callback(
+                            args.start_state_settle_s,
+                            (
+                                top_camera_preview.update
+                                if top_camera_preview is not None
+                                else None
+                            ),
+                            fps=args.fps,
+                        )
             except BaseException:
                 finish_trial_capture(
                     capture,
@@ -1495,11 +1681,19 @@ def run_robot_client(
             prompt_interrupted = False
             if (
                 capture is not None
-                and trial_has_recorded_actions(capture["writer"].action_count)
-                and reason in {"operator", "duration"}
+                and should_prompt_for_outcome(
+                    reason,
+                    capture["writer"].action_count,
+                )
             ):
                 try:
-                    outcome_label = prompt_for_outcome()
+                    outcome_label = prompt_for_outcome(
+                        idle_callback=(
+                            top_camera_preview.update
+                            if top_camera_preview is not None
+                            else None
+                        )
+                    )
                 except KeyboardInterrupt:
                     prompt_interrupted = True
                     print(
@@ -1570,22 +1764,10 @@ def run_robot_client(
             except Exception as exc:  # noqa: BLE001 -- continue closing logs/server
                 print(f"[eval_async] client stop failed: {exc}", flush=True)
         if pending_capture is not None:
-            outcome_label = None
-            if (
-                session_interrupted
-                and trial_has_recorded_actions(pending_capture["writer"].action_count)
-            ):
-                try:
-                    outcome_label = prompt_for_outcome()
-                except KeyboardInterrupt:
-                    print(
-                        "\n[eval_async] outcome prompt canceled; leaving trial unlabeled.",
-                        flush=True,
-                    )
             finish_trial_capture(
                 pending_capture,
                 "keyboard_interrupt" if session_interrupted else "aborted",
-                outcome_label,
+                None,
             )
         if trace_file is not None:
             trace_file.close()
@@ -1613,7 +1795,6 @@ def main() -> None:
     host, port = args.server_address.split(":")
     if not np.isfinite(args.max_joint_delta) or args.max_joint_delta <= 0:
         raise ValueError("--max-joint-delta must be a positive finite value.")
-
     force_no_calibration()
 
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")

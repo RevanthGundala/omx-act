@@ -150,6 +150,24 @@ def test_move_to_joint_state_uses_motor_telemetry_only():
     assert len(robot.commands) == 2
 
 
+def test_move_to_joint_state_runs_idle_callback_while_moving():
+    robot = _FakeRobot()
+    updates = []
+
+    move_to_joint_state(
+        robot,
+        target=np.ones(len(JOINT_NAMES), dtype=np.float32),
+        timeout=0.1,
+        ramp_seconds=0.1,
+        hz=1000,
+        max_delta=1.0,
+        tolerance=0.01,
+        loop_callback=lambda: updates.append("preview"),
+    )
+
+    assert updates
+
+
 def test_move_to_joint_state_requires_rate_limit_without_ramp():
     with pytest.raises(ValueError, match="requires max_delta"):
         move_to_joint_state(
@@ -254,6 +272,30 @@ def test_wrist_flex_start_override_stays_within_dataset_support():
     assert pose["wrist_flex.pos"] == 0.0
 
 
+def test_wrist_flex_start_override_none_uses_dataset_pose():
+    pose = {f"{name}.pos": float(index) for index, name in enumerate(JOINT_NAMES)}
+    statistics = {
+        "min": np.full(len(JOINT_NAMES), -10.0, dtype=np.float32),
+        "max": np.full(len(JOINT_NAMES), 10.0, dtype=np.float32),
+    }
+
+    assert apply_wrist_flex_start_override(pose, statistics, None) == pose
+
+
+def test_wrist_flex_start_offset_shifts_dataset_mean():
+    pose = {f"{name}.pos": 0.0 for name in JOINT_NAMES}
+    pose["wrist_flex.pos"] = 4.0
+    statistics = {
+        "min": np.full(len(JOINT_NAMES), -10.0, dtype=np.float32),
+        "max": np.full(len(JOINT_NAMES), 10.0, dtype=np.float32),
+    }
+
+    updated = apply_wrist_flex_start_override(pose, statistics, None, -1.25)
+
+    assert updated["wrist_flex.pos"] == 2.75
+    assert pose["wrist_flex.pos"] == 4.0
+
+
 def test_wrist_flex_start_override_rejects_out_of_distribution_target():
     pose = {f"{name}.pos": 0.0 for name in JOINT_NAMES}
     statistics = {
@@ -263,6 +305,29 @@ def test_wrist_flex_start_override_rejects_out_of_distribution_target():
 
     with pytest.raises(ValueError, match="outside dataset start support"):
         apply_wrist_flex_start_override(pose, statistics, 11.0)
+
+
+def test_wrist_flex_start_offset_rejects_out_of_distribution_target():
+    pose = {f"{name}.pos": 0.0 for name in JOINT_NAMES}
+    pose["wrist_flex.pos"] = 9.0
+    statistics = {
+        "min": np.full(len(JOINT_NAMES), -10.0, dtype=np.float32),
+        "max": np.full(len(JOINT_NAMES), 10.0, dtype=np.float32),
+    }
+
+    with pytest.raises(ValueError, match="outside dataset start support"):
+        apply_wrist_flex_start_override(pose, statistics, None, 2.0)
+
+
+def test_wrist_flex_start_adjustments_are_mutually_exclusive():
+    pose = {f"{name}.pos": 0.0 for name in JOINT_NAMES}
+    statistics = {
+        "min": np.full(len(JOINT_NAMES), -10.0, dtype=np.float32),
+        "max": np.full(len(JOINT_NAMES), 10.0, dtype=np.float32),
+    }
+
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        apply_wrist_flex_start_override(pose, statistics, 1.0, 1.0)
 
 
 def test_return_home_limits_each_command_even_with_zero_duration():
@@ -608,3 +673,85 @@ def test_locked_robot_client_disconnects_robot_on_partial_construction_failure()
             LockedRobotClient()
 
     assert disconnected == [True]
+
+
+def test_wrist_flex_seats_from_below_when_descending():
+    """Regression: parking failed with wrist_flex 25 ticks short of goal.
+
+    Wrist-flex sticks moving negative (~0.9 units short) but tracks positive to
+    ~0.11. Approaching a lower target directly ends on the sticky direction, so
+    the move must first go below the target and come back up.
+    """
+    from models.act.eval_common import move_to_joint_state
+    from utils.config import JOINT_NAMES
+
+    wrist = JOINT_NAMES.index("wrist_flex")
+    target = np.zeros(len(JOINT_NAMES), dtype=np.float32)
+    target[wrist] = 46.5
+    commands = []
+
+    class Robot:
+        def __init__(self):
+            self.state = {f"{n}.pos": 0.0 for n in JOINT_NAMES}
+            # Start ABOVE the target so the move descends.
+            self.state["wrist_flex.pos"] = 50.0
+
+        def get_observation(self):
+            return dict(self.state)
+
+        def send_action(self, action):
+            commands.append(action["wrist_flex.pos"])
+            self.state.update(action)
+            return dict(action)
+
+    move_to_joint_state(
+        Robot(),
+        target=target,
+        timeout=1.0,
+        ramp_seconds=0.2,
+        hz=30,
+        max_delta=2.0,
+        tolerance=0.5,
+        wrist_flex_seat_offset=3.0,
+    )
+
+    # It must dip below the 46.5 target before settling up onto it.
+    assert min(commands) < 46.5, "never seated below the target"
+    assert commands[-1] >= min(commands), "final approach must move upward"
+
+
+def test_wrist_flex_seating_skipped_when_ascending():
+    """Rising into the target is already the reliable direction."""
+    from models.act.eval_common import move_to_joint_state
+    from utils.config import JOINT_NAMES
+
+    wrist = JOINT_NAMES.index("wrist_flex")
+    target = np.zeros(len(JOINT_NAMES), dtype=np.float32)
+    target[wrist] = 46.5
+    commands = []
+
+    class Robot:
+        def __init__(self):
+            self.state = {f"{n}.pos": 0.0 for n in JOINT_NAMES}
+            self.state["wrist_flex.pos"] = 44.0
+
+        def get_observation(self):
+            return dict(self.state)
+
+        def send_action(self, action):
+            commands.append(action["wrist_flex.pos"])
+            self.state.update(action)
+            return dict(action)
+
+    move_to_joint_state(
+        Robot(),
+        target=target,
+        timeout=1.0,
+        ramp_seconds=0.2,
+        hz=30,
+        max_delta=2.0,
+        tolerance=0.5,
+        wrist_flex_seat_offset=3.0,
+    )
+
+    assert min(commands) >= 44.0 - 1e-6, "should not dip below when already rising"

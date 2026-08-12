@@ -85,7 +85,17 @@ def move_to_joint_state(
     max_delta: float,
     tolerance: float | np.ndarray | None,
     log_every: float = 0,
+    loop_callback=None,
+    wrist_flex_seat_offset: float = 0.0,
 ) -> dict:
+    """Move to a joint target, optionally seating wrist-flex from below.
+
+    Wrist-flex has measured directional stiction: it tracks the positive
+    direction to ~0.11 units but stalls ~0.9 units short moving negative. When
+    ``wrist_flex_seat_offset`` is positive and the move would approach the
+    target from above, first drive below the target and come back up so the
+    final approach is in the reliable direction. No current or PID change.
+    """
     if timeout <= 0 or hz <= 0:
         raise ValueError("timeout and hz must be positive.")
     if ramp_seconds < 0:
@@ -109,6 +119,28 @@ def move_to_joint_state(
             raise ValueError(f"tolerance must be positive and finite with shape {target.shape}")
 
     initial_state = read_joint_vector(robot)
+    wrist_index = JOINT_NAMES.index("wrist_flex")
+    if (
+        wrist_flex_seat_offset > 0
+        and initial_state[wrist_index] > target[wrist_index]
+    ):
+        # Approaching from above would end on a negative move, where the joint
+        # sticks. Seat below the target first, then let the main ramp come up.
+        seat_target = target.copy()
+        seat_target[wrist_index] = target[wrist_index] - wrist_flex_seat_offset
+        move_to_joint_state(
+            robot,
+            target=seat_target,
+            timeout=timeout,
+            ramp_seconds=ramp_seconds,
+            hz=hz,
+            max_delta=max_delta,
+            tolerance=None,
+            log_every=log_every,
+            loop_callback=loop_callback,
+            wrist_flex_seat_offset=0.0,
+        )
+        initial_state = read_joint_vector(robot)
     command = initial_state.copy()
     total_steps = max(1, int(np.ceil(timeout * hz)))
     ramp_steps = max(1, int(np.ceil(ramp_seconds * hz)))
@@ -121,6 +153,8 @@ def move_to_joint_state(
         loop_start = time.perf_counter()
         live_state = read_joint_vector(robot)
         error = target - live_state
+        if loop_callback is not None:
+            loop_callback()
         if tolerance_array is not None and np.all(np.abs(error) <= tolerance_array):
             return _move_result(live_state, error, tolerance_array, reached=True)
 

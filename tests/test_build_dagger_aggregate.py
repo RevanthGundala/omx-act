@@ -99,3 +99,102 @@ def test_build_plans_excludes_embedded_seed_copies_and_keeps_all_genuine_correct
     assert ("correction", 63) in labels
     assert sum(1 for label, _ in labels if label == "seed") == 1
     assert sum(1 for label, _ in labels if label == "correction") == 3
+
+
+def test_build_plans_can_trim_seed_idle_edges():
+    seed_rows = []
+    for frame_index, value in enumerate([0, 0, 0, 0, 1, 2, 2, 2, 2]):
+        seed_rows.append(
+            _make_frame(
+                0,
+                frame_index,
+                frame_index,
+                False,
+                action_val=value,
+            )
+        )
+    seed_df = pd.DataFrame(seed_rows)
+    corrections_df = pd.DataFrame(
+        [
+            _make_frame(0, frame, 100 + frame, True, action_val=frame)
+            for frame in range(5)
+        ]
+    )
+
+    plans, trim_report = build_plans(
+        seed_df,
+        corrections_df,
+        noop_threshold_deg=0.1,
+        noop_margin_frames=1,
+        trim_seed_idle_edges=True,
+    )
+
+    seed_plan = next(plan for plan in plans if plan.source_label == "seed")
+    assert (seed_plan.start, seed_plan.stop) == (2, 7)
+    assert seed_plan.global_indices.tolist() == [2, 3, 4, 5, 6]
+    assert trim_report[0] == {
+        "source": "seed",
+        "episode": 0,
+        "frames": 9,
+        "trim_lead": 2,
+        "trim_trail": 2,
+        "kept": 5,
+    }
+
+
+def test_build_plans_can_select_seed_episode_subset():
+    seed_df = pd.DataFrame(
+        [
+            _make_frame(episode, frame, episode * 10 + frame, False)
+            for episode in range(3)
+            for frame in range(2)
+        ]
+    )
+    corrections_df = pd.DataFrame(
+        [_make_frame(0, frame, 100 + frame, True, action_val=frame) for frame in range(2)]
+    )
+
+    plans, _ = build_plans(
+        seed_df,
+        corrections_df,
+        noop_threshold_deg=0.1,
+        noop_margin_frames=0,
+        seed_episodes={0, 2},
+    )
+
+    assert [
+        plan.source_episode_index
+        for plan in plans
+        if plan.source_label == "seed"
+    ] == [0, 2]
+
+
+def test_action_range_tolerance_is_explicit_and_defaults_tight():
+    """Genuine DAgger corrections reach past the seed envelope; widening the
+    guard must be a deliberate, recorded choice rather than a silent default."""
+    from data.build_dagger_aggregate import parse_args
+    import sys
+
+    argv = ["prog", "--output-dir", "/tmp/x"]
+    sys.argv = argv
+    assert parse_args().action_range_tolerance == 1.0
+
+    sys.argv = argv + ["--action-range-tolerance", "12"]
+    assert parse_args().action_range_tolerance == 12.0
+
+
+def test_guard_still_rejects_corruption_scale_overshoot():
+    import numpy as np
+    import pytest
+    from data.dagger_aggregate import validate_action_maxima_within_seed
+
+    seed = np.array([[10.0, 10.0]])
+    # Within a widened tolerance: allowed.
+    validate_action_maxima_within_seed(
+        seed, np.array([[18.0, 10.0]]), tolerance_deg=12.0
+    )
+    # Far beyond it: still rejected.
+    with pytest.raises(AssertionError):
+        validate_action_maxima_within_seed(
+            seed, np.array([[40.0, 10.0]]), tolerance_deg=12.0
+        )

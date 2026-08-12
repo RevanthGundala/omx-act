@@ -1192,3 +1192,9 @@ rl ablations
 intiialize weights from the pretrained policy
 do uncond == negative
 adaln vs exztra token
+
+- middle left 
+\ middle left
+/ middle-bottom
+| middle rightß
+\ bottom right

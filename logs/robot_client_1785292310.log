@@ -1,0 +1,157 @@
+DEBUG 2026-07-28 19:31:50 ort_utils.py:65 Detected datasets version: 4.8.5
+DEBUG 2026-07-28 19:31:50 ort_utils.py:65 Detected av version: 15.1.0
+DEBUG 2026-07-28 19:31:50 ts/config.py:54 PyTorch version 2.11.0 available.
+INFO 2026-07-28 19:31:50 gs/video.py:166 Using video codec: libsvtav1
+DEBUG 2026-07-28 19:31:50 IL/Image.py:421 Importing PngImagePlugin
+DEBUG 2026-07-28 19:31:50 IL/Image.py:421 Importing PngImagePlugin
+DEBUG 2026-07-28 19:31:50 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:50 gePlugin.py:204 STREAM b'IDAT' 41 26
+DEBUG 2026-07-28 19:31:50 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:50 gePlugin.py:204 STREAM b'IDAT' 41 26
+DEBUG 2026-07-28 19:31:50 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:50 gePlugin.py:204 STREAM b'IDAT' 41 52
+DEBUG 2026-07-28 19:31:50 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:50 gePlugin.py:204 STREAM b'IDAT' 41 52
+DEBUG 2026-07-28 19:31:50 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:50 gePlugin.py:204 STREAM b'IDAT' 41 52
+DEBUG 2026-07-28 19:31:50 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:50 gePlugin.py:204 STREAM b'IDAT' 41 52
+DEBUG 2026-07-28 19:31:50 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:50 gePlugin.py:204 STREAM b'IDAT' 41 26
+DEBUG 2026-07-28 19:31:50 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:50 gePlugin.py:204 STREAM b'IDAT' 41 26
+DEBUG 2026-07-28 19:31:50 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:50 gePlugin.py:204 STREAM b'IDAT' 41 52
+DEBUG 2026-07-28 19:31:50 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:50 gePlugin.py:204 STREAM b'IDAT' 41 52
+DEBUG 2026-07-28 19:31:50 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:50 gePlugin.py:204 STREAM b'IDAT' 41 52
+DEBUG 2026-07-28 19:31:50 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:50 gePlugin.py:204 STREAM b'IDAT' 41 52
+DEBUG 2026-07-28 19:31:51 ock/_api.py:536 Attempting to acquire lock 5138817648 on /Users/revanthgundala/.cache/huggingface/datasets/_Users_revanthgundala_.cache_huggingface_datasets_parquet_default-7f85f22f9bb71139_0.0.0_ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.lock
+DEBUG 2026-07-28 19:31:51 ock/_api.py:539 Lock 5138817648 acquired on /Users/revanthgundala/.cache/huggingface/datasets/_Users_revanthgundala_.cache_huggingface_datasets_parquet_default-7f85f22f9bb71139_0.0.0_ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.lock
+DEBUG 2026-07-28 19:31:51 ock/_api.py:568 Attempting to release lock 5138817648 on /Users/revanthgundala/.cache/huggingface/datasets/_Users_revanthgundala_.cache_huggingface_datasets_parquet_default-7f85f22f9bb71139_0.0.0_ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.lock
+DEBUG 2026-07-28 19:31:51 ock/_api.py:572 Lock 5138817648 released on /Users/revanthgundala/.cache/huggingface/datasets/_Users_revanthgundala_.cache_huggingface_datasets_parquet_default-7f85f22f9bb71139_0.0.0_ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.lock
+DEBUG 2026-07-28 19:31:51 ock/_api.py:536 Attempting to acquire lock 5236675584 on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-7f85f22f9bb71139/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb_builder.lock
+DEBUG 2026-07-28 19:31:51 ock/_api.py:539 Lock 5236675584 acquired on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-7f85f22f9bb71139/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb_builder.lock
+DEBUG 2026-07-28 19:31:51 ns/local.py:383 open file: /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-7f85f22f9bb71139/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.incomplete/parquet-train-00000-00000-of-NNNNN.arrow
+DEBUG 2026-07-28 19:31:51 ock/_api.py:536 Attempting to acquire lock 4648948976 on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-7f85f22f9bb71139/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.incomplete_info.lock
+DEBUG 2026-07-28 19:31:51 ock/_api.py:539 Lock 4648948976 acquired on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-7f85f22f9bb71139/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.incomplete_info.lock
+DEBUG 2026-07-28 19:31:51 ns/local.py:383 open file: /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-7f85f22f9bb71139/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.incomplete/dataset_info.json
+DEBUG 2026-07-28 19:31:51 ock/_api.py:568 Attempting to release lock 4648948976 on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-7f85f22f9bb71139/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.incomplete_info.lock
+DEBUG 2026-07-28 19:31:51 ock/_api.py:572 Lock 4648948976 released on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-7f85f22f9bb71139/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.incomplete_info.lock
+DEBUG 2026-07-28 19:31:51 ock/_api.py:568 Attempting to release lock 5236675584 on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-7f85f22f9bb71139/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb_builder.lock
+DEBUG 2026-07-28 19:31:51 ock/_api.py:572 Lock 5236675584 released on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-7f85f22f9bb71139/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb_builder.lock
+DEBUG 2026-07-28 19:31:51 ock/_api.py:536 Attempting to acquire lock 5238735360 on /Users/revanthgundala/.cache/huggingface/datasets/_Users_revanthgundala_.cache_huggingface_datasets_parquet_default-e1285fc55f2bcf86_0.0.0_ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.lock
+DEBUG 2026-07-28 19:31:51 ock/_api.py:539 Lock 5238735360 acquired on /Users/revanthgundala/.cache/huggingface/datasets/_Users_revanthgundala_.cache_huggingface_datasets_parquet_default-e1285fc55f2bcf86_0.0.0_ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.lock
+DEBUG 2026-07-28 19:31:51 ock/_api.py:568 Attempting to release lock 5238735360 on /Users/revanthgundala/.cache/huggingface/datasets/_Users_revanthgundala_.cache_huggingface_datasets_parquet_default-e1285fc55f2bcf86_0.0.0_ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.lock
+DEBUG 2026-07-28 19:31:51 ock/_api.py:572 Lock 5238735360 released on /Users/revanthgundala/.cache/huggingface/datasets/_Users_revanthgundala_.cache_huggingface_datasets_parquet_default-e1285fc55f2bcf86_0.0.0_ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.lock
+DEBUG 2026-07-28 19:31:51 ock/_api.py:536 Attempting to acquire lock 5245540864 on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-e1285fc55f2bcf86/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb_builder.lock
+DEBUG 2026-07-28 19:31:51 ock/_api.py:539 Lock 5245540864 acquired on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-e1285fc55f2bcf86/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb_builder.lock
+DEBUG 2026-07-28 19:31:51 ns/local.py:383 open file: /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-e1285fc55f2bcf86/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.incomplete/parquet-train-00000-00000-of-NNNNN.arrow
+DEBUG 2026-07-28 19:31:51 ock/_api.py:536 Attempting to acquire lock 5245536640 on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-e1285fc55f2bcf86/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.incomplete_info.lock
+DEBUG 2026-07-28 19:31:51 ock/_api.py:539 Lock 5245536640 acquired on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-e1285fc55f2bcf86/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.incomplete_info.lock
+DEBUG 2026-07-28 19:31:51 ns/local.py:383 open file: /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-e1285fc55f2bcf86/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.incomplete/dataset_info.json
+DEBUG 2026-07-28 19:31:51 ock/_api.py:568 Attempting to release lock 5245536640 on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-e1285fc55f2bcf86/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.incomplete_info.lock
+DEBUG 2026-07-28 19:31:51 ock/_api.py:572 Lock 5245536640 released on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-e1285fc55f2bcf86/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.incomplete_info.lock
+DEBUG 2026-07-28 19:31:51 ock/_api.py:568 Attempting to release lock 5245540864 on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-e1285fc55f2bcf86/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb_builder.lock
+DEBUG 2026-07-28 19:31:51 ock/_api.py:572 Lock 5245540864 released on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-e1285fc55f2bcf86/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb_builder.lock
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IDAT' 41 26
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IDAT' 41 52
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IDAT' 41 26
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IDAT' 41 52
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IDAT' 41 52
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IDAT' 41 52
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IDAT' 41 26
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IDAT' 41 52
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IDAT' 41 26
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IDAT' 41 52
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IDAT' 41 52
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IDAT' 41 52
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IDAT' 41 26
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IDAT' 41 52
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IDAT' 41 26
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IDAT' 41 52
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IDAT' 41 52
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IDAT' 41 52
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IDAT' 41 52
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IDAT' 41 52
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IDAT' 41 52
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IDAT' 41 52
+INFO 2026-07-28 19:31:51 gs/video.py:166 Using video codec: libsvtav1
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IDAT' 41 27
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IDAT' 41 27
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IDAT' 41 53
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IDAT' 41 54
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IDAT' 41 54
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:51 gePlugin.py:204 STREAM b'IDAT' 41 54
+DEBUG 2026-07-28 19:31:55 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:55 gePlugin.py:204 STREAM b'IDAT' 41 27
+DEBUG 2026-07-28 19:31:55 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:55 gePlugin.py:204 STREAM b'IDAT' 41 27
+DEBUG 2026-07-28 19:31:55 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:55 gePlugin.py:204 STREAM b'IDAT' 41 53
+DEBUG 2026-07-28 19:31:55 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:55 gePlugin.py:204 STREAM b'IDAT' 41 54
+DEBUG 2026-07-28 19:31:55 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:55 gePlugin.py:204 STREAM b'IDAT' 41 54
+DEBUG 2026-07-28 19:31:55 gePlugin.py:204 STREAM b'IHDR' 16 13
+DEBUG 2026-07-28 19:31:55 gePlugin.py:204 STREAM b'IDAT' 41 54
+DEBUG 2026-07-28 19:31:59 ock/_api.py:536 Attempting to acquire lock 5245847456 on /Users/revanthgundala/.cache/huggingface/datasets/_Users_revanthgundala_.cache_huggingface_datasets_parquet_default-21632ecfccf1f307_0.0.0_ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.lock
+DEBUG 2026-07-28 19:31:59 ock/_api.py:539 Lock 5245847456 acquired on /Users/revanthgundala/.cache/huggingface/datasets/_Users_revanthgundala_.cache_huggingface_datasets_parquet_default-21632ecfccf1f307_0.0.0_ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.lock
+DEBUG 2026-07-28 19:31:59 ock/_api.py:568 Attempting to release lock 5245847456 on /Users/revanthgundala/.cache/huggingface/datasets/_Users_revanthgundala_.cache_huggingface_datasets_parquet_default-21632ecfccf1f307_0.0.0_ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.lock
+DEBUG 2026-07-28 19:31:59 ock/_api.py:572 Lock 5245847456 released on /Users/revanthgundala/.cache/huggingface/datasets/_Users_revanthgundala_.cache_huggingface_datasets_parquet_default-21632ecfccf1f307_0.0.0_ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.lock
+DEBUG 2026-07-28 19:31:59 ock/_api.py:536 Attempting to acquire lock 5245852448 on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-21632ecfccf1f307/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb_builder.lock
+DEBUG 2026-07-28 19:31:59 ock/_api.py:539 Lock 5245852448 acquired on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-21632ecfccf1f307/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb_builder.lock
+DEBUG 2026-07-28 19:31:59 ns/local.py:383 open file: /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-21632ecfccf1f307/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.incomplete/parquet-train-00000-00000-of-NNNNN.arrow
+DEBUG 2026-07-28 19:31:59 ock/_api.py:536 Attempting to acquire lock 5246500784 on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-21632ecfccf1f307/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.incomplete_info.lock
+DEBUG 2026-07-28 19:31:59 ock/_api.py:539 Lock 5246500784 acquired on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-21632ecfccf1f307/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.incomplete_info.lock
+DEBUG 2026-07-28 19:31:59 ns/local.py:383 open file: /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-21632ecfccf1f307/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.incomplete/dataset_info.json
+DEBUG 2026-07-28 19:31:59 ock/_api.py:568 Attempting to release lock 5246500784 on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-21632ecfccf1f307/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.incomplete_info.lock
+DEBUG 2026-07-28 19:31:59 ock/_api.py:572 Lock 5246500784 released on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-21632ecfccf1f307/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.incomplete_info.lock
+DEBUG 2026-07-28 19:31:59 ock/_api.py:568 Attempting to release lock 5245852448 on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-21632ecfccf1f307/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb_builder.lock
+DEBUG 2026-07-28 19:31:59 ock/_api.py:572 Lock 5245852448 released on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-21632ecfccf1f307/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb_builder.lock
+DEBUG 2026-07-28 19:31:59 ock/_api.py:536 Attempting to acquire lock 5246493824 on /Users/revanthgundala/.cache/huggingface/datasets/_Users_revanthgundala_.cache_huggingface_datasets_parquet_default-bcaceeccf9dffa49_0.0.0_ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.lock
+DEBUG 2026-07-28 19:31:59 ock/_api.py:539 Lock 5246493824 acquired on /Users/revanthgundala/.cache/huggingface/datasets/_Users_revanthgundala_.cache_huggingface_datasets_parquet_default-bcaceeccf9dffa49_0.0.0_ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.lock
+DEBUG 2026-07-28 19:31:59 ock/_api.py:568 Attempting to release lock 5246493824 on /Users/revanthgundala/.cache/huggingface/datasets/_Users_revanthgundala_.cache_huggingface_datasets_parquet_default-bcaceeccf9dffa49_0.0.0_ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.lock
+DEBUG 2026-07-28 19:31:59 ock/_api.py:572 Lock 5246493824 released on /Users/revanthgundala/.cache/huggingface/datasets/_Users_revanthgundala_.cache_huggingface_datasets_parquet_default-bcaceeccf9dffa49_0.0.0_ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.lock
+DEBUG 2026-07-28 19:31:59 ock/_api.py:536 Attempting to acquire lock 5246491520 on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-bcaceeccf9dffa49/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb_builder.lock
+DEBUG 2026-07-28 19:31:59 ock/_api.py:539 Lock 5246491520 acquired on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-bcaceeccf9dffa49/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb_builder.lock
+DEBUG 2026-07-28 19:31:59 ns/local.py:383 open file: /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-bcaceeccf9dffa49/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.incomplete/parquet-train-00000-00000-of-NNNNN.arrow
+DEBUG 2026-07-28 19:31:59 ock/_api.py:536 Attempting to acquire lock 5237160416 on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-bcaceeccf9dffa49/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.incomplete_info.lock
+DEBUG 2026-07-28 19:31:59 ock/_api.py:539 Lock 5237160416 acquired on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-bcaceeccf9dffa49/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.incomplete_info.lock
+DEBUG 2026-07-28 19:31:59 ns/local.py:383 open file: /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-bcaceeccf9dffa49/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.incomplete/dataset_info.json
+DEBUG 2026-07-28 19:31:59 ock/_api.py:568 Attempting to release lock 5237160416 on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-bcaceeccf9dffa49/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.incomplete_info.lock
+DEBUG 2026-07-28 19:31:59 ock/_api.py:572 Lock 5237160416 released on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-bcaceeccf9dffa49/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb.incomplete_info.lock
+DEBUG 2026-07-28 19:31:59 ock/_api.py:568 Attempting to release lock 5246491520 on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-bcaceeccf9dffa49/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb_builder.lock
+DEBUG 2026-07-28 19:31:59 ock/_api.py:572 Lock 5246491520 released on /Users/revanthgundala/.cache/huggingface/datasets/parquet/default-bcaceeccf9dffa49/0.0.0/ec3958b52035e87929642b609b5a781870321434b151a14fbe8fd5a26ff494bb_builder.lock
+DEBUG 2026-07-28 19:31:59 ns/local.py:383 open file: /private/var/folders/nl/qldkk5xd0vd5kw4mg6nsjmg80000gn/T/pytest-of-revanthgundala/pytest-63/test_builds_action_granularity1/dataset/videos/observation.images.top/chunk-000/file-000.mp4
+DEBUG 2026-07-28 19:31:59 ns/local.py:383 open file: /private/var/folders/nl/qldkk5xd0vd5kw4mg6nsjmg80000gn/T/pytest-of-revanthgundala/pytest-63/test_builds_action_granularity1/dataset/videos/observation.images.wrist/chunk-000/file-000.mp4

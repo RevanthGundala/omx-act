@@ -62,6 +62,9 @@ def test_lerobot_async_aggregation_holds_queue_lock_while_iterating():
 
     client = LockedRobotClient.__new__(LockedRobotClient)
     client.action_queue_lock = threading.RLock()
+    client._replan_lock = threading.Lock()
+    client._replan_in_flight = False
+    client._replan_requested_at = 0.0
     client.action_queue = Queue()
     client.action_queue.queue = BlockingDeque(
         [TimedAction(timestamp=0.0, timestep=1, action=torch.tensor([1.0]))]

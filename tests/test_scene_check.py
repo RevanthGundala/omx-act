@@ -1,7 +1,14 @@
+import io
+
 import cv2
 import numpy as np
 
-from models.act.scene_check import check_scene, coverage_from_frames
+from models.act.scene_check import check_scene, coverage_from_frames, print_scene_check
+
+
+class _TTYStringIO(io.StringIO):
+    def isatty(self):
+        return True
 
 
 def _frame(sponge_x: int, bowl_x: int) -> np.ndarray:
@@ -21,3 +28,23 @@ def test_scene_check_uses_supplied_training_frame_coverage():
     assert result["sponge_bucket_count"] == 3
     assert result["bowl_bucket_count"] == 3
     assert result["verdict"].startswith("IN DISTRIBUTION")
+
+
+def test_scene_check_colors_pass_and_failure_verdicts():
+    frame = _frame(50, 350)
+    passing_output = _TTYStringIO()
+    failing_output = _TTYStringIO()
+
+    print_scene_check(
+        frame,
+        coverage=coverage_from_frames([frame, frame, frame]),
+        output=passing_output,
+    )
+    print_scene_check(
+        frame,
+        coverage=coverage_from_frames([_frame(350, 30)]),
+        output=failing_output,
+    )
+
+    assert "\033[1;32mIN DISTRIBUTION" in passing_output.getvalue()
+    assert "\033[1;31mOUT OF DISTRIBUTION" in failing_output.getvalue()

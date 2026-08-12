@@ -18,9 +18,13 @@ from __future__ import annotations
 
 from collections import Counter
 from pathlib import Path
+import sys
+from typing import TextIO
 
 import cv2
 import numpy as np
+
+from models.act.terminal_colors import colorize_status
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 COVERAGE_JSON = REPO_ROOT / "outputs/dataset_audits/011_position_detections.json"
@@ -167,8 +171,10 @@ def print_scene_check(
     label: str = "eval",
     *,
     coverage: tuple[Counter, Counter, int] | None = None,
+    output: TextIO | None = None,
 ) -> dict:
     """Convenience wrapper: run check_scene and print a one-line summary. Returns the full result."""
+    output = sys.stdout if output is None else output
     result = check_scene(image_rgb, coverage=coverage)
     sx = result["sponge_xy_norm"]
     bx = result["bowl_xy_norm"]
@@ -178,8 +184,23 @@ def print_scene_check(
     # Printed as a boxed, all-caps banner (not just a plain log line) specifically because a
     # single easy-to-miss line got scrolled past by console noise in practice -- this check only
     # matters if it's actually seen before the rollout starts.
-    print(banner, flush=True)
-    print(f"[{label}] SCENE CHECK -- sponge_xy={sx_s} bowl_xy={bx_s}", flush=True)
-    print(f"[{label}] {result['verdict'].upper()}", flush=True)
-    print(banner, flush=True)
+    verdict = result["verdict"].upper()
+    if verdict.startswith("IN DISTRIBUTION"):
+        color = "green"
+    elif verdict.startswith(("OUT OF DISTRIBUTION", "COULD NOT DETECT")):
+        color = "red"
+    else:
+        color = "yellow"
+    print(banner, file=output, flush=True)
+    print(
+        f"[{label}] SCENE CHECK -- sponge_xy={sx_s} bowl_xy={bx_s}",
+        file=output,
+        flush=True,
+    )
+    print(
+        f"[{label}] {colorize_status(verdict, color, output)}",
+        file=output,
+        flush=True,
+    )
+    print(banner, file=output, flush=True)
     return result

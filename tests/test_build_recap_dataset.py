@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from models.act.rollout_capture import RolloutVideoRecorder
+import models.recap.build_dataset as build_dataset_module
 from models.recap.build_dataset import (
     build_dataset,
     discover_trial_dirs,
@@ -182,3 +183,51 @@ def test_builds_action_granularity_lerobot_dataset(tmp_path, use_videos):
     assert reread[2]["terminal"].item() is True
     assert reread[2]["success"].item() is False
     assert (output_root / "recap_manifest.json").is_file()
+
+
+def test_load_trial_defers_video_decode_by_default(tmp_path):
+    trial = _make_trial(tmp_path, outcome="success")
+
+    lazy = load_trial(trial)
+    assert lazy.frames is None
+
+    eager = load_trial(trial, decode_frames=True)
+    assert eager.frames is not None
+    assert set(eager.frames) == set(CAMERA_NAMES)
+
+
+def test_build_decodes_one_trial_at_a_time(tmp_path, monkeypatch):
+    _make_trial(tmp_path / "a", outcome="success")
+    _make_trial(tmp_path / "b", outcome="failure")
+    trials = [load_trial(path) for path in discover_trial_dirs([tmp_path])]
+    assert all(trial.frames is None for trial in trials)
+
+    live_decodes = []
+    peak = 0
+
+    real_decode = build_dataset_module.decode_trial_frames
+
+    def counting_decode(trial):
+        nonlocal peak
+        decoded = real_decode(trial)
+        live_decodes.append(trial.root)
+        peak = max(peak, len(live_decodes))
+        return decoded
+
+    def counting_save(self):
+        live_decodes.clear()
+        return original_save(self)
+
+    original_save = LeRobotDataset.save_episode
+    monkeypatch.setattr(build_dataset_module, "decode_trial_frames", counting_decode)
+    monkeypatch.setattr(LeRobotDataset, "save_episode", counting_save)
+
+    build_dataset(
+        trials=trials,
+        target_repo="owner/rollout_recap_stream_test",
+        output_root=tmp_path / "dataset",
+        failure_penalty=None,
+        use_videos=True,
+    )
+
+    assert peak == 1

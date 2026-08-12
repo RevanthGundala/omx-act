@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
+import select
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import TextIO
 
@@ -12,6 +13,21 @@ import cv2
 import numpy as np
 
 VALID_OUTCOMES = frozenset({"success", "failure"})
+
+
+def readline_with_idle_callback(
+    stream: TextIO,
+    idle_callback: Callable[[], None] | None,
+    *,
+    poll_interval: float = 1 / 30,
+) -> str:
+    if idle_callback is None:
+        return stream.readline()
+    while True:
+        idle_callback()
+        readable, _, _ = select.select([stream], [], [], poll_interval)
+        if readable:
+            return stream.readline()
 
 
 class RolloutVideoRecorder:
@@ -187,6 +203,7 @@ def prompt_for_outcome(
     *,
     stream: TextIO = sys.stdin,
     output: TextIO = sys.stdout,
+    idle_callback: Callable[[], None] | None = None,
 ) -> str | None:
     """Prompt an interactive operator for a binary rollout outcome."""
     if not stream.isatty():
@@ -204,7 +221,7 @@ def prompt_for_outcome(
             end="",
             flush=True,
         )
-        response = stream.readline()
+        response = readline_with_idle_callback(stream, idle_callback)
         if response == "":
             return None
         normalized = response.strip().lower()

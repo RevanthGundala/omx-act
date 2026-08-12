@@ -5,6 +5,8 @@ from itertools import combinations
 import json
 import math
 from pathlib import Path
+import sys
+from typing import TextIO
 
 import cv2
 import numpy as np
@@ -15,12 +17,13 @@ from models.act.scene_check import (
     WHITE_RANGE,
     coverage_from_frames,
 )
+from models.act.terminal_colors import colorize_status
 
 
 @dataclass(frozen=True)
 class CameraTransform:
-    dx_px: float
-    dy_px: float
+    center_dx_px: float
+    center_dy_px: float
     rotation_deg: float
     scale: float
     inliers: int
@@ -222,9 +225,12 @@ def estimate_camera_transform(
     a, b = float(matrix[0, 0]), float(matrix[1, 0])
     scale = math.sqrt(a * a + b * b)
     rotation_deg = math.degrees(math.atan2(b, a))
+    height, width = reference_rgb.shape[:2]
+    center = np.array([width / 2.0, height / 2.0, 1.0])
+    mapped_center = matrix @ center
     return CameraTransform(
-        dx_px=float(matrix[0, 2]),
-        dy_px=float(matrix[1, 2]),
+        center_dx_px=float(mapped_center[0] - center[0]),
+        center_dy_px=float(mapped_center[1] - center[1]),
         rotation_deg=rotation_deg,
         scale=scale,
         inliers=inliers,
@@ -263,12 +269,12 @@ class CameraAlignmentChecker:
         ]
         baseline = [estimate for estimate in baseline if estimate is not None]
         thresholds = {
-            "dx_px": _percentile_limit(
-                [abs(estimate.dx_px) for estimate in baseline],
+            "center_dx_px": _percentile_limit(
+                [abs(estimate.center_dx_px) for estimate in baseline],
                 4.0,
             ),
-            "dy_px": _percentile_limit(
-                [abs(estimate.dy_px) for estimate in baseline],
+            "center_dy_px": _percentile_limit(
+                [abs(estimate.center_dy_px) for estimate in baseline],
                 4.0,
             ),
             "rotation_deg": _percentile_limit(
@@ -326,8 +332,12 @@ class CameraAlignmentChecker:
         estimates.sort(key=lambda estimate: estimate.inliers, reverse=True)
         selected = estimates[: min(5, len(estimates))]
         result = {
-            "dx_px": float(np.median([estimate.dx_px for estimate in selected])),
-            "dy_px": float(np.median([estimate.dy_px for estimate in selected])),
+            "center_dx_px": float(
+                np.median([estimate.center_dx_px for estimate in selected])
+            ),
+            "center_dy_px": float(
+                np.median([estimate.center_dy_px for estimate in selected])
+            ),
             "rotation_deg": float(
                 np.median([estimate.rotation_deg for estimate in selected])
             ),
@@ -337,8 +347,8 @@ class CameraAlignmentChecker:
             "total_references": len(self.reference_frames),
         }
         within_training_view = (
-            abs(result["dx_px"]) <= self.thresholds["dx_px"]
-            and abs(result["dy_px"]) <= self.thresholds["dy_px"]
+            abs(result["center_dx_px"]) <= self.thresholds["center_dx_px"]
+            and abs(result["center_dy_px"]) <= self.thresholds["center_dy_px"]
             and abs(result["rotation_deg"]) <= self.thresholds["rotation_deg"]
             and abs(result["scale"] - 1.0) <= self.thresholds["scale_delta"]
         )
@@ -400,12 +410,50 @@ def _select_evenly(frames, maximum: int):
     return tuple(frames[index] for index in selected)
 
 
+def _camera_view_diagnosis(result: dict, thresholds: dict[str, float]) -> str:
+    mismatches = []
+    center_dx = result["center_dx_px"]
+    center_dy = result["center_dy_px"]
+    rotation = result["rotation_deg"]
+    scale = result["scale"]
+
+    if abs(center_dx) > thresholds["center_dx_px"]:
+        direction = "right" if center_dx > 0 else "left"
+        mismatches.append(
+            f"background center is shifted {direction} {abs(center_dx):.1f}px "
+            f"(limit {thresholds['center_dx_px']:.1f}px)"
+        )
+    if abs(center_dy) > thresholds["center_dy_px"]:
+        direction = "down" if center_dy > 0 else "up"
+        mismatches.append(
+            f"background center is shifted {direction} {abs(center_dy):.1f}px "
+            f"(limit {thresholds['center_dy_px']:.1f}px)"
+        )
+    if abs(rotation) > thresholds["rotation_deg"]:
+        mismatches.append(
+            f"camera roll is {rotation:+.2f}deg relative to training "
+            f"(limit +/-{thresholds['rotation_deg']:.2f}deg)"
+        )
+    if abs(scale - 1.0) > thresholds["scale_delta"]:
+        mismatches.append(
+            f"view scale is {scale:.3f} "
+            f"(allowed {1.0 - thresholds['scale_delta']:.3f}.."
+            f"{1.0 + thresholds['scale_delta']:.3f})"
+        )
+
+    if not mismatches:
+        return "View center, camera roll, and scale match the training starts."
+    return "Likely mismatch: " + "; ".join(mismatches) + "."
+
+
 def print_camera_view_check(
     checker: CameraAlignmentChecker,
     image_rgb: np.ndarray,
     *,
     label: str,
+    output: TextIO | None = None,
 ) -> dict:
+    output = sys.stdout if output is None else output
     result = checker.check(image_rgb)
     if result["status"] == "low_confidence":
         details = (
@@ -414,13 +462,19 @@ def print_camera_view_check(
     else:
         details = (
             f"refs={result['matched_references']}/{result['total_references']} "
-            f"inliers_med={result['inliers']} dx={result['dx_px']:+.1f}px "
-            f"dy={result['dy_px']:+.1f}px rot={result['rotation_deg']:+.2f}deg "
-            f"scale={result['scale']:.3f}"
+            f"inliers_med={result['inliers']} "
+            f"center_shift=({result['center_dx_px']:+.1f},"
+            f"{result['center_dy_px']:+.1f})px "
+            f"roll={result['rotation_deg']:+.2f}deg scale={result['scale']:.3f}"
         )
+        diagnosis = _camera_view_diagnosis(result, checker.thresholds)
     banner = "=" * 78
-    print(banner, flush=True)
-    print(f"[{label}] {result['verdict']}", flush=True)
-    print(f"[{label}] {details}", flush=True)
-    print(banner, flush=True)
+    color = "green" if result["status"] == "pass" else "yellow"
+    verdict = colorize_status(result["verdict"], color, output)
+    print(banner, file=output, flush=True)
+    print(f"[{label}] {verdict}", file=output, flush=True)
+    if result["status"] != "low_confidence":
+        print(f"[{label}] {diagnosis}", file=output, flush=True)
+    print(f"[{label}] {details}", file=output, flush=True)
+    print(banner, file=output, flush=True)
     return result

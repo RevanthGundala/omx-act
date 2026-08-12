@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 import torch
 from lerobot.async_inference.helpers import TimedAction
+from lerobot.async_inference.robot_client import RobotClient
 
 from models.act.eval_async import (
     LockedRobotClient,
@@ -19,7 +20,9 @@ from models.act.eval_async import (
     resolve_dataset_start_pose,
     run_trial_sequence,
     should_park_after_trial,
+    should_prompt_for_outcome,
     trial_stop_instructions,
+    wait_with_idle_callback,
 )
 
 
@@ -38,6 +41,9 @@ class _FakeStub:
 def _client_with_trial_state() -> LockedRobotClient:
     client = LockedRobotClient.__new__(LockedRobotClient)
     client.action_queue_lock = threading.RLock()
+    client._replan_lock = threading.Lock()
+    client._replan_in_flight = False
+    client._replan_requested_at = 0.0
     client.action_queue = Queue()
     client.action_queue.put(
         TimedAction(timestamp=0.0, timestep=7, action=torch.zeros(2))
@@ -53,6 +59,8 @@ def _client_with_trial_state() -> LockedRobotClient:
 
 def test_prepare_trial_resets_async_state_without_reloading_policy():
     client = _client_with_trial_state()
+    client._replan_in_flight = True
+    client._replan_requested_at = 123.0
 
     client.prepare_trial()
 
@@ -63,6 +71,48 @@ def test_prepare_trial_resets_async_state_without_reloading_policy():
     assert client.action_chunk_size == -1
     assert client.must_go.is_set()
     assert client.trial_active.is_set()
+    assert client._replan_in_flight is False
+    assert client._replan_requested_at == 0.0
+
+
+def test_locked_client_allows_only_one_replan_request_in_flight(monkeypatch):
+    client = _client_with_trial_state()
+    client.trial_started_at = 0.0
+    client.trial_active.set()
+    monkeypatch.setattr(
+        RobotClient,
+        "_ready_to_send_observation",
+        lambda _self: True,
+    )
+    now = {"value": 10.0}
+    monkeypatch.setattr(
+        "models.act.eval_async.time.monotonic",
+        lambda: now["value"],
+    )
+    aggregate_calls = []
+    monkeypatch.setattr(
+        RobotClient,
+        "_aggregate_action_queues",
+        lambda _self, actions, aggregate_fn=None: aggregate_calls.append(
+            (actions, aggregate_fn)
+        ),
+    )
+
+    assert client._ready_to_send_observation() is True
+    assert client._ready_to_send_observation() is False
+
+    # The server may filter a request without returning an action chunk. Retry
+    # after a short cooldown rather than deadlocking the queue forever.
+    now["value"] += client.REPLAN_RETRY_SECONDS
+    assert client._ready_to_send_observation() is True
+
+    actions = [TimedAction(timestamp=1.0, timestep=7, action=torch.zeros(2))]
+    client._aggregate_action_queues(actions, None)
+
+    assert len(aggregate_calls) == 1
+    assert client._replan_in_flight is False
+    assert client._replan_requested_at == 0.0
+    assert client._ready_to_send_observation() is True
 
 
 def test_control_trial_stops_without_global_shutdown_and_reuses_receiver_barrier():
@@ -171,6 +221,7 @@ def test_top_camera_preview_displays_rgb_and_q_closes_window():
 
     class FakeCV2:
         COLOR_RGB2BGR = object()
+        FONT_HERSHEY_SIMPLEX = object()
 
         def __init__(self):
             self.displayed = []
@@ -179,6 +230,9 @@ def test_top_camera_preview_displays_rgb_and_q_closes_window():
         def cvtColor(self, frame, conversion):
             assert conversion is self.COLOR_RGB2BGR
             return frame[..., ::-1].copy()
+
+        def putText(self, frame, text, *args, **kwargs):
+            return frame
 
         def imshow(self, name, frame):
             self.displayed.append((name, frame))
@@ -200,6 +254,97 @@ def test_top_camera_preview_displays_rgb_and_q_closes_window():
     assert cv2_module.displayed[0][0] == TopCameraPreview.WINDOW_NAME
     assert cv2_module.displayed[0][1].tolist() == [[[3, 2, 1]]]
     assert cv2_module.destroyed == [TopCameraPreview.WINDOW_NAME]
+
+
+def test_preview_shows_wrist_beside_top_in_one_window():
+    """The operator needs the wrist view to judge grasps, not just the top view."""
+    top_rgb = np.zeros((4, 4, 3), dtype=np.uint8)
+    wrist_rgb = np.ones((4, 4, 3), dtype=np.uint8)
+
+    class FakeCamera:
+        def __init__(self, frame):
+            self.frame = frame
+
+        def read_latest(self):
+            return self.frame
+
+    class FakeCV2:
+        COLOR_RGB2BGR = object()
+        FONT_HERSHEY_SIMPLEX = object()
+
+        def __init__(self):
+            self.displayed = []
+            self.labels = []
+
+        def cvtColor(self, frame, conversion):
+            return frame.copy()
+
+        def putText(self, frame, text, *args, **kwargs):
+            self.labels.append(text)
+            return frame
+
+        def resize(self, frame, size):
+            return frame
+
+        def imshow(self, name, frame):
+            self.displayed.append((name, frame))
+
+        def waitKey(self, _delay):
+            return 255
+
+        def destroyWindow(self, name):
+            pass
+
+    cv2_module = FakeCV2()
+    preview = TopCameraPreview(
+        FakeCamera(top_rgb),
+        cv2_module=cv2_module,
+        extra_cameras={"wrist": FakeCamera(wrist_rgb)},
+    )
+
+    preview.update()
+
+    shown = cv2_module.displayed[0][1]
+    assert cv2_module.labels == ["top", "wrist"]
+    # Both feeds are stacked horizontally into a single window.
+    assert shown.shape == (4, 8, 3)
+
+
+def test_preview_still_works_with_top_camera_only():
+    top_rgb = np.zeros((4, 4, 3), dtype=np.uint8)
+
+    class FakeCamera:
+        def read_latest(self):
+            return top_rgb
+
+    class FakeCV2:
+        COLOR_RGB2BGR = object()
+        FONT_HERSHEY_SIMPLEX = object()
+
+        def __init__(self):
+            self.displayed = []
+
+        def cvtColor(self, frame, conversion):
+            return frame.copy()
+
+        def putText(self, frame, text, *args, **kwargs):
+            return frame
+
+        def imshow(self, name, frame):
+            self.displayed.append(frame)
+
+        def waitKey(self, _delay):
+            return 255
+
+        def destroyWindow(self, name):
+            pass
+
+    cv2_module = FakeCV2()
+    preview = TopCameraPreview(FakeCamera(), cv2_module=cv2_module)
+
+    preview.update()
+
+    assert cv2_module.displayed[0].shape == (4, 4, 3)
 
 
 def test_locked_client_forwards_policy_observations_to_capture_callback(monkeypatch):
@@ -345,6 +490,21 @@ def test_trial_start_prompt_does_not_crash_without_interactive_stdin():
     assert not prompted
 
 
+def test_idle_wait_refreshes_preview():
+    now = {"value": 0.0}
+    updates = []
+
+    wait_with_idle_callback(
+        0.1,
+        lambda: updates.append(now["value"]),
+        fps=20,
+        clock=lambda: now["value"],
+        sleep=lambda duration: now.update(value=now["value"] + duration),
+    )
+
+    assert updates == pytest.approx([0.0, 0.05, 0.1])
+
+
 def test_new_trial_rejects_entire_chunk_from_prior_observation():
     client = _client_with_trial_state()
     client.trial_active.set()
@@ -459,6 +619,13 @@ def test_watchdog_shutdown_never_triggers_automatic_parking():
     assert should_park_after_trial("operator")
     assert should_park_after_trial("duration")
     assert not should_park_after_trial("shutdown")
+
+
+def test_ctrl_c_never_prompts_for_rollout_outcome():
+    assert should_prompt_for_outcome("operator", action_count=1)
+    assert should_prompt_for_outcome("duration", action_count=1)
+    assert not should_prompt_for_outcome("keyboard_interrupt", action_count=1)
+    assert not should_prompt_for_outcome("operator", action_count=0)
 
 
 def test_dataset_start_pose_uses_seed_dataset_override(tmp_path):

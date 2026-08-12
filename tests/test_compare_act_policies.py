@@ -40,6 +40,17 @@ def test_pose_errors_are_zero_for_identical_actions():
     assert np.array_equal(orientation_error, np.zeros(2))
 
 
+def test_pose_errors_convert_normalized_omx_units_to_degrees():
+    zero = np.zeros((1, 6), dtype=np.float32)
+    quarter_turn = zero.copy()
+    quarter_turn[0, 0] = 50.0
+
+    position_error, orientation_error = pose_errors(quarter_turn, zero)
+
+    assert position_error[0] > 300
+    assert orientation_error[0] == pytest.approx(90.0)
+
+
 def test_episode_start_pairs_skip_missing_and_cross_episode_next_frames():
     class FakeDataset:
         hf_dataset = [
