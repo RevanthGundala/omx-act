@@ -25,6 +25,11 @@ echo "policy=$POLICY"
 echo "advantage=$ADVANTAGE  trials=$TRIALS"
 echo
 
+# --max-joint-delta 40.0 matches every recorded base ACT eval rollout. The CLI
+# default is 2.0, which would clamp this policy 20x tighter than the baseline
+# was evaluated under and make the comparison meaningless. Everything else below
+# is already the shared default: actions_per_chunk=30, chunk_size_threshold=0.4,
+# action_smoothing=0.7, aggregate_fn=conservative, fps=30.
 PYTHONPATH=. uv run python -m models.act.eval_async \
   --policy-path "$POLICY" \
   --policy-type custom_act \
@@ -32,6 +37,7 @@ PYTHONPATH=. uv run python -m models.act.eval_async \
   --task "$TASK" \
   --trials "$TRIALS" \
   --actions-per-chunk 30 \
+  --max-joint-delta 40.0 \
   --policy-device mps \
   --record-rollout \
   --rollout-output-root "outputs/eval_rollouts_recap_${ADVANTAGE}"
