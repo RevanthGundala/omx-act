@@ -47,6 +47,7 @@ for i in $(seq 1 "$EPISODES"); do
 echo "--- episode $i / $EPISODES ---"
 uv run python evaluation/collect_recap_act.py \
   --policy-path "$POLICY" \
+  --policy-code-root "$ACT_SIM" \
   --dataset-repo-id "$REPO_ID" \
   --dataset-root "$DATASET_ROOT" \
   --task "$TASK" \
