@@ -982,11 +982,13 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--start-state-wrist-flex",
         type=float,
-        default=46.0,
+        default=None,
         help=(
             "Override only the demonstrated wrist-flex start target. The value "
-            "must remain within the selected dataset's episode-start range "
-            "(default: 46)."
+            "must remain within the selected dataset's episode-start range. "
+            "Defaults to the dataset's own start pose, which is always in "
+            "range; a fixed default silently goes stale when the start-state "
+            "dataset changes."
         ),
     )
     p.add_argument(
