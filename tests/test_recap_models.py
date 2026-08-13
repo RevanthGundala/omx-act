@@ -336,6 +336,7 @@ def _build_recap_dataset(root, repo_id, episodes):
                     ),
                     "terminal": np.array([step == steps - 1], dtype=np.bool_),
                     "success": np.array([success], dtype=np.bool_),
+                    "intervention": np.array([False], dtype=np.bool_),
                     "source.observation_index": np.array([step], dtype=np.int64),
                     "source.observation_frame_index": np.array([step], dtype=np.int64),
                     "source.action_index": np.array([step], dtype=np.int64),
