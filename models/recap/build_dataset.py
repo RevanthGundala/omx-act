@@ -39,6 +39,26 @@ class UnlabeledRolloutError(ValueError):
 
 
 @dataclass(frozen=True)
+class CorrectionEpisode:
+    """One human-teleoperated episode from a LeRobot correction dataset.
+
+    RECAP forces these frames to positive advantage (Sec. IV-B), so they are
+    kept distinct from autonomous rollout steps via the ``intervention`` flag.
+    """
+
+    repo_id: str
+    root: Path
+    episode_index: int
+    start: int
+    stop: int
+    task: str
+
+    @property
+    def steps(self) -> int:
+        return self.stop - self.start
+
+
+@dataclass(frozen=True)
 class RolloutTrial:
     root: Path
     metadata: dict
@@ -132,6 +152,108 @@ def decode_video(path: Path) -> tuple[np.ndarray, ...]:
     if not frames:
         raise ValueError(f"Rollout video contains no frames: {path}")
     return tuple(frames)
+
+
+def load_correction_episodes(
+    repo_id: str,
+    root: Path | None,
+) -> tuple[list[CorrectionEpisode], LeRobotDataset]:
+    """Read episode boundaries from a LeRobot human-correction dataset."""
+    dataset = LeRobotDataset(repo_id, root=root)
+    episodes = []
+    for row in dataset.meta.episodes:
+        tasks = row.get("tasks") or []
+        if not tasks:
+            raise ValueError(
+                f"{repo_id} episode {row['episode_index']} has no task string"
+            )
+        episodes.append(
+            CorrectionEpisode(
+                repo_id=repo_id,
+                root=Path(dataset.root),
+                episode_index=int(row["episode_index"]),
+                start=int(row["dataset_from_index"]),
+                stop=int(row["dataset_to_index"]),
+                task=str(tasks[0]),
+            )
+        )
+    if not episodes:
+        raise ValueError(f"{repo_id} contains no episodes")
+    return episodes, dataset
+
+
+def _image_to_hwc_uint8(image) -> np.ndarray:
+    """Match the rollout path's HWC uint8 frames.
+
+    LeRobotDataset returns CHW float tensors in [0, 1]; the video decoder used
+    for autonomous trials returns HWC uint8, and both must agree before they are
+    written into one dataset.
+    """
+    array = image.numpy() if hasattr(image, "numpy") else np.asarray(image)
+    if array.ndim != 3:
+        raise ValueError(f"Expected a 3-dimensional image, got {array.shape}")
+    if array.shape[0] == 3 and array.shape[-1] != 3:
+        array = np.transpose(array, (1, 2, 0))
+    if array.dtype != np.uint8:
+        if array.max() <= 1.0:
+            array = array * 255.0
+        array = np.clip(array, 0.0, 255.0).round().astype(np.uint8)
+    return np.ascontiguousarray(array)
+
+
+def read_correction_step(
+    dataset: LeRobotDataset,
+    index: int,
+    camera_names: tuple[str, ...],
+    joint_names: tuple[str, ...],
+) -> tuple[np.ndarray, np.ndarray, dict[str, np.ndarray]]:
+    """Return (qpos, action, frames) for one correction timestep."""
+    sample = dataset[index]
+    qpos = np.asarray(sample["observation.state"], dtype=np.float32).reshape(-1)
+    action = np.asarray(sample["action"], dtype=np.float32).reshape(-1)
+    if qpos.shape[0] != len(joint_names) or action.shape[0] != len(joint_names):
+        raise ValueError(
+            f"Correction frame {index} has {qpos.shape[0]} state and "
+            f"{action.shape[0]} action dimensions; expected {len(joint_names)}"
+        )
+    frames = {
+        camera: _image_to_hwc_uint8(sample[f"observation.images.{camera}"])
+        for camera in camera_names
+    }
+    return qpos, action, frames
+
+
+def validate_correction_schema(
+    dataset: LeRobotDataset,
+    *,
+    camera_names: tuple[str, ...],
+    joint_names: tuple[str, ...],
+    fps: int,
+    frame_shape: tuple[int, int, int],
+) -> None:
+    """Reject correction data that cannot share a schema with the rollouts."""
+    if int(dataset.meta.fps) != int(fps):
+        raise ValueError(
+            f"Correction dataset runs at {dataset.meta.fps} Hz; rollouts use {fps} Hz"
+        )
+    features = dataset.meta.features
+    expected_state = list(joint_names)
+    actual_state = list(features["observation.state"].get("names") or [])
+    if actual_state != expected_state:
+        raise ValueError(
+            f"Correction joint names {actual_state} do not match rollouts {expected_state}"
+        )
+    for camera in camera_names:
+        key = f"observation.images.{camera}"
+        if key not in features:
+            raise ValueError(f"Correction dataset is missing camera {camera!r}")
+    _, _, frames = read_correction_step(dataset, 0, camera_names, joint_names)
+    for camera, frame in frames.items():
+        if tuple(frame.shape) != tuple(frame_shape):
+            raise ValueError(
+                f"Correction camera {camera!r} frame shape {frame.shape} does not "
+                f"match rollout shape {frame_shape}"
+            )
 
 
 def load_trial(trial_dir: Path, *, decode_frames: bool = False) -> RolloutTrial:
@@ -401,6 +523,7 @@ def build_features(
         },
         "terminal": {"dtype": "bool", "shape": (1,), "names": None},
         "success": {"dtype": "bool", "shape": (1,), "names": None},
+        "intervention": {"dtype": "bool", "shape": (1,), "names": None},
         "source.observation_index": {
             "dtype": "int64",
             "shape": (1,),
@@ -433,13 +556,32 @@ def build_dataset(
     output_root: Path,
     failure_penalty: float | None,
     use_videos: bool,
+    corrections: list[CorrectionEpisode] | None = None,
+    correction_dataset: LeRobotDataset | None = None,
+    corrections_succeeded: bool = True,
 ) -> tuple[LeRobotDataset, dict]:
     if not trials:
         raise ValueError("At least one rollout trial is required")
+    corrections = list(corrections or [])
+    if corrections and correction_dataset is None:
+        raise ValueError("correction_dataset is required when corrections are given")
     camera_names, joint_names, fps, frame_shape = validate_compatible_trials(
         trials
     )
-    max_episode_steps = max(len(trial.actions) for trial in trials)
+    if corrections:
+        validate_correction_schema(
+            correction_dataset,
+            camera_names=camera_names,
+            joint_names=joint_names,
+            fps=fps,
+            frame_shape=frame_shape,
+        )
+    # C_fail must clear the longest episode from either source, or a long
+    # correction could outrank a short failure.
+    max_episode_steps = max(
+        [len(trial.actions) for trial in trials]
+        + [episode.steps for episode in corrections]
+    )
     failure_penalty = resolve_failure_penalty(
         max_episode_steps,
         failure_penalty,
@@ -500,6 +642,7 @@ def build_dataset(
                     dtype=np.bool_,
                 ),
                 "success": np.asarray([trial.success], dtype=np.bool_),
+                "intervention": np.asarray([False], dtype=np.bool_),
                 "source.observation_index": np.asarray(
                     [observation["observation_index"]],
                     dtype=np.int64,
@@ -529,6 +672,63 @@ def build_dataset(
                 "steps": len(trial.actions),
                 "initial_return": float(returns_to_go[0]),
                 "terminal_reward": float(rewards[-1]),
+                "intervention": False,
+            }
+        )
+
+    for offset, episode in enumerate(corrections):
+        episode_index = len(trials) + offset
+        rewards, returns_to_go = recap_rewards(
+            episode.steps,
+            success=corrections_succeeded,
+            failure_penalty=failure_penalty,
+        )
+        for step, index in enumerate(range(episode.start, episode.stop)):
+            qpos, executed_action, images = read_correction_step(
+                correction_dataset,
+                index,
+                camera_names,
+                joint_names,
+            )
+            if not np.isfinite(qpos).all() or not np.isfinite(executed_action).all():
+                raise ValueError(
+                    f"Non-finite state/action in correction episode "
+                    f"{episode.episode_index} at step {step}"
+                )
+            frame = {
+                "observation.state": qpos,
+                "action": executed_action,
+                "reward": np.asarray([rewards[step]], dtype=np.float32),
+                "return_to_go": np.asarray(
+                    [returns_to_go[step]],
+                    dtype=np.float32,
+                ),
+                "terminal": np.asarray(
+                    [step == episode.steps - 1],
+                    dtype=np.bool_,
+                ),
+                "success": np.asarray([corrections_succeeded], dtype=np.bool_),
+                # RECAP Sec. IV-B forces human corrections to positive
+                # advantage, so the labeler must be able to find them.
+                "intervention": np.asarray([True], dtype=np.bool_),
+                "source.observation_index": np.asarray([step], dtype=np.int64),
+                "source.observation_frame_index": np.asarray([step], dtype=np.int64),
+                "source.action_index": np.asarray([step], dtype=np.int64),
+                "task": episode.task,
+            }
+            for camera in camera_names:
+                frame[f"observation.images.{camera}"] = images[camera]
+            target.add_frame(frame)
+        target.save_episode()
+        episode_summaries.append(
+            {
+                "episode_index": episode_index,
+                "source_trial": f"{episode.repo_id}#episode_{episode.episode_index}",
+                "outcome_label": "success" if corrections_succeeded else "failure",
+                "steps": episode.steps,
+                "initial_return": float(returns_to_go[0]),
+                "terminal_reward": float(rewards[-1]),
+                "intervention": True,
             }
         )
     target.finalize()
@@ -555,6 +755,15 @@ def build_dataset(
             "the longest rollout to keep all critic targets finite"
         ),
         "return_target": "undiscounted Monte Carlo return_to_go",
+        "correction_repo": (
+            corrections[0].repo_id if corrections else None
+        ),
+        "correction_episodes": len(corrections),
+        "rollout_episodes": len(trials),
+        "correction_advantage": (
+            "intervention=True frames are forced to positive advantage per "
+            "RECAP Sec. IV-B; the critic is not consulted for them"
+        ),
         "max_episode_steps": max_episode_steps,
         "episodes": episode_summaries,
     }
@@ -595,6 +804,30 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--no-videos", action="store_true")
+    parser.add_argument(
+        "--correction-repo",
+        default=None,
+        help=(
+            "LeRobot repo id of human-correction episodes to merge in. Their "
+            "frames are tagged intervention=True and forced to positive "
+            "advantage during RECAP policy training."
+        ),
+    )
+    parser.add_argument(
+        "--correction-root",
+        type=Path,
+        default=None,
+        help="Local root for --correction-repo.",
+    )
+    parser.add_argument(
+        "--corrections-failed",
+        action="store_true",
+        help=(
+            "Label correction episodes as failures. Only use this when the "
+            "operator did not finish the task; RECAP assumes corrections "
+            "complete it."
+        ),
+    )
     parser.add_argument("--push", action="store_true")
     parser.add_argument("--private", action="store_true")
     return parser.parse_args()
@@ -615,12 +848,29 @@ def main() -> None:
         trial_dirs,
         skip_unlabeled=args.skip_unlabeled,
     )
+    corrections: list[CorrectionEpisode] = []
+    correction_dataset = None
+    if args.correction_repo:
+        corrections, correction_dataset = load_correction_episodes(
+            args.correction_repo,
+            args.correction_root,
+        )
+        print(
+            f"Merging {len(corrections)} correction episodes from "
+            f"{args.correction_repo}"
+        )
+    elif args.correction_root:
+        raise ValueError("--correction-root requires --correction-repo")
+
     target, manifest = build_dataset(
         trials=trials,
         target_repo=args.target_repo,
         output_root=output_root,
         failure_penalty=args.failure_penalty,
         use_videos=not args.no_videos,
+        corrections=corrections,
+        correction_dataset=correction_dataset,
+        corrections_succeeded=not args.corrections_failed,
     )
     print(
         f"Built {target.num_episodes} RECAP episodes at {target.root}; "
@@ -632,9 +882,10 @@ def main() -> None:
         root=output_root,
         download_videos=False,
     )
-    if reread.num_episodes != len(trials):
+    expected_episodes = len(trials) + len(corrections)
+    if reread.num_episodes != expected_episodes:
         raise RuntimeError(
-            f"Read-back episode mismatch: {reread.num_episodes} vs {len(trials)}"
+            f"Read-back episode mismatch: {reread.num_episodes} vs {expected_episodes}"
         )
     print(f"Read-back ok: {reread.num_episodes} episodes, {len(reread)} frames")
 

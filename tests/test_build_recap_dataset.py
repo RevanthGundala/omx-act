@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 from lerobot.datasets import LeRobotDataset
 import numpy as np
@@ -19,6 +20,27 @@ from models.recap.build_dataset import (
 
 JOINT_NAMES = ("joint_a.pos", "joint_b.pos")
 CAMERA_NAMES = ("top", "wrist")
+
+
+class _FakeCorrectionDataset:
+    """Minimal stand-in for a LeRobot human-correction dataset."""
+
+    meta = SimpleNamespace(
+        fps=30,
+        features={
+            "observation.state": {"names": list(JOINT_NAMES)},
+            "observation.images.top": {},
+            "observation.images.wrist": {},
+        },
+    )
+
+    def __getitem__(self, index):
+        return {
+            "observation.state": np.array([index, index + 1], dtype=np.float32),
+            "action": np.array([index + 2, index + 3], dtype=np.float32),
+            "observation.images.top": np.full((24, 32, 3), 5, dtype=np.uint8),
+            "observation.images.wrist": np.full((24, 32, 3), 6, dtype=np.uint8),
+        }
 
 
 def _write_jsonl(path: Path, rows: list[dict]) -> None:
@@ -231,3 +253,108 @@ def test_build_decodes_one_trial_at_a_time(tmp_path, monkeypatch):
     )
 
     assert peak == 1
+
+
+def test_image_to_hwc_uint8_matches_video_decoder_layout():
+    import torch
+
+    from models.recap.build_dataset import _image_to_hwc_uint8
+
+    chw_float = torch.zeros(3, 4, 5)
+    chw_float[0] = 1.0
+    converted = _image_to_hwc_uint8(chw_float)
+    assert converted.shape == (4, 5, 3)
+    assert converted.dtype == np.uint8
+    assert converted[0, 0, 0] == 255
+    assert converted[0, 0, 1] == 0
+
+    already_hwc = np.full((4, 5, 3), 7, dtype=np.uint8)
+    assert np.array_equal(_image_to_hwc_uint8(already_hwc), already_hwc)
+
+
+def test_corrections_are_tagged_and_scored_as_successes(tmp_path):
+    _make_trial(tmp_path / "roll", outcome="failure")
+    trials = [load_trial(path) for path in discover_trial_dirs([tmp_path / "roll"])]
+
+    # Stand in for a LeRobot correction dataset with two 2-step episodes.
+    correction_root = tmp_path / "corrections"
+    corrections = [
+        build_dataset_module.CorrectionEpisode(
+            repo_id="owner/rollout_corr",
+            root=correction_root,
+            episode_index=index,
+            start=index * 2,
+            stop=index * 2 + 2,
+            task="Place the sponge on the hot pad",
+        )
+        for index in range(2)
+    ]
+
+    output_root = tmp_path / "dataset"
+    _, manifest = build_dataset(
+        trials=trials,
+        target_repo="owner/rollout_recap_merge_test",
+        output_root=output_root,
+        failure_penalty=None,
+        use_videos=False,
+        corrections=corrections,
+        correction_dataset=_FakeCorrectionDataset(),
+    )
+
+    assert manifest["rollout_episodes"] == 1
+    assert manifest["correction_episodes"] == 2
+
+    reread = LeRobotDataset("owner/rollout_recap_merge_test", root=output_root)
+    assert reread.num_episodes == 3
+
+    rollout_steps = len(trials[0].actions)
+    for index in range(rollout_steps):
+        assert reread[index]["intervention"].item() is False
+    for index in range(rollout_steps, len(reread)):
+        assert reread[index]["intervention"].item() is True
+        assert reread[index]["success"].item() is True
+
+    # A 2-step success ends at 0 and starts one step below it.
+    first_correction = rollout_steps
+    assert reread[first_correction]["return_to_go"].item() == -1.0
+    assert reread[first_correction + 1]["return_to_go"].item() == 0.0
+
+
+def test_failure_penalty_clears_the_longest_correction(tmp_path):
+    _make_trial(tmp_path / "roll", outcome="success", num_actions=3)
+    trials = [load_trial(path) for path in discover_trial_dirs([tmp_path / "roll"])]
+    long_correction = [
+        build_dataset_module.CorrectionEpisode(
+            repo_id="owner/rollout_corr",
+            root=tmp_path,
+            episode_index=0,
+            start=0,
+            stop=9,
+            task="Place the sponge on the hot pad",
+        )
+    ]
+
+    captured = {}
+
+    def capture(max_episode_steps, requested):
+        captured["max_episode_steps"] = max_episode_steps
+        raise RuntimeError("stop after the C_fail decision")
+
+    original = build_dataset_module.resolve_failure_penalty
+    build_dataset_module.resolve_failure_penalty = capture
+    try:
+        with pytest.raises(RuntimeError, match="stop after"):
+            build_dataset(
+                trials=trials,
+                target_repo="owner/rollout_recap_cfail_test",
+                output_root=tmp_path / "unused",
+                failure_penalty=None,
+                use_videos=False,
+                corrections=long_correction,
+                correction_dataset=_FakeCorrectionDataset(),
+            )
+    finally:
+        build_dataset_module.resolve_failure_penalty = original
+
+    # The 9-step correction, not the 3-step rollout, must set the bound.
+    assert captured["max_episode_steps"] == 9

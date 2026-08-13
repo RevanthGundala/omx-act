@@ -76,6 +76,29 @@ def force_no_calibration() -> None:
     OmxFollower.connect = lambda self, calibrate=False: original(self, calibrate=False)
 
 
+def jsonable_scene_check(result: dict | None) -> dict | None:
+    """Convert a scene-check result into JSON-serializable primitives.
+
+    Detections carry numpy scalars and tuples, so the raw dict cannot be written
+    to trial metadata directly.
+    """
+    if result is None:
+        return None
+
+    def convert(value):
+        if isinstance(value, dict):
+            return {str(key): convert(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [convert(item) for item in value]
+        if isinstance(value, np.generic):
+            return value.item()
+        if isinstance(value, (str, bool, int, float)) or value is None:
+            return value
+        return str(value)
+
+    return convert(result)
+
+
 def camera_config(name: str, fourcc: str | None, warmup_s: int) -> OpenCVCameraConfig:
     if name not in CAMERAS:
         raise KeyError(f"camera '{name}' is not configured in utils.config.CAMERAS")
@@ -1246,6 +1269,7 @@ def run_robot_client(
     rollout_session_dir = None
     active_capture = None
     top_camera_preview = None
+    pending_scene_check = None
 
     def start_trial_capture(trial: int):
         nonlocal active_capture, rollout_session_dir
@@ -1275,6 +1299,7 @@ def run_robot_client(
             "writer": writer,
             "started_at": datetime.now(timezone.utc),
             "started_perf": time.perf_counter(),
+            "scene_check": pending_scene_check,
         }
         active_capture = capture
 
@@ -1388,6 +1413,7 @@ def run_robot_client(
             "max_joint_delta": args.max_joint_delta,
             "start_state_wrist_flex": args.start_state_wrist_flex,
             "start_state_wrist_flex_offset": args.start_state_wrist_flex_offset,
+            "scene_check": capture.get("scene_check"),
         }
         metadata_path = writer.output_dir / "metadata.json"
         write_metadata_atomic(metadata_path, metadata)
@@ -1587,7 +1613,8 @@ def run_robot_client(
         )
 
         def before_trial(trial: int) -> None:
-            nonlocal parked
+            nonlocal parked, pending_scene_check
+            pending_scene_check = None
             if wait_for_trial_start:
                 prompt_for_trial_start(
                     trial=trial,
@@ -1610,10 +1637,12 @@ def run_robot_client(
                             flush=True,
                         )
                     else:
-                        print_scene_check(
-                            frame,
-                            label=f"eval_async trial={trial}",
-                            coverage=scene_coverage,
+                        pending_scene_check = jsonable_scene_check(
+                            print_scene_check(
+                                frame,
+                                label=f"eval_async trial={trial}",
+                                coverage=scene_coverage,
+                            )
                         )
                     if camera_view_checker is not None:
                         from models.act.camera_alignment import print_camera_view_check
