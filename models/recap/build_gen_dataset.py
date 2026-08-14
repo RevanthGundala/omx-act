@@ -32,6 +32,9 @@ from models.recap.build_dataset import (
 
 
 def collect_specs(args: argparse.Namespace) -> list:
+    excluded = {
+        Path(path).expanduser().resolve() for path in (args.exclude_trial or [])
+    }
     specs = []
     for root in args.demo_dataset or []:
         # Demonstrations carry no outcome sidecar: they are expert successes by
@@ -41,7 +44,14 @@ def collect_specs(args: argparse.Namespace) -> list:
         )
     for root in args.rollout_root or []:
         for trial_dir in discover_trial_dirs([root]):
+            if trial_dir.resolve() in excluded:
+                continue
             specs.append(_trial_spec(trial_dir))
+    for trial_dir in args.rollout_trial or []:
+        trial_dir = Path(trial_dir).expanduser().resolve()
+        if not (trial_dir / "metadata.json").is_file():
+            raise FileNotFoundError(f"Not a recorded trial directory: {trial_dir}")
+        specs.append(_trial_spec(trial_dir))
     for root in args.correction_dataset or []:
         # A correction episode is labeled by the operator, so a missing sidecar
         # is an error rather than an assumed success.
@@ -50,6 +60,11 @@ def collect_specs(args: argparse.Namespace) -> list:
         )
     if not specs:
         raise ValueError("No episodes were found in any source")
+    seen = set()
+    for spec in specs:
+        if spec.source_id in seen:
+            raise ValueError(f"Episode included twice: {spec.source_id}")
+        seen.add(spec.source_id)
     return specs
 
 
@@ -66,6 +81,25 @@ def parse_args(argv=None) -> argparse.Namespace:
         type=Path,
         action="append",
         help="Directory of recorded autonomous evaluation trials.",
+    )
+    parser.add_argument(
+        "--rollout-trial",
+        type=Path,
+        action="append",
+        help=(
+            "One recorded trial directory to include. Use this to add specific "
+            "episodes, such as failures from an earlier evaluation, without "
+            "pulling in the whole session."
+        ),
+    )
+    parser.add_argument(
+        "--exclude-trial",
+        type=Path,
+        action="append",
+        help=(
+            "Trial directory to drop from a --rollout-root. Lets a set stay at "
+            "a fixed episode budget while its composition changes."
+        ),
     )
     parser.add_argument(
         "--correction-dataset",

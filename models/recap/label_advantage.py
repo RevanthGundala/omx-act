@@ -74,6 +74,7 @@ def task_percentile_thresholds(
     advantages: torch.Tensor,
     task_index: torch.Tensor | None = None,
     positive_fraction: float = ACTConfig.recap_positive_fraction,
+    mask: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """Resolve eps_l per task so that ``positive_fraction`` of it scores POSITIVE.
 
@@ -86,6 +87,11 @@ def task_percentile_thresholds(
     so the quantile is computed within each ``task_index`` group and broadcast
     back over that group's frames.
 
+    ``mask`` selects which frames the quantile is computed over, while the
+    resolved threshold still applies to every frame. Corrections are the reason
+    it exists: they are forced positive afterwards, so including them would let
+    frames whose label is already decided move eps_l for everything else.
+
     Units: Sec. IV-B applies the threshold to the advantage itself,
     ``delta(A(o, a, l) > eps_l)``, and Appendix A fixes it by the fraction of
     data with positive *advantage*, so the quantile is taken over advantages
@@ -95,8 +101,17 @@ def task_percentile_thresholds(
     which already rejects them with a clear message.
     """
     quantile = 1.0 - positive_fraction
+    if mask is not None:
+        if mask.shape != advantages.shape:
+            raise ValueError(
+                f"mask must be aligned per frame, got {tuple(mask.shape)} for "
+                f"{tuple(advantages.shape)} advantages"
+            )
+        if not mask.any():
+            raise ValueError("mask excludes every frame, leaving no advantages to threshold")
     if task_index is None:
-        return torch.full_like(advantages, float(torch.quantile(advantages.double(), quantile)))
+        sample = advantages if mask is None else advantages[mask]
+        return torch.full_like(advantages, float(torch.quantile(sample.double(), quantile)))
     if task_index.shape != advantages.shape:
         raise ValueError(
             f"task_index must be aligned per frame, got {tuple(task_index.shape)} "
@@ -105,7 +120,12 @@ def task_percentile_thresholds(
     thresholds = torch.empty_like(advantages)
     for task in torch.unique(task_index):
         selected = task_index == task
-        thresholds[selected] = float(torch.quantile(advantages[selected].double(), quantile))
+        sample = advantages[selected if mask is None else selected & mask]
+        if sample.numel() == 0:
+            raise ValueError(
+                f"Task {int(task)} has no unmasked frames to compute a threshold from"
+            )
+        thresholds[selected] = float(torch.quantile(sample.double(), quantile))
     return thresholds
 
 
@@ -131,6 +151,14 @@ def episode_layout(dataset: LeRobotDataset) -> dict[str, torch.Tensor]:
         torch.as_tensor(columns["task_index"]).long()
         if "task_index" in columns.column_names
         else torch.zeros(len(dataset), dtype=torch.long)
+    )
+    # Sec. IV-B forces the indicator positive on human corrections, so the
+    # per-frame flag has to travel with the layout. Datasets built before the
+    # column existed are all-policy data, which is the same as no corrections.
+    intervention = (
+        torch.as_tensor(columns["intervention"]).bool().flatten()
+        if "intervention" in columns.column_names
+        else torch.zeros(len(dataset), dtype=torch.bool)
     )
     num_frames = len(dataset)
 
@@ -158,6 +186,7 @@ def episode_layout(dataset: LeRobotDataset) -> dict[str, torch.Tensor]:
         "frame_index": frame_index,
         "episode_end": episode_end,
         "task_index": task_index,
+        "intervention": intervention,
         "rewards": rewards,
         "returns_to_go": returns_to_go,
     }
@@ -222,6 +251,34 @@ def advantage_conditions(
     )
 
 
+def force_corrections_positive(
+    conditions: torch.Tensor,
+    intervention: torch.Tensor,
+) -> torch.Tensor:
+    """Mark every human-correction frame POSITIVE regardless of its advantage.
+
+    Sec. IV-B: "we found it useful to force I_t = True (i.e., positive) for
+    actions provided as human corrections during autonomous rollouts. This
+    choice is reasonable if we assume that human experts always provide good
+    corrective actions."
+
+    The critic scores a correction by the return that follows it, so a rescue
+    that arrives late still trails a long negative run-up and can score below
+    the threshold. Conditioning on that would teach the policy to imitate
+    expert recoveries under the *negative* token.
+    """
+    if intervention.shape != conditions.shape:
+        raise ValueError(
+            f"intervention shape {tuple(intervention.shape)} does not match "
+            f"conditions {tuple(conditions.shape)}"
+        )
+    return torch.where(
+        intervention.bool(),
+        torch.full_like(conditions, int(AdvantageCondition.POSITIVE)),
+        conditions,
+    )
+
+
 def load_critic(checkpoint_path: str | Path, device: torch.device) -> tuple[ACTCritic, float, float]:
     """Rebuild a trained critic along with the value range it was trained on."""
     checkpoint = torch.load(Path(checkpoint_path), map_location=device, weights_only=True)
@@ -267,6 +324,7 @@ def label_dataset(
     threshold: float | None = None,
     batch_size: int = 8,
     num_workers: int = 0,
+    force_corrections: bool = True,
 ) -> dict[str, torch.Tensor]:
     """Label every transition, resolving eps_l from a per-task positive fraction.
 
@@ -281,20 +339,32 @@ def label_dataset(
     )
     # First pass: every advantage. Second pass: the threshold that needs them all.
     advantages = n_step_advantages(layout["returns_to_go"], values, layout["episode_end"], n_step)
+    intervention = layout["intervention"]
     if threshold is None:
         if positive_fraction is None:
             raise ValueError("Provide either a positive_fraction or an absolute threshold")
+        # Corrections are forced positive below, so letting them into the
+        # quantile would move eps_l on frames whose label is already decided.
+        # App. A-F calibrates the fine-tuning threshold on the rollouts, not on
+        # the corrections, so they are held out of the statistic.
         thresholds = task_percentile_thresholds(
-            advantages, layout["task_index"], positive_fraction
+            advantages,
+            layout["task_index"],
+            positive_fraction,
+            mask=~intervention if force_corrections else None,
         )
     else:
         thresholds = torch.full_like(advantages, float(threshold))
+    conditions = advantage_conditions(advantages, thresholds)
+    if force_corrections:
+        conditions = force_corrections_positive(conditions, intervention)
     return {
         "values": values,
         "advantages": advantages,
-        "conditions": advantage_conditions(advantages, thresholds),
+        "conditions": conditions,
         "thresholds": thresholds,
         "task_index": layout["task_index"],
+        "intervention": intervention,
     }
 
 
@@ -318,6 +388,9 @@ def main():
     )
     absolute = os.environ.get("RECAP_ADVANTAGE_THRESHOLD")
     threshold = float(absolute) if absolute is not None else None
+    force_corrections = os.environ.get(
+        "RECAP_ADVANTAGE_FORCE_CORRECTIONS", "1"
+    ).lower() not in ("0", "false", "no")
     device_name = os.environ.get("RECAP_DEVICE")
     if device_name is None:
         device_name = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
@@ -336,12 +409,30 @@ def main():
         threshold=threshold,
         batch_size=cfg.batch_size,
         num_workers=cfg.num_workers,
+        force_corrections=force_corrections,
     )
 
     conditions = labels["conditions"]
     counts = {
         condition.name: int((conditions == int(condition)).sum()) for condition in AdvantageCondition
     }
+    intervention = labels["intervention"]
+    positive = conditions == int(AdvantageCondition.POSITIVE)
+    # Report the two populations separately: corrections are positive by rule,
+    # so pooling them would hide whether the threshold actually landed near the
+    # requested fraction on the data it was calibrated against.
+    autonomous_positive = (
+        float(positive[~intervention].float().mean()) if (~intervention).any() else 0.0
+    )
+    forced = int((intervention & positive).sum())
+    print(
+        f"corrections forced positive: {force_corrections} "
+        f"({int(intervention.sum())} frames, {forced} labeled POSITIVE)"
+    )
+    print(
+        f"positive fraction on non-correction frames: {autonomous_positive:.3f} "
+        f"(target {positive_fraction:.2f})"
+    )
     task_index = labels["task_index"]
     task_thresholds = {
         str(int(task)): float(labels["thresholds"][task_index == task][0])
@@ -357,6 +448,9 @@ def main():
                 "critic_checkpoint": str(checkpoint_path),
                 "n_step": n_step,
                 "positive_fraction": None if threshold is not None else positive_fraction,
+                "force_corrections_positive": force_corrections,
+                "intervention_frames": int(intervention.sum()),
+                "positive_fraction_non_correction": autonomous_positive,
                 "thresholds_by_task": task_thresholds,
                 "value_min": value_min,
                 "value_max": value_max,

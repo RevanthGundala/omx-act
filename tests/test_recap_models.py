@@ -964,3 +964,89 @@ def test_policy_config_rejects_a_checkpoint_without_a_config(tmp_path):
 
     with pytest.raises(ValueError, match="no config dictionary"):
         train_policy.config_from_checkpoint(path)
+
+
+# ---------------------------------------------------------------------------
+# Corrections forced positive (Sec. IV-B)
+# ---------------------------------------------------------------------------
+
+
+def test_corrections_are_forced_positive_regardless_of_advantage():
+    """Sec. IV-B: force I_t = True for human corrections during rollouts.
+
+    A rescue that arrives late trails a long negative run-up, so the critic can
+    score it below eps_l. Conditioning on that would teach the policy to
+    imitate expert recoveries under the negative token.
+    """
+    from models.recap.act_recap import AdvantageCondition
+    from models.recap.label_advantage import force_corrections_positive
+
+    conditions = torch.tensor(
+        [
+            int(AdvantageCondition.NEGATIVE),
+            int(AdvantageCondition.NEGATIVE),
+            int(AdvantageCondition.POSITIVE),
+            int(AdvantageCondition.NEGATIVE),
+        ]
+    )
+    intervention = torch.tensor([False, True, False, True])
+
+    forced = force_corrections_positive(conditions, intervention)
+
+    assert forced.tolist() == [
+        int(AdvantageCondition.NEGATIVE),
+        int(AdvantageCondition.POSITIVE),
+        int(AdvantageCondition.POSITIVE),
+        int(AdvantageCondition.POSITIVE),
+    ]
+
+
+def test_forcing_never_downgrades_an_autonomous_positive():
+    from models.recap.act_recap import AdvantageCondition
+    from models.recap.label_advantage import force_corrections_positive
+
+    conditions = torch.full((5,), int(AdvantageCondition.POSITIVE))
+    forced = force_corrections_positive(conditions, torch.zeros(5, dtype=torch.bool))
+    assert torch.equal(forced, conditions)
+
+
+def test_forcing_rejects_a_misaligned_intervention_vector():
+    from models.recap.label_advantage import force_corrections_positive
+
+    with pytest.raises(ValueError, match="does not match"):
+        force_corrections_positive(torch.zeros(4, dtype=torch.long), torch.zeros(3, dtype=torch.bool))
+
+
+def test_the_threshold_can_ignore_frames_that_are_forced_positive():
+    """Corrections would otherwise move eps_l for data whose label is decided."""
+    from models.recap.label_advantage import task_percentile_thresholds
+
+    # Corrections carry extreme advantages; excluding them must change eps_l.
+    advantages = torch.tensor([0.0, 1.0, 2.0, 3.0, 100.0, 200.0])
+    mask = torch.tensor([True, True, True, True, False, False])
+
+    with_all = task_percentile_thresholds(advantages, None, 0.5)
+    without = task_percentile_thresholds(advantages, None, 0.5, mask=mask)
+
+    assert float(without[0]) < float(with_all[0])
+    # The resolved threshold still applies to every frame, masked or not.
+    assert without.shape == advantages.shape
+
+
+def test_a_mask_that_excludes_everything_is_rejected():
+    from models.recap.label_advantage import task_percentile_thresholds
+
+    with pytest.raises(ValueError, match="excludes every frame"):
+        task_percentile_thresholds(
+            torch.zeros(4), None, 0.4, mask=torch.zeros(4, dtype=torch.bool)
+        )
+
+
+def test_the_masked_threshold_hits_the_requested_fraction_on_unmasked_data():
+    from models.recap.label_advantage import task_percentile_thresholds
+
+    advantages = torch.arange(100.0)
+    mask = torch.ones(100, dtype=torch.bool)
+    thresholds = task_percentile_thresholds(advantages, None, 0.40, mask=mask)
+    positive = (advantages > thresholds).float().mean()
+    assert abs(float(positive) - 0.40) < 0.02
