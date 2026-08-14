@@ -707,3 +707,47 @@ def main(
     print("Outputs volume: omx-custom-act-training-logs")
     print("Download later with:")
     print("  modal volume get omx-custom-act-training-logs / outputs/modal_custom_act")
+
+
+@app.local_entrypoint()
+def recap_policy(
+    pretrained_checkpoint: str,
+    dataset_repo_id: str,
+    labels_path: str | None = None,
+    steps: int = 20_000,
+    save_freq: int = 2_000,
+    job_name: str = "recap_policy",
+    dropout: str | None = None,
+):
+    """Launch advantage-conditioned RECAP policy training.
+
+    ``labels_path`` selects the stage: omitted runs SFT with the indicator
+    pinned to POSITIVE, supplied runs the improvement loop. It is refused
+    without ``dataset_repo_id``, because labels are keyed by frame index into
+    the dataset they were built from.
+
+    Both paths are volume-relative, since the container reads them from the
+    training volume rather than from the image.
+    """
+    stage = "improvement loop" if labels_path else "SFT (indicator pinned POSITIVE)"
+    print("=== RECAP POLICY LAUNCH ===")
+    print(f"stage={stage}")
+    print(f"dataset={dataset_repo_id}")
+    print(f"warm_start={pretrained_checkpoint}")
+    print(f"labels={labels_path or '(none)'}")
+    print(f"steps={steps} save_freq={save_freq} dropout={dropout or '(config default)'}")
+    print(f"MODAL_GPU={MODAL_GPU}")
+    print(f"MODAL_HARD_TIMEOUT_SECONDS={MODAL_MAX_RUNTIME_SECONDS}")
+
+    result = train_recap_policy_remote.remote(
+        pretrained_checkpoint=pretrained_checkpoint,
+        steps=steps,
+        save_freq=save_freq,
+        job_name=job_name,
+        labels_path=labels_path,
+        dropout=dropout,
+        dataset_repo_id=dataset_repo_id,
+    )
+    print(result)
+    print("Outputs volume: omx-custom-act-training-logs")
+    print(f"  modal volume get omx-custom-act-training-logs act_experiments/{job_name} .")
