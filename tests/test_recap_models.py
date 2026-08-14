@@ -979,6 +979,155 @@ def test_advantage_dataset_keys_labels_by_global_frame_index():
     assert labels != [int(conditions[index]) for index in range(3)]
 
 
+def test_advantage_dataset_on_an_episode_subset_keeps_whole_dataset_labels():
+    # Training on a subset must not require relabeling: each frame has to keep
+    # the exact token it would have received as part of the whole dataset. The
+    # total_frames guard therefore counts the full dataset, not the subset.
+    conditions = torch.tensor(
+        [AdvantageCondition.NEGATIVE] * 5
+        + [AdvantageCondition.POSITIVE, AdvantageCondition.NEGATIVE, AdvantageCondition.POSITIVE]
+    )
+    subset = train_policy.AdvantageDataset(
+        _StubACTDataset(3),
+        conditions,
+        frame_ids=torch.tensor([5, 6, 7]),
+        total_frames=len(conditions),
+    )
+
+    assert [int(subset[index]["advantage_condition"]) for index in range(3)] == [
+        AdvantageCondition.POSITIVE,
+        AdvantageCondition.NEGATIVE,
+        AdvantageCondition.POSITIVE,
+    ]
+
+
+def test_advantage_dataset_rejects_total_frames_measured_on_the_subset():
+    # Regression guard: reading total_frames off the filtered loader would make
+    # a legitimate subset run look like a dataset mismatch and refuse to start.
+    with pytest.raises(ValueError, match="built for a different"):
+        train_policy.AdvantageDataset(
+            _StubACTDataset(3),
+            conditions=torch.zeros(8, dtype=torch.long),
+            frame_ids=torch.tensor([5, 6, 7]),
+            total_frames=3,
+        )
+
+
+@pytest.mark.parametrize(
+    "spec,expected",
+    [
+        (None, None),
+        ("", None),
+        ("   ", None),
+        ("48-58", list(range(48, 59))),
+        ("59,60,61", [59, 60, 61]),
+        ("48-50,65", [48, 49, 50, 65]),
+        (" 48 - 50 , 65 ", [48, 49, 50, 65]),
+        ("7-7", [7]),
+        ("50,48,49,48", [48, 49, 50]),
+    ],
+)
+def test_parse_episode_subset(spec, expected):
+    assert train_policy.parse_episode_subset(spec) == expected
+
+
+@pytest.mark.parametrize("spec", ["58-48", "-3", "48-", "abc"])
+def test_parse_episode_subset_rejects_bad_specs(spec):
+    with pytest.raises(ValueError):
+        train_policy.parse_episode_subset(spec)
+
+
+@pytest.fixture
+def act_helper(monkeypatch):
+    """Import models.act.helper with data.episode_split stubbed.
+
+    ``data`` lives in the omx-training checkout, so helper cannot be imported
+    standalone here; train_policy imports it lazily for the same reason.
+    """
+    import sys
+    import types
+
+    if "data.episode_split" not in sys.modules:
+        package = types.ModuleType("data")
+        package.__path__ = []
+        module = types.ModuleType("data.episode_split")
+        module.resolve_train_holdout_episodes = lambda total, split, seed: (list(range(total)), [])
+        package.episode_split = module
+        monkeypatch.setitem(sys.modules, "data", package)
+        monkeypatch.setitem(sys.modules, "data.episode_split", module)
+
+    from models.act import helper
+
+    monkeypatch.setattr(
+        helper, "resolve_train_holdout_episodes", lambda total, split, seed: (list(range(total)), [])
+    )
+    return helper
+
+
+def test_make_dataloaders_episode_subset_intersects_the_seeded_split(act_helper, monkeypatch):
+    captured = {}
+
+    class _Meta:
+        total_episodes = 66
+
+        def __init__(self, **kwargs):
+            pass
+
+    class _Dataset:
+        def __init__(self, cfg, episodes=None, image_transforms=None):
+            captured.setdefault("episodes", []).append(episodes)
+
+        def __len__(self):
+            return 10
+
+    monkeypatch.setattr(act_helper, "LeRobotDatasetMetadata", _Meta)
+    monkeypatch.setattr(act_helper, "ACTDataset", _Dataset)
+
+    cfg = ACTConfig(dataset_repo_id="x", train_split=1.0, num_workers=0, batch_size=2)
+    act_helper.make_dataloaders(cfg, episodes=[48, 49, 65])
+
+    assert captured["episodes"][0] == [48, 49, 65]
+
+
+def test_make_dataloaders_without_a_subset_trains_on_everything(act_helper, monkeypatch):
+    captured = {}
+
+    class _Meta:
+        total_episodes = 66
+
+        def __init__(self, **kwargs):
+            pass
+
+    class _Dataset:
+        def __init__(self, cfg, episodes=None, image_transforms=None):
+            captured.setdefault("episodes", []).append(episodes)
+
+        def __len__(self):
+            return 10
+
+    monkeypatch.setattr(act_helper, "LeRobotDatasetMetadata", _Meta)
+    monkeypatch.setattr(act_helper, "ACTDataset", _Dataset)
+
+    cfg = ACTConfig(dataset_repo_id="x", train_split=1.0, num_workers=0, batch_size=2)
+    act_helper.make_dataloaders(cfg)
+
+    assert captured["episodes"][0] == list(range(66))
+
+
+def test_make_dataloaders_rejects_episode_indices_outside_the_dataset(act_helper, monkeypatch):
+    class _Meta:
+        total_episodes = 66
+
+        def __init__(self, **kwargs):
+            pass
+
+    monkeypatch.setattr(act_helper, "LeRobotDatasetMetadata", _Meta)
+
+    cfg = ACTConfig(dataset_repo_id="x", train_split=1.0)
+    with pytest.raises(ValueError, match="has 66 episodes"):
+        act_helper.make_dataloaders(cfg, episodes=[48, 999])
+
+
 def test_advantage_dataset_pins_positive_for_the_sft_stage():
     dataset = train_policy.AdvantageDataset(
         _StubACTDataset(4),

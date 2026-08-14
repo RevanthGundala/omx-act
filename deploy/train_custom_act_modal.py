@@ -378,6 +378,7 @@ def train_recap_policy_remote(
     labels_path: str | None = None,
     dropout: str | None = None,
     dataset_repo_id: str | None = None,
+    episodes: str | None = None,
 ) -> str:
     """Train the advantage-conditioned RECAP policy.
 
@@ -439,6 +440,8 @@ def train_recap_policy_remote(
         environment["RECAP_POLICY_DATASET_REPO_ID"] = dataset_repo_id
     if dropout is not None:
         environment["RECAP_POLICY_DROPOUT"] = str(dropout)
+    if episodes:
+        environment["RECAP_POLICY_EPISODES"] = str(episodes)
     os.environ.update(environment)
 
     sys.path.insert(0, str(REMOTE_WORKSPACE))
@@ -718,6 +721,7 @@ def recap_policy(
     save_freq: int = 2_000,
     job_name: str = "recap_policy",
     dropout: str | None = None,
+    episodes: str | None = None,
 ):
     """Launch advantage-conditioned RECAP policy training.
 
@@ -736,6 +740,7 @@ def recap_policy(
     print(f"warm_start={pretrained_checkpoint}")
     print(f"labels={labels_path or '(none)'}")
     print(f"steps={steps} save_freq={save_freq} dropout={dropout or '(config default)'}")
+    print(f"episodes={episodes or '(all)'}")
     print(f"MODAL_GPU={MODAL_GPU}")
     print(f"MODAL_HARD_TIMEOUT_SECONDS={MODAL_MAX_RUNTIME_SECONDS}")
 
@@ -747,6 +752,7 @@ def recap_policy(
         labels_path=labels_path,
         dropout=dropout,
         dataset_repo_id=dataset_repo_id,
+        episodes=episodes,
     )
     print(result)
     print("Outputs volume: omx-custom-act-training-logs")

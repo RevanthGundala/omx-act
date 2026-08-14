@@ -176,6 +176,35 @@ def config_from_checkpoint(checkpoint_path: str | Path) -> ACTConfig:
     return ACTConfig(**source)
 
 
+def parse_episode_subset(spec: str | None) -> list[int] | None:
+    """Parse RECAP_POLICY_EPISODES, e.g. "48-58,60" -> [48..58, 60].
+
+    Restricting the training set does not require relabeling: labels are indexed
+    by absolute frame id, so a subset trains against exactly the tokens it would
+    have received as part of the whole dataset.
+    """
+    if spec is None or not spec.strip():
+        return None
+    episodes: set[int] = set()
+    for part in spec.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "-" in part.lstrip("-"):
+            start, _, end = part.partition("-")
+            start_index, end_index = int(start), int(end)
+            if end_index < start_index:
+                raise ValueError(f"Empty episode range {part!r}")
+            episodes.update(range(start_index, end_index + 1))
+        else:
+            episodes.add(int(part))
+    if any(episode < 0 for episode in episodes):
+        raise ValueError(f"Negative episode index in {spec!r}")
+    if not episodes:
+        raise ValueError(f"No episodes parsed from {spec!r}")
+    return sorted(episodes)
+
+
 def config_from_env() -> ACTConfig:
     pretrained = os.environ.get("RECAP_POLICY_PRETRAINED_CHECKPOINT")
     if pretrained:
@@ -232,11 +261,18 @@ def main():
     default_dropout = cfg.recap_conditioning_dropout if conditions is not None else 0.0
     dropout = float(os.environ.get("RECAP_POLICY_DROPOUT", default_dropout))
 
-    train_loader, _ = make_dataloaders(cfg)
+    episodes = parse_episode_subset(os.environ.get("RECAP_POLICY_EPISODES"))
+    train_loader, _ = make_dataloaders(cfg, episodes=episodes)
     # The label file is per dataset, so compare against the full dataset rather
-    # than this split: make_dataloaders holds episodes out, and a smaller
-    # training split is not evidence that the labels belong to another dataset.
-    total_frames = len(train_loader.dataset.dataset.hf_dataset)
+    # than this split: make_dataloaders holds episodes out and may be restricted
+    # to a subset, and a smaller training set is not evidence that the labels
+    # belong to another dataset. Read the count from metadata, because the
+    # loader's hf_dataset only covers the episodes actually being trained on.
+    from lerobot.datasets import LeRobotDatasetMetadata
+
+    total_frames = LeRobotDatasetMetadata(
+        repo_id=cfg.dataset_repo_id, revision=cfg.dataset_revision
+    ).total_frames
     train_loader = torch.utils.data.DataLoader(
         dataset=AdvantageDataset(
             train_loader.dataset, conditions, total_frames=total_frames
@@ -264,6 +300,9 @@ def main():
 
     stage = "improvement loop" if conditions is not None else "SFT (indicator fixed to POSITIVE)"
     print(f"Dataset: {cfg.dataset_repo_id}@{cfg.dataset_revision}")
+    if episodes is not None:
+        (run_dir / "episodes.json").write_text(json.dumps(episodes) + "\n")
+        print(f"Episode subset: {len(episodes)} episodes -> {episodes}")
     print(f"Stage: {stage}; conditioning dropout={dropout:g}")
     print(
         f"Inherited architecture: chunk_size={cfg.chunk_size} cameras={cfg.camera_names} "

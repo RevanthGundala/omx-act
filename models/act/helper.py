@@ -7,11 +7,26 @@ from lerobot.datasets import LeRobotDataset, LeRobotDatasetMetadata
 from lerobot.transforms.transforms import ImageTransforms, ImageTransformsConfig
 
 
-def make_dataloaders(cfg: ACTConfig):
+def make_dataloaders(cfg: ACTConfig, episodes: list[int] | None = None):
     metadata = LeRobotDatasetMetadata(repo_id=cfg.dataset_repo_id, revision=cfg.dataset_revision)
     train_episodes, holdout_episodes = resolve_train_holdout_episodes(
         metadata.total_episodes, cfg.train_split, cfg.seed
     )
+    if episodes is not None:
+        # Intersect rather than replace, so the seeded train/holdout split stays
+        # the one every other run used and the subset is the only difference.
+        allowed = set(episodes)
+        unknown = allowed - set(range(metadata.total_episodes))
+        if unknown:
+            raise ValueError(
+                f"Episode subset references {sorted(unknown)} but "
+                f"{cfg.dataset_repo_id} has {metadata.total_episodes} episodes"
+            )
+        train_episodes = [episode for episode in train_episodes if episode in allowed]
+        holdout_episodes = [episode for episode in holdout_episodes if episode in allowed]
+        if not train_episodes:
+            raise ValueError("Episode subset left no training episodes")
+        print(f"[make_dataloaders] restricted to {len(allowed)} requested episodes", flush=True)
     print(
         f"[make_dataloaders] {metadata.total_episodes} episodes total, holding out "
         f"{holdout_episodes} ({len(holdout_episodes)}/{metadata.total_episodes} = "
