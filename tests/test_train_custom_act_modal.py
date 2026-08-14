@@ -70,3 +70,71 @@ def test_validate_volume_relative_path_rejects_unsafe_path(path):
 def test_validate_pretrained_checkpoint_path_rejects_unsafe_paths(path):
     with pytest.raises(ValueError, match="safe .pt path"):
         validate_pretrained_checkpoint_path(path)
+
+
+def _recap_entrypoint_source() -> str:
+    """Source of the RECAP entrypoint.
+
+    Read as text rather than imported because the launcher needs the `modal`
+    package, which is not a dependency of the test environment.
+    """
+    import ast
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "deploy" / "train_custom_act_modal.py"
+    tree = ast.parse(path.read_text())
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and node.name == "train_recap_policy_remote":
+            return ast.get_source_segment(path.read_text(), node) or ""
+    raise AssertionError("train_recap_policy_remote is missing from the Modal launcher")
+
+
+def test_recap_entrypoint_is_bounded_by_the_hard_runtime():
+    """An unattended GPU run must not be able to bill for a full day if the
+    local client disconnects, so the RECAP function uses the shared hard
+    runtime rather than the 24h timeout the older entrypoints carry.
+    """
+    import ast
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "deploy" / "train_custom_act_modal.py"
+    source = path.read_text()
+    tree = ast.parse(source)
+    decorators = [
+        decorator
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "train_recap_policy_remote"
+        for decorator in node.decorator_list
+    ]
+    assert decorators, "RECAP entrypoint has no @app.function decorator"
+    timeouts = [
+        keyword.value
+        for decorator in decorators
+        if isinstance(decorator, ast.Call)
+        for keyword in decorator.keywords
+        if keyword.arg == "timeout"
+    ]
+    assert len(timeouts) == 1
+    assert isinstance(timeouts[0], ast.Name)
+    assert timeouts[0].id == "MODAL_MAX_RUNTIME_SECONDS"
+
+
+def test_recap_entrypoint_refuses_cpu_fallback_and_pins_the_gpu_device():
+    source = _recap_entrypoint_source()
+
+    # Paying for a GPU while silently training on CPU is the expensive failure.
+    assert "torch.cuda.is_available()" in source
+    assert "refusing CPU fallback" in source
+    assert '"RECAP_DEVICE": "cuda"' in source
+    # Checkpoints must survive teardown, so the volume is committed periodically.
+    assert "vol.commit()" in source
+
+
+def test_recap_entrypoint_defaults_to_the_sft_stage():
+    source = _recap_entrypoint_source()
+
+    # Omitting labels must run SFT with the indicator fixed to POSITIVE rather
+    # than silently training against stale advantage labels.
+    assert "labels_path: str | None = None" in source
+    assert 'RECAP_POLICY_LABELS' in source
+    assert 'stage = "improvement_loop" if labels_full_path else "sft_positive"' in source

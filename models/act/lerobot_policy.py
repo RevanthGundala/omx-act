@@ -7,6 +7,7 @@ from collections import deque
 from copy import deepcopy
 from dataclasses import dataclass, field, fields
 import json
+import os
 from pathlib import Path
 import shutil
 import sys
@@ -33,6 +34,34 @@ from models.recap.act_recap import (
 
 IMAGENET_MEAN = torch.tensor([0.485, 0.456, 0.406], dtype=torch.float32).view(3, 1, 1)
 IMAGENET_STD = torch.tensor([0.229, 0.224, 0.225], dtype=torch.float32).view(3, 1, 1)
+# eval_async launches the policy server in its own process, so the requested
+# conditioning token crosses the boundary as an environment variable.
+ADVANTAGE_ENV_VAR = "RECAP_EVAL_ADVANTAGE"
+
+
+def resolve_advantage_condition(condition: AdvantageCondition | int | str) -> AdvantageCondition:
+    if isinstance(condition, str):
+        try:
+            return AdvantageCondition[condition.upper()]
+        except KeyError as exc:
+            raise ValueError(f"Unknown advantage condition: {condition!r}") from exc
+    try:
+        return AdvantageCondition(condition)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid advantage condition: {condition!r}") from exc
+
+
+def default_advantage_condition(recap: bool) -> AdvantageCondition:
+    """RECAP policies are trained to be asked for POSITIVE at inference.
+
+    Defaulting to UNCONDITIONED would silently evaluate the marginal policy
+    averaged over good and bad experience, which reads as "RECAP did not help"
+    when the conditioning was simply never switched on.
+    """
+    if not recap:
+        return AdvantageCondition.UNCONDITIONED
+    override = os.environ.get(ADVANTAGE_ENV_VAR)
+    return resolve_advantage_condition(override) if override else AdvantageCondition.POSITIVE
 
 
 @PreTrainedConfig.register_subclass("custom_act")
@@ -64,7 +93,7 @@ class CustomACTPolicy(PreTrainedPolicy):
         self.source_config = ACTConfig(**source)
         model_class = RecapACTPolicy if config.recap else BaseACTPolicy
         self.model = model_class(self.source_config)
-        self._advantage_condition = AdvantageCondition.UNCONDITIONED
+        self._advantage_condition = default_advantage_condition(config.recap)
         self._action_queue: deque[Tensor] = deque(maxlen=config.n_action_steps)
         self.temporal_ensembler = (
             ACTTemporalEnsembler(config.temporal_ensemble_coeff, config.chunk_size)
@@ -111,20 +140,7 @@ class CustomACTPolicy(PreTrainedPolicy):
             raise RuntimeError(
                 "Advantage conditioning requires a RECAP-exported custom ACT policy"
             )
-        if isinstance(condition, str):
-            try:
-                condition = AdvantageCondition[condition.upper()]
-            except KeyError as exc:
-                raise ValueError(
-                    f"Unknown advantage condition: {condition!r}"
-                ) from exc
-        try:
-            resolved = AdvantageCondition(condition)
-        except (TypeError, ValueError) as exc:
-            raise ValueError(
-                f"Invalid advantage condition: {condition!r}"
-            ) from exc
-        self._advantage_condition = resolved
+        self._advantage_condition = resolve_advantage_condition(condition)
         self.reset()
 
     def _inputs(self, batch: dict[str, Tensor]) -> tuple[Tensor, Tensor]:
