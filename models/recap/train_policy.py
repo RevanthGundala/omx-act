@@ -60,7 +60,13 @@ class AdvantageDataset(Dataset):
     stage.
     """
 
-    def __init__(self, dataset, conditions: torch.Tensor | None = None, frame_ids: torch.Tensor | None = None):
+    def __init__(
+        self,
+        dataset,
+        conditions: torch.Tensor | None = None,
+        frame_ids: torch.Tensor | None = None,
+        total_frames: int | None = None,
+    ):
         self.dataset = dataset
         self.conditions = conditions
         if frame_ids is None:
@@ -78,6 +84,17 @@ class AdvantageDataset(Dataset):
                 raise ValueError(
                     f"Labels cover {len(conditions)} frames but the dataset references index "
                     f"{int(self.frame_ids.max())}; relabel with models/recap/label_advantage.py"
+                )
+            if total_frames is not None and total_frames != len(conditions):
+                # Equal length is what ties the labels to this dataset. A
+                # shorter dataset keeps every frame id in range, so the check
+                # above passes while each transition trains against another
+                # transition's token -- silently, and only for some frames.
+                raise ValueError(
+                    f"Labels cover {len(conditions)} frames but the dataset has "
+                    f"{total_frames}; these labels were built for a different "
+                    "dataset. Relabel with models/recap/label_advantage.py, or "
+                    "point RECAP_POLICY_DATASET_REPO_ID at the labeled dataset."
                 )
 
     def __len__(self):
@@ -216,8 +233,14 @@ def main():
     dropout = float(os.environ.get("RECAP_POLICY_DROPOUT", default_dropout))
 
     train_loader, _ = make_dataloaders(cfg)
+    # The label file is per dataset, so compare against the full dataset rather
+    # than this split: make_dataloaders holds episodes out, and a smaller
+    # training split is not evidence that the labels belong to another dataset.
+    total_frames = len(train_loader.dataset.dataset.hf_dataset)
     train_loader = torch.utils.data.DataLoader(
-        dataset=AdvantageDataset(train_loader.dataset, conditions),
+        dataset=AdvantageDataset(
+            train_loader.dataset, conditions, total_frames=total_frames
+        ),
         batch_size=cfg.batch_size,
         shuffle=True,
         generator=torch.Generator().manual_seed(cfg.seed),

@@ -1,5 +1,6 @@
 from dataclasses import asdict, replace
 import json
+from types import SimpleNamespace
 
 from lerobot.datasets import LeRobotDataset
 import numpy as np
@@ -1050,3 +1051,68 @@ def test_the_masked_threshold_hits_the_requested_fraction_on_unmasked_data():
     thresholds = task_percentile_thresholds(advantages, None, 0.40, mask=mask)
     positive = (advantages > thresholds).float().mean()
     assert abs(float(positive) - 0.40) < 0.02
+
+
+# ---------------------------------------------------------------------------
+# Label/dataset binding
+# ---------------------------------------------------------------------------
+
+
+class _FrameIdACTDataset:
+    """Stands in for models.act.helper.ACTDataset over a fixed frame count."""
+
+    def __init__(self, frame_ids):
+        self._frame_ids = list(frame_ids)
+        self.dataset = SimpleNamespace(
+            hf_dataset={"index": self._frame_ids}
+        )
+
+    def __len__(self):
+        return len(self._frame_ids)
+
+    def __getitem__(self, idx):
+        return {"qpos": torch.zeros(6)}
+
+
+def test_labels_from_a_different_dataset_are_rejected():
+    """Frame ids staying in range is not evidence the labels belong here.
+
+    A warm-start checkpoint names the demonstration set it was trained on, so
+    inheriting it while using labels built for the larger RECAP set leaves every
+    id in range and pairs transitions with other transitions' tokens.
+    """
+    from models.recap.train_policy import AdvantageDataset
+
+    dataset = _FrameIdACTDataset(range(48))
+    conditions = torch.zeros(96, dtype=torch.long)
+
+    with pytest.raises(ValueError, match="built for a different dataset"):
+        AdvantageDataset(dataset, conditions, total_frames=48)
+
+
+def test_matching_label_and_dataset_lengths_are_accepted():
+    from models.recap.train_policy import AdvantageDataset
+
+    dataset = _FrameIdACTDataset(range(48))
+    wrapped = AdvantageDataset(dataset, torch.zeros(48, dtype=torch.long), total_frames=48)
+    assert len(wrapped) == 48
+
+
+def test_a_held_out_split_does_not_trip_the_binding_check():
+    """make_dataloaders holds episodes out, so the split is smaller than the set."""
+    from models.recap.train_policy import AdvantageDataset
+
+    # 30 training frames drawn from a 48-frame dataset, labels cover all 48.
+    dataset = _FrameIdACTDataset(range(30))
+    wrapped = AdvantageDataset(
+        dataset, torch.zeros(48, dtype=torch.long), total_frames=48
+    )
+    assert len(wrapped) == 30
+
+
+def test_out_of_range_frame_ids_are_still_caught():
+    from models.recap.train_policy import AdvantageDataset
+
+    dataset = _FrameIdACTDataset(range(60))
+    with pytest.raises(ValueError, match="relabel"):
+        AdvantageDataset(dataset, torch.zeros(48, dtype=torch.long), total_frames=48)

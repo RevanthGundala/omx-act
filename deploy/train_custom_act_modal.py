@@ -377,6 +377,7 @@ def train_recap_policy_remote(
     job_name: str = "recap_policy",
     labels_path: str | None = None,
     dropout: str | None = None,
+    dataset_repo_id: str | None = None,
 ) -> str:
     """Train the advantage-conditioned RECAP policy.
 
@@ -384,6 +385,13 @@ def train_recap_policy_remote(
     ``pretrained_checkpoint`` by models.recap.train_policy, so this entrypoint
     only carries run identity and budget. Omitting ``labels_path`` runs the SFT
     stage with the indicator fixed to POSITIVE.
+
+    ``dataset_repo_id`` must name the dataset the labels were built from.
+    Without it the trainer inherits the warm-start checkpoint's dataset, which
+    is the demonstration set the baseline was trained on, while the labels
+    index the larger RECAP set. Nothing raises in that case -- the frame ids
+    stay in range -- so every transition would silently train against another
+    transition's advantage token.
     """
     import json
     import os
@@ -401,6 +409,14 @@ def train_recap_policy_remote(
         )
     labels_full_path = ""
     if labels_path:
+        if not dataset_repo_id:
+            raise ValueError(
+                "labels_path requires dataset_repo_id: advantage labels are keyed "
+                "by frame index into the dataset they were built from, and "
+                "inheriting the warm-start checkpoint's dataset instead would "
+                "pair every transition with another transition's token without "
+                "raising."
+            )
         labels_full_path = str(REMOTE_OUTPUTS / validate_volume_relative_path(labels_path))
         if not Path(labels_full_path).is_file():
             raise FileNotFoundError(f"Advantage labels are missing: {labels_full_path}")
@@ -419,6 +435,8 @@ def train_recap_policy_remote(
     }
     if labels_full_path:
         environment["RECAP_POLICY_LABELS"] = labels_full_path
+    if dataset_repo_id:
+        environment["RECAP_POLICY_DATASET_REPO_ID"] = dataset_repo_id
     if dropout is not None:
         environment["RECAP_POLICY_DROPOUT"] = str(dropout)
     os.environ.update(environment)
