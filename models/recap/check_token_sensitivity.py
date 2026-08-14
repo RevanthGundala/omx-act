@@ -45,6 +45,7 @@ from models.recap.train_policy import (
     AdvantageDataset,
     config_from_checkpoint,
     load_conditions,
+    parse_episode_subset,
 )
 
 
@@ -170,6 +171,15 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--dataset-repo-id", default=None)
     parser.add_argument("--dataset-root", type=Path, default=None)
     parser.add_argument("--labels", type=Path, default=None)
+    parser.add_argument(
+        "--episodes",
+        default=None,
+        help=(
+            "Restrict the check to an episode subset, e.g. '48-65'. Use this to "
+            "measure the token on the data the policy was trained on: a run "
+            "trained on a subset is out of distribution everywhere else."
+        ),
+    )
     parser.add_argument("--batches", type=int, default=16)
     parser.add_argument("--device", default=None)
     parser.add_argument(
@@ -199,13 +209,19 @@ def main(argv=None) -> int:
         os.environ["RECAP_CRITIC_DATASET_ROOT"] = str(args.dataset_root)
 
     conditions = load_conditions(args.labels) if args.labels else None
-    train_loader, _ = make_dataloaders(cfg)
+    episodes = parse_episode_subset(args.episodes)
+    train_loader, _ = make_dataloaders(cfg, episodes=episodes)
     dataset = train_loader.dataset
     if conditions is not None:
         # Labels are keyed by global frame index, so let AdvantageDataset do the
         # lookup that training does; it also validates that these labels belong
-        # to this dataset.
-        total_frames = len(dataset.dataset.hf_dataset)
+        # to this dataset. Count frames from metadata rather than the loader:
+        # under --episodes the loader only covers the requested subset.
+        from lerobot.datasets import LeRobotDatasetMetadata
+
+        total_frames = LeRobotDatasetMetadata(
+            repo_id=cfg.dataset_repo_id, revision=cfg.dataset_revision
+        ).total_frames
         dataset = AdvantageDataset(dataset, conditions, total_frames=total_frames)
     loader = torch.utils.data.DataLoader(
         dataset,
