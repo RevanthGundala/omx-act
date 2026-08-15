@@ -1,7 +1,14 @@
-"""Shared configuration constants for OMX training scripts."""
+"""Shared hardware constants for the OMX evaluation scripts.
+
+act-sim runs policies; teleoperation and data collection live in omx-training,
+which has its own utils/config.py. The two files are otherwise identical, so
+keep this one limited to what act-sim actually reads -- a leader port or task
+string here would be a second source of truth for something this repo does not
+do, and importing the wrong copy is a real failure mode (both repos expose a
+top-level ``utils`` package).
+"""
 
 # ── Hardware Ports ──
-LEADER_PORT = "/dev/tty.usbmodem1301"
 FOLLOWER_PORT = "/dev/tty.usbmodem1401"
 
 # ── Joint Configuration ──
@@ -15,9 +22,9 @@ JOINT_NAMES = [
 ]
 
 # ── Camera Defaults ──
-# Map of camera name → OpenCV device index. Names appear in Rerun under
-# camera/<name>, in datasets as observation.images.<name>, and the trained
-# policy is fed frames matched by these names.
+# Map of camera name → OpenCV device index. Names appear in datasets as
+# observation.images.<name>, and the trained policy is fed frames matched by
+# these names.
 #
 # On macOS, index 0 is typically the built-in FaceTime camera; external USB
 # cameras are usually 1, 2, ... Run:
@@ -32,10 +39,3 @@ CAMERA_HEIGHT = 480
 
 # ── Control Loop FPS ──
 FPS = 30
-TELEOP_FPS = 60
-
-# ── Dataset & Models ──
-RECORD_DATASET_REPO_ID = "RevanthGundala/007-place-penne-pasta-in-bowl"
-TRAIN_DATASET_REPO_ID = "RevanthGundala/003-pour-water"
-# ── Task ──
-TASK_NAME = "Place the penne pasta in the bowl, then do the gemelli pasta."

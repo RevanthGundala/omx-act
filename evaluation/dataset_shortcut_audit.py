@@ -30,7 +30,6 @@ from lerobot.datasets import LeRobotDataset, LeRobotDatasetMetadata
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from utils.config import RECORD_DATASET_REPO_ID
 
 
 JOINT_NAMES = [
@@ -350,7 +349,7 @@ def make_feature_explanation_visualization(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Audit qpos shortcut vs object-conditioned diversity.")
-    parser.add_argument("--dataset", default=RECORD_DATASET_REPO_ID)
+    parser.add_argument("--dataset", required=True)
     parser.add_argument("--revision", default="main")
     parser.add_argument("--stride", type=int, default=5, help="Use every Nth frame per episode for full-dataset metrics.")
     parser.add_argument("--neighbor-samples", type=int, default=1000)

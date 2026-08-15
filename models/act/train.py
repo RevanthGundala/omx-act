@@ -13,7 +13,6 @@ import torch.nn.functional as F
 from configs.act.base import ACTConfig
 from models.act.act import ACTPolicy
 from models.act.helper import make_dataloaders
-from utils.config import RECORD_DATASET_REPO_ID
 
 
 def seed_training(seed: int) -> None:
@@ -52,8 +51,23 @@ def compute_loss(model, batch, device, kl_weight):
     return loss, action_loss, kl_loss
 
 
+def _required_dataset_repo_id(variable: str) -> str:
+    """Read the dataset from the environment, refusing to guess.
+
+    This used to fall back to a module-level constant, which for a long time
+    named an abandoned task. A run with the variable unset then trained
+    successfully on the wrong dataset and said nothing.
+    """
+    dataset_repo_id = os.environ.get(variable)
+    if not dataset_repo_id:
+        raise ValueError(
+            f"{variable} is required; set it to the dataset this run should use"
+        )
+    return dataset_repo_id
+
+
 def config_from_env() -> ACTConfig:
-    base_cfg = ACTConfig(dataset_repo_id=os.environ.get("ACT_TRAIN_DATASET_REPO_ID") or RECORD_DATASET_REPO_ID)
+    base_cfg = ACTConfig(dataset_repo_id=_required_dataset_repo_id("ACT_TRAIN_DATASET_REPO_ID"))
     train_split = os.environ.get("ACT_TRAIN_SPLIT")
     image_transforms = os.environ.get("ACT_TRAIN_IMAGE_TRANSFORMS")
     if image_transforms is not None and image_transforms.lower() not in {"true", "false"}:

@@ -15,7 +15,6 @@ from lerobot.datasets import LeRobotDataset, LeRobotDatasetMetadata
 from lerobot.datasets.factory import resolve_delta_timestamps
 from lerobot.policies.act.configuration_act import ACTConfig as LeRobotACTConfig
 from lerobot.policies.factory import make_policy, make_pre_post_processors
-from utils.config import RECORD_DATASET_REPO_ID
 
 
 @dataclass(frozen=True)
@@ -109,7 +108,7 @@ def make_dataloaders(cfg: ACTConfig, policy_cfg: LeRobotACTConfig, device: torch
 
 
 def main():
-    base_cfg = ACTConfig(dataset_repo_id=os.environ.get("ACT_TRAIN_DATASET_REPO_ID") or RECORD_DATASET_REPO_ID)
+    base_cfg = ACTConfig(dataset_repo_id=_required_dataset_repo_id("ACT_TRAIN_DATASET_REPO_ID"))
     cfg = replace(
         base_cfg,
         job_name=os.environ.get("ACT_TRAIN_JOB_NAME", f"{base_cfg.job_name}_lerobot_train"),

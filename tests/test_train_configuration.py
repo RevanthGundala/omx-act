@@ -36,12 +36,14 @@ def test_config_from_env_overrides_output_root(monkeypatch):
 
 
 def test_config_from_env_enables_default_image_transforms(monkeypatch):
+    monkeypatch.setenv("ACT_TRAIN_DATASET_REPO_ID", "owner/dataset")
     monkeypatch.setenv("ACT_TRAIN_IMAGE_TRANSFORMS", "true")
 
     assert config_from_env().image_transforms is True
 
 
 def test_config_from_env_rejects_invalid_image_transforms(monkeypatch):
+    monkeypatch.setenv("ACT_TRAIN_DATASET_REPO_ID", "owner/dataset")
     monkeypatch.setenv("ACT_TRAIN_IMAGE_TRANSFORMS", "sometimes")
 
     with pytest.raises(ValueError, match="ACT_TRAIN_IMAGE_TRANSFORMS"):
@@ -196,3 +198,12 @@ def test_pretrained_checkpoint_loads_weights_with_fresh_optimizer(monkeypatch, t
     train_module.main()
 
     assert [name for name, _value in events] == ["model_load"]
+
+
+def test_config_from_env_requires_a_dataset(monkeypatch):
+    # There used to be a module-level fallback here, and for months it named an
+    # abandoned task. A run with this unset trained happily on the wrong data.
+    monkeypatch.delenv("ACT_TRAIN_DATASET_REPO_ID", raising=False)
+
+    with pytest.raises(ValueError, match="ACT_TRAIN_DATASET_REPO_ID is required"):
+        config_from_env()

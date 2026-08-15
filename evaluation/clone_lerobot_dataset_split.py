@@ -28,7 +28,6 @@ from lerobot.datasets import LeRobotDataset
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from utils.config import RECORD_DATASET_REPO_ID
 
 
 def tensor_to_frame_value(value):
@@ -55,7 +54,7 @@ def frame_for_clone(sample: dict, feature_keys: list[str]) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Clone selected LeRobot episodes into a new dataset.")
-    parser.add_argument("--source-repo", default=RECORD_DATASET_REPO_ID)
+    parser.add_argument("--source-repo", required=True)
     parser.add_argument("--source-revision", default="main")
     parser.add_argument("--target-repo", required=True)
     parser.add_argument("--split-json", default="outputs/dataset_audits/recommended_split.json")

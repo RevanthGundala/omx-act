@@ -30,7 +30,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from configs.act.base import ACTConfig
 from models.act.act import ACTPolicy
-from utils.config import RECORD_DATASET_REPO_ID
 
 
 IMAGENET_MEAN = torch.tensor([0.485, 0.456, 0.406], dtype=torch.float32).view(3, 1, 1)
@@ -197,7 +196,7 @@ def save_contact_sheet(path: Path, variants: dict[str, dict[str, np.ndarray]], c
 def main() -> None:
     parser = argparse.ArgumentParser(description="Offline counterfactual probe for custom ACT checkpoints.")
     parser.add_argument("--checkpoint", required=True)
-    parser.add_argument("--dataset", default=RECORD_DATASET_REPO_ID)
+    parser.add_argument("--dataset", required=True)
     parser.add_argument("--revision", default="main")
     parser.add_argument("--dataset-index", type=int, default=None)
     parser.add_argument("--episode", type=int, default=0)

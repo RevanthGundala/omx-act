@@ -34,7 +34,6 @@ from lerobot.datasets import LeRobotDataset
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from utils.config import RECORD_DATASET_REPO_ID
 
 
 def tensor_to_frame_value(value):
@@ -70,7 +69,7 @@ def frame_for_clone(sample: dict, feature_keys: list[str], state_key: str, actio
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Relabel a LeRobot dataset to delta actions.")
-    parser.add_argument("--source-repo", default=RECORD_DATASET_REPO_ID)
+    parser.add_argument("--source-repo", required=True)
     parser.add_argument("--source-revision", default="main")
     parser.add_argument("--target-repo", required=True)
     parser.add_argument("--root", default=None, help="Local root for the relabeled dataset.")

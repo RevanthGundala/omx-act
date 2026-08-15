@@ -21,7 +21,7 @@ from lerobot.policies.factory import get_policy_class, make_pre_post_processors
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import models.act.lerobot_policy  # noqa: F401 -- register custom_act before config parsing
-from utils.config import JOINT_NAMES, RECORD_DATASET_REPO_ID
+from utils.config import JOINT_NAMES
 
 
 def load_sample(dataset: LeRobotDataset, episode: int, frame_index: int):
@@ -40,7 +40,7 @@ def vector_by_joint(values) -> dict[str, float]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Check LeRobot policy first action on a recorded dataset frame.")
     parser.add_argument("--policy-path", required=True, help="Path to exported pretrained_model directory.")
-    parser.add_argument("--dataset", default=RECORD_DATASET_REPO_ID)
+    parser.add_argument("--dataset", required=True)
     parser.add_argument("--revision", default="main")
     parser.add_argument("--episode", type=int, default=0)
     parser.add_argument("--frame-index", type=int, default=0)

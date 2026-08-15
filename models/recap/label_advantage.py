@@ -68,7 +68,6 @@ from lerobot.datasets import LeRobotDataset
 from models.recap.act_critic import ACTCritic
 from models.recap.act_recap import AdvantageCondition
 from models.recap.train_critic import CriticDataset, expected_return
-from utils.config import RECORD_DATASET_REPO_ID
 
 def task_percentile_thresholds(
     advantages: torch.Tensor,
@@ -368,11 +367,27 @@ def label_dataset(
     }
 
 
+def _required_dataset_repo_id(*variables: str) -> str:
+    """Read the dataset from the environment, refusing to guess.
+
+    This used to fall back to a module-level constant, which for a long time
+    named an abandoned task. A run with the variable unset then trained
+    successfully on the wrong dataset and said nothing.
+    """
+    for variable in variables:
+        value = os.environ.get(variable)
+        if value:
+            return value
+    raise ValueError(
+        f"Set one of {', '.join(variables)} to the dataset this run should use"
+    )
+
+
 def config_from_env() -> ACTConfig:
     base_cfg = ACTConfig(
-        dataset_repo_id=os.environ.get("RECAP_ADVANTAGE_DATASET_REPO_ID")
-        or os.environ.get("RECAP_CRITIC_DATASET_REPO_ID")
-        or RECORD_DATASET_REPO_ID
+        dataset_repo_id=_required_dataset_repo_id(
+            "RECAP_ADVANTAGE_DATASET_REPO_ID", "RECAP_CRITIC_DATASET_REPO_ID"
+        )
     )
     return replace(base_cfg, job_name=os.environ.get("RECAP_ADVANTAGE_JOB_NAME", "recap_advantage"))
 

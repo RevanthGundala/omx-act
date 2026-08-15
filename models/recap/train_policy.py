@@ -34,7 +34,6 @@ from torch.utils.data import Dataset
 
 from configs.act.base import ACTConfig
 from models.recap.act_recap import ACTPolicy, AdvantageCondition
-from utils.config import RECORD_DATASET_REPO_ID
 
 # The advantage token is the only thing a base ACT checkpoint cannot supply.
 ADVANTAGE_PARAMETERS = ("decoder.adv_proj.weight", "decoder.adv_proj.bias", "decoder.adv_pos_emb.weight")
@@ -205,13 +204,29 @@ def parse_episode_subset(spec: str | None) -> list[int] | None:
     return sorted(episodes)
 
 
+def _required_dataset_repo_id(*variables: str) -> str:
+    """Read the dataset from the environment, refusing to guess.
+
+    This used to fall back to a module-level constant, which for a long time
+    named an abandoned task. A run with the variable unset then trained
+    successfully on the wrong dataset and said nothing.
+    """
+    for variable in variables:
+        value = os.environ.get(variable)
+        if value:
+            return value
+    raise ValueError(
+        f"Set one of {', '.join(variables)} to the dataset this run should use"
+    )
+
+
 def config_from_env() -> ACTConfig:
     pretrained = os.environ.get("RECAP_POLICY_PRETRAINED_CHECKPOINT")
     if pretrained:
         base_cfg = config_from_checkpoint(pretrained)
     else:
         base_cfg = ACTConfig(
-            dataset_repo_id=os.environ.get("RECAP_POLICY_DATASET_REPO_ID") or RECORD_DATASET_REPO_ID
+            dataset_repo_id=_required_dataset_repo_id("RECAP_POLICY_DATASET_REPO_ID")
         )
     dataset_repo_id = os.environ.get("RECAP_POLICY_DATASET_REPO_ID")
     if dataset_repo_id:

@@ -23,7 +23,6 @@ from configs.act.base import ACTConfig
 from lerobot.datasets import LeRobotDataset, LeRobotDatasetMetadata
 from lerobot.transforms.transforms import ImageTransforms, ImageTransformsConfig
 from models.recap.act_critic import ACTCritic
-from utils.config import RECORD_DATASET_REPO_ID
 
 # Sec. IV-A: the empirical return is discretized into B = 201 bins.
 NUM_BINS = 201
@@ -354,9 +353,25 @@ class CriticDataset(Dataset):
         }
 
 
+def _required_dataset_repo_id(*variables: str) -> str:
+    """Read the dataset from the environment, refusing to guess.
+
+    This used to fall back to a module-level constant, which for a long time
+    named an abandoned task. A run with the variable unset then trained
+    successfully on the wrong dataset and said nothing.
+    """
+    for variable in variables:
+        value = os.environ.get(variable)
+        if value:
+            return value
+    raise ValueError(
+        f"Set one of {', '.join(variables)} to the dataset this run should use"
+    )
+
+
 def config_from_env() -> ACTConfig:
     base_cfg = ACTConfig(
-        dataset_repo_id=os.environ.get("RECAP_CRITIC_DATASET_REPO_ID") or RECORD_DATASET_REPO_ID
+        dataset_repo_id=_required_dataset_repo_id("RECAP_CRITIC_DATASET_REPO_ID")
     )
     return replace(
         base_cfg,
