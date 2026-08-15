@@ -256,37 +256,41 @@ def validate_correction_schema(
             )
 
 
-def load_trial(trial_dir: Path, *, decode_frames: bool = False) -> RolloutTrial:
-    trial_dir = trial_dir.resolve()
-    metadata = json.loads((trial_dir / "metadata.json").read_text())
+def _require_outcome_label(metadata: dict, trial_dir: Path) -> str:
+    """The operator's success/failure keypress for one rollout.
+
+    This is the only ground truth in the pipeline: it sets the terminal reward,
+    and through it every return, critic target, and advantage. There is no
+    sensor for "the sponge is on the hot pad". An unlabeled trial is therefore
+    skipped or escalated, never defaulted -- guessing "success" would feed a
+    fabricated terminal reward of 0 into the critic.
+
+    Raises UnlabeledRolloutError specifically, so callers can skip *this* case
+    without also swallowing corrupt videos or malformed indices.
+    """
     outcome = metadata.get("outcome_label")
     if outcome not in VALID_OUTCOMES:
         raise UnlabeledRolloutError(
             f"{trial_dir} is not labeled success/failure: {outcome!r}"
         )
+    return outcome
 
-    camera_names = tuple(metadata.get("camera_names") or ())
-    joint_names = tuple(metadata.get("joint_names") or ())
-    if not camera_names or len(set(camera_names)) != len(camera_names):
-        raise ValueError(f"{trial_dir} has invalid camera_names")
-    if not joint_names or len(set(joint_names)) != len(joint_names):
-        raise ValueError(f"{trial_dir} has invalid joint_names")
 
-    observations = read_jsonl(trial_dir / "observations.jsonl")
-    actions = read_jsonl(trial_dir / "actions.jsonl")
-    if len(observations) != metadata.get("observation_count"):
-        raise ValueError(
-            f"{trial_dir} observation count disagrees with metadata"
-        )
-    if len(actions) != metadata.get("action_count"):
-        raise ValueError(f"{trial_dir} action count disagrees with metadata")
+def _validate_trial_observations(
+    trial_dir: Path,
+    observations: tuple[dict, ...],
+    joint_names: tuple[str, ...],
+    metadata: dict,
+) -> dict[int, dict]:
+    """Index observations by video frame, rejecting gaps and duplicates.
 
-    observations_by_frame = {}
+    Actions reference observations by frame index, so a gap here would later
+    surface as an action pointing at nothing.
+    """
+    observations_by_frame: dict[int, dict] = {}
     for expected_index, observation in enumerate(observations):
         if observation.get("observation_index") != expected_index:
-            raise ValueError(
-                f"{trial_dir} observation indices are not contiguous"
-            )
+            raise ValueError(f"{trial_dir} observation indices are not contiguous")
         frame_index = observation.get("frame_index")
         if not isinstance(frame_index, int) or frame_index < 0:
             raise ValueError(f"{trial_dir} has an invalid observation frame index")
@@ -300,17 +304,24 @@ def load_trial(trial_dir: Path, *, decode_frames: bool = False) -> RolloutTrial:
                 f"{trial_dir} observation {expected_index} has incompatible qpos"
             )
         observations_by_frame[frame_index] = observation
-    expected_frame_indices = set(range(len(observations)))
-    if set(observations_by_frame) != expected_frame_indices:
+
+    if set(observations_by_frame) != set(range(len(observations))):
         raise ValueError(
             f"{trial_dir} observation frame indices must be contiguous "
             f"0-{len(observations) - 1}"
         )
     if metadata.get("camera_frame_count") != len(observations):
-        raise ValueError(
-            f"{trial_dir} camera frame count disagrees with observations"
-        )
+        raise ValueError(f"{trial_dir} camera frame count disagrees with observations")
+    return observations_by_frame
 
+
+def _validate_trial_actions(
+    trial_dir: Path,
+    actions: tuple[dict, ...],
+    observations_by_frame: dict[int, dict],
+    joint_names: tuple[str, ...],
+) -> None:
+    """Every action must name the observation the policy actually saw."""
     for expected_index, action in enumerate(actions):
         if action.get("action_index") != expected_index:
             raise ValueError(f"{trial_dir} action indices are not contiguous")
@@ -326,11 +337,48 @@ def load_trial(trial_dir: Path, *, decode_frames: bool = False) -> RolloutTrial:
                 f"{trial_dir} action {expected_index} has incompatible sent_action"
             )
 
+
+def _validate_trial_videos(
+    trial_dir: Path, metadata: dict, camera_names: tuple[str, ...]
+) -> None:
     videos = metadata.get("videos")
     if not isinstance(videos, dict) or set(videos) != set(camera_names):
         raise ValueError(f"{trial_dir} video metadata does not match camera_names")
     for camera in camera_names:
         _resolve_trial_file(trial_dir, videos[camera])
+
+
+def load_trial(trial_dir: Path, *, decode_frames: bool = False) -> RolloutTrial:
+    """Read one recorded rollout directory.
+
+    The trial was written by a separate process, on separate hardware, in the
+    omx-training repo, so everything it claims is checked before use. Frames
+    are left on disk unless ``decode_frames`` is set: decoding every trial up
+    front once needed 27.8 GB.
+    """
+    trial_dir = trial_dir.resolve()
+    metadata = json.loads((trial_dir / "metadata.json").read_text())
+    _require_outcome_label(metadata, trial_dir)
+
+    camera_names = tuple(metadata.get("camera_names") or ())
+    joint_names = tuple(metadata.get("joint_names") or ())
+    if not camera_names or len(set(camera_names)) != len(camera_names):
+        raise ValueError(f"{trial_dir} has invalid camera_names")
+    if not joint_names or len(set(joint_names)) != len(joint_names):
+        raise ValueError(f"{trial_dir} has invalid joint_names")
+
+    observations = read_jsonl(trial_dir / "observations.jsonl")
+    actions = read_jsonl(trial_dir / "actions.jsonl")
+    if len(observations) != metadata.get("observation_count"):
+        raise ValueError(f"{trial_dir} observation count disagrees with metadata")
+    if len(actions) != metadata.get("action_count"):
+        raise ValueError(f"{trial_dir} action count disagrees with metadata")
+
+    observations_by_frame = _validate_trial_observations(
+        trial_dir, observations, joint_names, metadata
+    )
+    _validate_trial_actions(trial_dir, actions, observations_by_frame, joint_names)
+    _validate_trial_videos(trial_dir, metadata, camera_names)
 
     return RolloutTrial(
         root=trial_dir,
@@ -1006,11 +1054,7 @@ class EpisodeSpec:
 
 def _trial_spec(trial_dir: Path) -> EpisodeSpec:
     metadata = json.loads((trial_dir / "metadata.json").read_text())
-    outcome = metadata.get("outcome_label")
-    if outcome not in VALID_OUTCOMES:
-        raise UnlabeledRolloutError(
-            f"{trial_dir} is not labeled success/failure: {outcome!r}"
-        )
+    outcome = _require_outcome_label(metadata, trial_dir)
 
     def load():
         trial = load_trial(trial_dir)

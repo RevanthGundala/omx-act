@@ -429,3 +429,35 @@ def test_non_finite_rollout_frame_names_the_trial(tmp_path):
             joint_names=list(JOINT_NAMES),
             failure_penalty=4.0,
         )
+
+
+def test_both_trial_readers_reject_an_unlabeled_trial_the_same_way(tmp_path):
+    # load_trial and _trial_spec each open metadata.json for a different
+    # purpose. When the label check was written out twice, the two could drift,
+    # and only one of them raising the catchable type would turn
+    # --skip-unlabeled into an unhandled crash on that path.
+    trial_dir = _make_trial(tmp_path / "roll", outcome="success")
+    metadata = json.loads((trial_dir / "metadata.json").read_text())
+    del metadata["outcome_label"]
+    (trial_dir / "metadata.json").write_text(json.dumps(metadata))
+
+    with pytest.raises(build_dataset_module.UnlabeledRolloutError):
+        load_trial(trial_dir)
+    with pytest.raises(build_dataset_module.UnlabeledRolloutError):
+        build_dataset_module._trial_spec(trial_dir)
+
+
+def test_unlabeled_is_distinguishable_from_a_corrupt_trial(tmp_path):
+    # --skip-unlabeled must skip only missing labels. A trial whose action
+    # count disagrees with its metadata is damaged, and silently dropping it
+    # would build a dataset short an episode with a misleading reason logged.
+    trial_dir = _make_trial(tmp_path / "roll", outcome="success")
+    metadata = json.loads((trial_dir / "metadata.json").read_text())
+    metadata["action_count"] = 999
+    (trial_dir / "metadata.json").write_text(json.dumps(metadata))
+
+    with pytest.raises(ValueError) as caught:
+        load_trials([trial_dir], skip_unlabeled=True)
+
+    assert not isinstance(caught.value, build_dataset_module.UnlabeledRolloutError)
+    assert "action count disagrees" in str(caught.value)
