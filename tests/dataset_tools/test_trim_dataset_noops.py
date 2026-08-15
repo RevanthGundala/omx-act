@@ -23,7 +23,7 @@ MAX_EPISODES = 2
 
 
 @pytest.fixture(scope="module")
-def trimmed_dataset_dir(tmp_path_factory):
+def trimmed_dataset_dir(tmp_path_factory, repo_root):
     output_dir = tmp_path_factory.mktemp("trim_dataset_noops_pytest") / "output"
     result = subprocess.run(
         [
@@ -35,7 +35,7 @@ def trimmed_dataset_dir(tmp_path_factory):
             "--noop-threshold-deg", str(NOOP_THRESHOLD_DEG),
             "--noop-margin-frames", str(NOOP_MARGIN_FRAMES),
         ],
-        cwd=Path(__file__).resolve().parents[1],
+        cwd=repo_root,
         capture_output=True,
         text=True,
     )

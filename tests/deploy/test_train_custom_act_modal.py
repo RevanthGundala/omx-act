@@ -72,16 +72,15 @@ def test_validate_pretrained_checkpoint_path_rejects_unsafe_paths(path):
         validate_pretrained_checkpoint_path(path)
 
 
-def _recap_entrypoint_source() -> str:
+def _recap_entrypoint_source(repo_root) -> str:
     """Source of the RECAP entrypoint.
 
     Read as text rather than imported because the launcher needs the `modal`
     package, which is not a dependency of the test environment.
     """
     import ast
-    from pathlib import Path
 
-    path = Path(__file__).resolve().parents[1] / "deploy" / "train_custom_act_modal.py"
+    path = repo_root / "deploy" / "train_custom_act_modal.py"
     tree = ast.parse(path.read_text())
     for node in tree.body:
         if isinstance(node, ast.FunctionDef) and node.name == "train_recap_policy_remote":
@@ -89,15 +88,14 @@ def _recap_entrypoint_source() -> str:
     raise AssertionError("train_recap_policy_remote is missing from the Modal launcher")
 
 
-def test_recap_entrypoint_is_bounded_by_the_hard_runtime():
+def test_recap_entrypoint_is_bounded_by_the_hard_runtime(repo_root):
     """An unattended GPU run must not be able to bill for a full day if the
     local client disconnects, so the RECAP function uses the shared hard
     runtime rather than the 24h timeout the older entrypoints carry.
     """
     import ast
-    from pathlib import Path
 
-    path = Path(__file__).resolve().parents[1] / "deploy" / "train_custom_act_modal.py"
+    path = repo_root / "deploy" / "train_custom_act_modal.py"
     source = path.read_text()
     tree = ast.parse(source)
     decorators = [
@@ -119,8 +117,8 @@ def test_recap_entrypoint_is_bounded_by_the_hard_runtime():
     assert timeouts[0].id == "MODAL_MAX_RUNTIME_SECONDS"
 
 
-def test_recap_entrypoint_refuses_cpu_fallback_and_pins_the_gpu_device():
-    source = _recap_entrypoint_source()
+def test_recap_entrypoint_refuses_cpu_fallback_and_pins_the_gpu_device(repo_root):
+    source = _recap_entrypoint_source(repo_root)
 
     # Paying for a GPU while silently training on CPU is the expensive failure.
     assert "torch.cuda.is_available()" in source
@@ -130,8 +128,8 @@ def test_recap_entrypoint_refuses_cpu_fallback_and_pins_the_gpu_device():
     assert "vol.commit()" in source
 
 
-def test_recap_entrypoint_defaults_to_the_sft_stage():
-    source = _recap_entrypoint_source()
+def test_recap_entrypoint_defaults_to_the_sft_stage(repo_root):
+    source = _recap_entrypoint_source(repo_root)
 
     # Omitting labels must run SFT with the indicator fixed to POSITIVE rather
     # than silently training against stale advantage labels.
