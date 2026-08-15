@@ -2,11 +2,14 @@
 Train the custom models/act ACT implementation on Modal.
 
 Usage:
-    modal run --detach deploy/train_custom_act_modal.py::train_remote --profile pour_water
-    modal run deploy/train_custom_act_modal.py --profile pour_water --preflight-only
-    modal run deploy/train_custom_act_modal.py --profile sim_transfer_cube_reference \
-      --benchmark-dataset-dir data/benchmarks/act_sim_transfer_cube_scripted --upload-benchmark-data
-    modal run deploy/train_custom_act_modal.py --profile sim_transfer_cube_reference --run-name seed0
+    modal run --detach deploy/train_custom_act_modal.py \
+      --dataset-repo-id RevanthGundala/026-place-sponge-on-hot-pad-clean \
+      --job-name act_custom_clean48_chunk30_20k --steps 20000
+
+    modal run deploy/train_custom_act_modal.py::recap_policy \
+      --pretrained-checkpoint act_experiments/<run>/checkpoints/last.pt \
+      --dataset-repo-id RevanthGundala/034-recap-balanced \
+      --labels-path act_experiments/recap_labels/034-recap-balanced.json
 
 Download outputs:
     modal volume get omx-custom-act-training-logs / outputs/modal_custom_act
@@ -16,7 +19,6 @@ from __future__ import annotations
 
 from dataclasses import asdict, replace
 from datetime import datetime, timezone
-import importlib
 from pathlib import Path
 import uuid
 
@@ -38,7 +40,6 @@ except ModuleNotFoundError:
 
 REMOTE_WORKSPACE = Path("/workspace")
 REMOTE_OUTPUTS = Path("/outputs")
-REMOTE_BENCHMARK_DATA = Path("/benchmark-data")
 MODAL_GPU = "A10G"
 MODAL_MAX_RUNTIME_SECONDS = 3 * 60 * 60
 VOLUME_COMMIT_INTERVAL_SECONDS = 300
@@ -71,12 +72,8 @@ image = (
     .add_local_dir("data", remote_path=str(REMOTE_WORKSPACE / "data"))
     .add_local_file("deploy/modal_training_common.py", remote_path="/root/modal_training_common.py")
 )
-if Path("benchmarks").is_dir():
-    image = image.add_local_dir("benchmarks", remote_path=str(REMOTE_WORKSPACE / "benchmarks"))
-
 app = modal.App("omx-custom-act-training", image=image)
 vol = modal.Volume.from_name("omx-custom-act-training-logs", create_if_missing=True)
-benchmark_vol = modal.Volume.from_name("omx-custom-act-benchmark-data", create_if_missing=True)
 
 
 @app.function(timeout=300)
@@ -110,88 +107,6 @@ def runtime_preflight() -> str:
         f"torchcodec={torchcodec.__version__} lerobot={lerobot.__version__} "
         f"decoded_frame_shape={tuple(frame.shape)}"
     )
-
-
-def load_profile(profile: str):
-    module = importlib.import_module(f"configs.act.{profile}")
-    return module.config
-
-
-def preflight_profile(profile: str) -> None:
-    config = load_profile(profile)
-    print(f"PROFILE {profile}")
-    print(f"  modal_gpu={MODAL_GPU}")
-    print(f"  dataset_format={config.dataset_format}")
-    if config.dataset_format == "act_hdf5":
-        print(f"  benchmark_task={config.benchmark_task_name}")
-        print(f"  benchmark_dataset_dir={config.benchmark_dataset_dir}")
-        print(f"  benchmark_num_episodes={config.benchmark_num_episodes}")
-        print(f"  benchmark_episode_len={config.benchmark_episode_len}")
-    else:
-        print(f"  dataset={config.dataset_repo_id}@{config.dataset_revision}")
-    print(f"  cameras={config.camera_names}")
-    print(f"  batch_size={config.batch_size}")
-    print(f"  chunk_size={config.chunk_size}")
-    print(f"  d_model={config.d_model}")
-    print(f"  encoder_layers={config.num_encoder_layers}")
-    print(f"  decoder_layers={config.num_decoder_layers}")
-    print(f"  lr={config.learning_rate}")
-    print(f"  kl_weight={config.kl_weight}")
-    print(f"  steps={config.num_train_steps}")
-
-    if config.dataset_format == "act_hdf5":
-        print("  dataset_check=skipped; benchmark HDF5 data is staged in Modal volume")
-    else:
-        try:
-            from huggingface_hub import HfApi
-        except ModuleNotFoundError:
-            print("  dataset_check=skipped; install/use uv env for local huggingface_hub preflight")
-        else:
-            HfApi().dataset_info(config.dataset_repo_id, revision=config.dataset_revision)
-            print("  dataset_check=ok")
-
-
-def benchmark_remote_dir(profile: str) -> Path:
-    return REMOTE_BENCHMARK_DATA / profile
-
-
-def upload_benchmark_dataset(profile: str, local_dataset_dir: str) -> None:
-    local_path = Path(local_dataset_dir).expanduser()
-    if not local_path.is_dir():
-        raise FileNotFoundError(f"Benchmark dataset dir not found: {local_path}")
-    episode_files = sorted(local_path.glob("episode_*.hdf5"))
-    if not episode_files:
-        raise FileNotFoundError(f"No episode_*.hdf5 files found in {local_path}")
-
-    remote_dir = f"/{profile}"
-    print(f"Uploading {len(episode_files)} benchmark episodes to Modal volume {remote_dir}...")
-    with benchmark_vol.batch_upload(force=True) as batch:
-        batch.put_directory(local_path, remote_dir)
-    print("Benchmark upload complete.")
-
-
-@app.function(volumes={REMOTE_BENCHMARK_DATA: benchmark_vol})
-def list_benchmark_data(profile: str) -> list[str]:
-    import os
-
-    benchmark_vol.reload()
-    root_dir = benchmark_remote_dir(profile)
-    results = []
-    if not root_dir.exists():
-        return results
-    for root, _dirs, files in os.walk(root_dir):
-        for filename in files:
-            full = os.path.join(root, filename)
-            results.append(os.path.relpath(full, root_dir))
-    return sorted(results)
-
-
-def configure_remote_profile(config, profile: str):
-    remote_output_root = REMOTE_OUTPUTS / "act_experiments"
-    updated = replace(config, output_root=str(remote_output_root))
-    if updated.dataset_format == "act_hdf5":
-        updated = replace(updated, benchmark_dataset_dir=str(benchmark_remote_dir(profile)))
-    return updated
 
 
 @app.function(
@@ -526,79 +441,6 @@ def train_recap_policy_remote(
     )
 
 
-@app.function(
-    gpu=MODAL_GPU,
-    timeout=86_400,
-    memory=65_536,
-    volumes={REMOTE_OUTPUTS: vol, REMOTE_BENCHMARK_DATA: benchmark_vol},
-    secrets=[hf_secret],
-)
-def train_remote(profile: str, run_name: str | None = None) -> str:
-    import os
-    import sys
-    import threading
-
-    os.environ["PYTHONUNBUFFERED"] = "1"
-    os.environ["HF_TOKEN"] = os.environ.get("HF_TOKEN", "")
-    os.environ["HUGGINGFACE_HUB_TOKEN"] = os.environ.get("HF_TOKEN", "")
-
-    sys.path.insert(0, str(REMOTE_WORKSPACE))
-    os.chdir(REMOTE_WORKSPACE)
-
-    import torch
-
-    print("=== CUDA PREFLIGHT ===")
-    print("Torch:", torch.__version__)
-    print("CUDA runtime:", torch.version.cuda)
-    if not torch.cuda.is_available():
-        raise RuntimeError("CUDA is not available in this Modal container.")
-    print("Detected GPU:", torch.cuda.get_device_name(0))
-    print("VRAM (GB):", round(torch.cuda.get_device_properties(0).total_memory / 1e9, 1))
-
-    config_module = importlib.import_module(f"configs.act.{profile}")
-    config_module.config = configure_remote_profile(config_module.config, profile)
-    if config_module.config.dataset_format == "act_hdf5":
-        benchmark_vol.reload()
-        dataset_dir = Path(config_module.config.benchmark_dataset_dir)
-        episode_files = sorted(dataset_dir.glob("episode_*.hdf5"))
-        expected = config_module.config.benchmark_num_episodes
-        print(f"benchmark_dataset_dir={dataset_dir}")
-        print(f"benchmark_episode_files={len(episode_files)}")
-        if expected is not None and len(episode_files) != expected:
-            raise RuntimeError(f"Expected {expected} benchmark episodes in {dataset_dir}, found {len(episode_files)}")
-        if not episode_files:
-            raise RuntimeError(
-                f"No benchmark episodes found in {dataset_dir}. "
-                "Run the local entrypoint with --upload-benchmark-data first."
-            )
-    remote_output_root = Path(config_module.config.output_root)
-
-    from models.act.train import main as train_main
-
-    print("=== STARTING CUSTOM ACT TRAINING ===")
-    print(f"profile={profile}")
-    print(f"run_name={run_name}")
-    print(f"output_root={remote_output_root}")
-    print(f"config={asdict(config_module.config)}")
-
-    stop_commits = threading.Event()
-
-    def commit_loop() -> None:
-        while not stop_commits.wait(VOLUME_COMMIT_INTERVAL_SECONDS):
-            print("Committing outputs volume for periodic checkpoint download...", flush=True)
-            vol.commit()
-
-    commit_thread = threading.Thread(target=commit_loop, daemon=True)
-    commit_thread.start()
-    try:
-        train_main(profile=profile, run_name=run_name, dry_run=False)
-    finally:
-        stop_commits.set()
-        commit_thread.join(timeout=5)
-        vol.commit()
-    return f"Custom ACT training complete for profile={profile}; outputs saved in volume omx-custom-act-training-logs."
-
-
 @app.function(volumes={REMOTE_OUTPUTS: vol})
 def list_outputs() -> list[str]:
     import os
@@ -614,13 +456,9 @@ def list_outputs() -> list[str]:
 
 @app.local_entrypoint()
 def main(
-    profile: str = "pour_water",
+    dataset_repo_id: str,
     run_name: str | None = None,
     preflight_only: bool = False,
-    benchmark_dataset_dir: str | None = None,
-    upload_benchmark_data: bool = False,
-    list_benchmark_only: bool = False,
-    dataset_repo_id: str | None = None,
     steps: int = 20_000,
     chunk_size: int = 30,
     save_freq: int = 2_000,
@@ -630,86 +468,56 @@ def main(
     resume_checkpoint: str | None = None,
     image_transforms: bool = False,
 ):
-    if dataset_repo_id is not None:
-        validate_dataset_run(
-            dataset_repo_id=dataset_repo_id,
-            steps=steps,
-            chunk_size=chunk_size,
-            save_freq=save_freq,
-            train_split=train_split,
-            job_name=job_name,
+    validate_dataset_run(
+        dataset_repo_id=dataset_repo_id,
+        steps=steps,
+        chunk_size=chunk_size,
+        save_freq=save_freq,
+        train_split=train_split,
+        job_name=job_name,
+    )
+    pretrained_checkpoint = validate_pretrained_checkpoint_path(pretrained_checkpoint)
+    resume_checkpoint = validate_pretrained_checkpoint_path(resume_checkpoint)
+    if pretrained_checkpoint and resume_checkpoint:
+        raise ValueError(
+            "--pretrained-checkpoint and --resume-checkpoint are mutually exclusive."
         )
-        pretrained_checkpoint = validate_pretrained_checkpoint_path(pretrained_checkpoint)
-        resume_checkpoint = validate_pretrained_checkpoint_path(resume_checkpoint)
-        if pretrained_checkpoint and resume_checkpoint:
-            raise ValueError(
-                "--pretrained-checkpoint and --resume-checkpoint are mutually exclusive."
-            )
-        print(
-            "DATASET_RUN "
-            f"gpu={MODAL_GPU} hard_timeout_seconds={MODAL_MAX_RUNTIME_SECONDS} "
-            f"dataset={dataset_repo_id} steps={steps} chunk_size={chunk_size} "
-            f"save_freq={save_freq} train_split={train_split} job_name={job_name} "
-            f"image_transforms={image_transforms} "
-            f"pretrained_checkpoint={pretrained_checkpoint} "
-            f"resume_checkpoint={resume_checkpoint}"
-        )
-        if preflight_only:
-            print("Preflight only; not launching Modal GPU job.")
-            return
-        run_token = (
-            datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-            + "-"
-            + uuid.uuid4().hex[:8]
-        )
-        function_call = train_dataset_remote.spawn(
-            dataset_repo_id=dataset_repo_id,
-            steps=steps,
-            chunk_size=chunk_size,
-            save_freq=save_freq,
-            train_split=train_split,
-            job_name=job_name,
-            run_token=run_token,
-            pretrained_checkpoint=pretrained_checkpoint,
-            resume_checkpoint=resume_checkpoint,
-            image_transforms=image_transforms,
-        )
-        print(f"MODAL_FUNCTION_CALL_ID={function_call.object_id}")
-        print(f"MODAL_RUN_TOKEN={run_token}")
-        print(f"MODAL_JOB_NAME={job_name}")
-        print(f"MODAL_HARD_TIMEOUT_SECONDS={MODAL_MAX_RUNTIME_SECONDS}")
-        print("MODAL_OUTPUT_VOLUME=omx-custom-act-training-logs")
-        print(f"MODAL_OUTPUT_PATH=act_experiments/{job_name}")
-        return
-
-    preflight_profile(profile)
-    config = load_profile(profile)
-    if upload_benchmark_data:
-        if config.dataset_format != "act_hdf5":
-            raise ValueError("--upload-benchmark-data is only valid for dataset_format='act_hdf5' profiles")
-        upload_benchmark_dataset(profile, benchmark_dataset_dir or config.benchmark_dataset_dir or "")
-    if list_benchmark_only:
-        files = list_benchmark_data.remote(profile)
-        print(f"Benchmark files in Modal volume for {profile}:")
-        for filename in files[:20]:
-            print(f"  {filename}")
-        if len(files) > 20:
-            print(f"  ... {len(files) - 20} more")
-        return
+    print(
+        "DATASET_RUN "
+        f"gpu={MODAL_GPU} hard_timeout_seconds={MODAL_MAX_RUNTIME_SECONDS} "
+        f"dataset={dataset_repo_id} steps={steps} chunk_size={chunk_size} "
+        f"save_freq={save_freq} train_split={train_split} job_name={job_name} "
+        f"image_transforms={image_transforms} "
+        f"pretrained_checkpoint={pretrained_checkpoint} "
+        f"resume_checkpoint={resume_checkpoint}"
+    )
     if preflight_only:
         print("Preflight only; not launching Modal GPU job.")
         return
-    if upload_benchmark_data:
-        print("Benchmark upload complete; not launching Modal GPU job.")
-        print("Start training with:")
-        print(f"  modal run deploy/train_custom_act_modal.py --profile {profile} --run-name {run_name or 'seed0'}")
-        return
-
-    function_call = train_remote.spawn(profile, run_name)
-    print(f"Spawned Modal custom ACT training call: {function_call.object_id}")
-    print("Outputs volume: omx-custom-act-training-logs")
-    print("Download later with:")
-    print("  modal volume get omx-custom-act-training-logs / outputs/modal_custom_act")
+    run_token = (
+        datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        + "-"
+        + uuid.uuid4().hex[:8]
+    )
+    function_call = train_dataset_remote.spawn(
+        dataset_repo_id=dataset_repo_id,
+        steps=steps,
+        chunk_size=chunk_size,
+        save_freq=save_freq,
+        train_split=train_split,
+        job_name=job_name,
+        run_token=run_token,
+        pretrained_checkpoint=pretrained_checkpoint,
+        resume_checkpoint=resume_checkpoint,
+        image_transforms=image_transforms,
+    )
+    print(f"MODAL_FUNCTION_CALL_ID={function_call.object_id}")
+    print(f"MODAL_RUN_TOKEN={run_token}")
+    print(f"MODAL_JOB_NAME={job_name}")
+    print(f"MODAL_HARD_TIMEOUT_SECONDS={MODAL_MAX_RUNTIME_SECONDS}")
+    print("MODAL_OUTPUT_VOLUME=omx-custom-act-training-logs")
+    print(f"MODAL_OUTPUT_PATH=act_experiments/{job_name}")
+    return
 
 
 @app.local_entrypoint()

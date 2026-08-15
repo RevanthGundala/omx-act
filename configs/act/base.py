@@ -6,15 +6,10 @@ class ACTConfig:
     # Dataset
     dataset_repo_id: str
     dataset_revision: str = "main"
-    dataset_format: str = "lerobot"
     camera_names: tuple[str, ...] = ("wrist", "top")
-    benchmark_dataset_dir: str | None = None
-    benchmark_task_name: str | None = None
-    benchmark_num_episodes: int | None = None
-    benchmark_episode_len: int | None = None
 
     # Run identity
-    job_name: str = "act_pour_water"
+    job_name: str = "act_custom"
     output_root: str = "outputs/act_experiments"
 
     # Data loading
