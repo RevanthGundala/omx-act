@@ -1,10 +1,9 @@
-"""Quick Rerun visualizer for LeRobot dataset episodes.
+"""Export LeRobot dataset episodes to local video and image files.
 
 Examples:
-    uv run python evaluation/visualize_dataset.py --episode 0
-    uv run python evaluation/visualize_dataset.py --episodes all --visual-only
-    uv run python evaluation/visualize_dataset.py --episodes 50:70 --grid --grid-cols 6
-    uv run python evaluation/visualize_dataset.py --episodes all --play-grid --stride 10
+    uv run python evaluation/visualize_dataset.py --episodes 50:70 --export-mp4
+    uv run python evaluation/visualize_dataset.py --episodes all --export-raw-mp4
+    uv run python evaluation/visualize_dataset.py --episode 0 --export-stills
 """
 
 import argparse
@@ -13,12 +12,10 @@ import sys
 
 import cv2
 import numpy as np
-import rerun as rr
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from utils.config import JOINT_NAMES, TRAIN_DATASET_REPO_ID
 
 
 def parse_episodes(value: str | None, fallback: int) -> list[int] | None:
@@ -71,83 +68,6 @@ def detect_cameras(ds: LeRobotDataset, requested: str) -> list[str]:
     prefix = "observation.images."
     return sorted(key.removeprefix(prefix) for key in sample if key.startswith(prefix))
 
-
-def log_episode_grid(
-    ds: LeRobotDataset,
-    episodes: list[int] | None,
-    cameras: list[str],
-    samples_per_episode: int,
-    grid_cols: int,
-    thumb_width: int,
-) -> None:
-    first_indices = collect_episode_indices(ds)
-    episode_ids = episodes if episodes is not None else sorted(first_indices)
-    thumb_height = int(thumb_width * 0.75)
-    cell_width = thumb_width * samples_per_episode
-    cell_height = thumb_height
-
-    for camera in cameras:
-        rows = int(np.ceil(len(episode_ids) / grid_cols))
-        sheet = np.zeros((rows * cell_height, grid_cols * cell_width, 3), dtype=np.uint8)
-        key = f"observation.images.{camera}"
-        for episode_idx, episode in enumerate(episode_ids):
-            indices = first_indices.get(episode, [])
-            if not indices:
-                continue
-            sample_positions = np.linspace(0, len(indices) - 1, samples_per_episode).astype(int)
-            row = episode_idx // grid_cols
-            col = episode_idx % grid_cols
-            for sample_col, pos in enumerate(sample_positions):
-                sample = ds[indices[pos]]
-                if key not in sample:
-                    continue
-                img = resize_nearest(image_to_uint8_hwc(sample[key]), (thumb_height, thumb_width))
-                y0 = row * cell_height
-                x0 = col * cell_width + sample_col * thumb_width
-                sheet[y0 : y0 + thumb_height, x0 : x0 + thumb_width] = img
-
-        rr.log(f"grid/{camera}", rr.Image(sheet))
-        print(f"Logged {camera} grid: {len(episode_ids)} episodes, {samples_per_episode} samples/episode")
-
-
-def log_playable_grid(
-    ds: LeRobotDataset,
-    episodes: list[int] | None,
-    cameras: list[str],
-    grid_cols: int,
-    thumb_width: int,
-    stride: int,
-) -> None:
-    episode_indices = collect_episode_indices(ds)
-    episode_ids = episodes if episodes is not None else sorted(episode_indices)
-    thumb_height = int(thumb_width * 0.75)
-    rows = int(np.ceil(len(episode_ids) / grid_cols))
-    max_len = max(len(episode_indices[episode]) for episode in episode_ids)
-
-    for frame in range(0, max_len, stride):
-        rr.set_time("relative_frame", sequence=frame)
-        for camera in cameras:
-            sheet = np.full((rows * thumb_height, grid_cols * thumb_width, 3), 32, dtype=np.uint8)
-            key = f"observation.images.{camera}"
-            for episode_idx, episode in enumerate(episode_ids):
-                indices = episode_indices.get(episode, [])
-                if not indices:
-                    continue
-                sample = ds[indices[min(frame, len(indices) - 1)]]
-                if key not in sample:
-                    continue
-                img = resize_nearest(image_to_uint8_hwc(sample[key]), (thumb_height, thumb_width))
-                row = episode_idx // grid_cols
-                col = episode_idx % grid_cols
-                y0 = row * thumb_height
-                x0 = col * thumb_width
-                sheet[y0 : y0 + thumb_height, x0 : x0 + thumb_width] = img
-            rr.log(f"play_grid/{camera}", rr.Image(sheet))
-
-    print(
-        f"Logged playable grid: {len(episode_ids)} episodes, "
-        f"{max_len // stride + 1} timesteps, stride={stride}"
-    )
 
 
 def build_playable_grid_frame(
@@ -300,22 +220,18 @@ def export_episode_stills(
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--repo-id", default=TRAIN_DATASET_REPO_ID)
+    parser.add_argument("--repo-id", required=True)
     parser.add_argument("--root", type=Path, default=None)
     parser.add_argument("--episode", type=int, default=0)
     parser.add_argument("--episodes", default=None, help="'all', 'start:end', or comma-separated episode ids")
     parser.add_argument("--cameras", default="wrist,top", help="Comma-separated camera names, or 'all'.")
-    parser.add_argument("--visual-only", action="store_true", help="Only log camera images, not state/action scalars")
     parser.add_argument("--stride", type=int, default=1, help="Log every Nth frame")
     parser.add_argument("--video-backend", default="pyav")
-    parser.add_argument("--grid", action="store_true", help="Log contact-sheet grids instead of a frame timeline")
-    parser.add_argument("--play-grid", action="store_true", help="Log playable contact-sheet grids over relative episode time")
     parser.add_argument("--grid-cols", type=int, default=5, help="Episode cells per grid row")
-    parser.add_argument("--samples-per-episode", type=int, default=5, help="Frames sampled across each episode cell")
     parser.add_argument("--thumb-width", type=int, default=128)
-    parser.add_argument("--export-mp4", action="store_true", help="Write playable camera-grid MP4 files locally instead of opening Rerun.")
-    parser.add_argument("--export-raw-mp4", action="store_true", help="Write raw per-camera episode MP4 files locally instead of opening Rerun.")
-    parser.add_argument("--export-stills", action="store_true", help="Write camera stills locally instead of opening Rerun.")
+    parser.add_argument("--export-mp4", action="store_true", help="Write playable camera-grid MP4 files.")
+    parser.add_argument("--export-raw-mp4", action="store_true", help="Write raw per-camera episode MP4 files.")
+    parser.add_argument("--export-stills", action="store_true", help="Write camera stills.")
     parser.add_argument("--still-frame", type=int, default=0, help="Relative episode frame for --export-stills.")
     parser.add_argument("--output-dir", type=Path, default=Path("outputs/dataset_videos"), help="Directory for --export-mp4 outputs.")
     parser.add_argument("--output-fps", type=float, default=10.0, help="FPS metadata for --export-mp4 videos.")
@@ -356,40 +272,9 @@ def main() -> None:
         )
         return
 
-    rr.init(f"dataset_{args.repo_id.split('/')[-1]}_eps_{label}", spawn=True)
-
-    if args.grid:
-        log_episode_grid(ds, episodes, cameras, args.samples_per_episode, args.grid_cols, args.thumb_width)
-        print("Rerun grid viewer should be open.")
-        return
-    if args.play_grid:
-        log_playable_grid(ds, episodes, cameras, args.grid_cols, args.thumb_width, args.stride)
-        print("Rerun playable grid viewer should be open.")
-        return
-
-    for i in range(len(ds)):
-        if i % args.stride != 0:
-            continue
-        sample = ds[i]
-        episode = int(scalar(sample["episode_index"]))
-        frame = int(scalar(sample["frame_index"]))
-        rr.set_time("episode", sequence=episode)
-        rr.set_time("frame", sequence=frame)
-        rr.set_time("time", duration=float(scalar(sample["timestamp"])))
-
-        if not args.visual_only:
-            state = sample["observation.state"].numpy()
-            action = sample["action"].numpy()
-            for joint_idx, name in enumerate(JOINT_NAMES):
-                rr.log(f"state/{name}", rr.Scalars(float(state[joint_idx])))
-                rr.log(f"action/{name}", rr.Scalars(float(action[joint_idx])))
-
-        for camera in cameras:
-            key = f"observation.images.{camera}"
-            if key in sample:
-                rr.log(f"camera/{camera}", rr.Image(image_to_uint8_hwc(sample[key])))
-
-    print(f"Logged up to {len(ds)} frames. Rerun viewer should be open.")
+    raise SystemExit(
+        "Choose an output mode: --export-mp4, --export-raw-mp4, or --export-stills"
+    )
 
 
 if __name__ == "__main__":

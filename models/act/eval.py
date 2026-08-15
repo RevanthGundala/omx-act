@@ -8,7 +8,6 @@ import zlib
 
 import cv2
 import numpy as np
-import rerun as rr
 import torch
 from lerobot.datasets import LeRobotDatasetMetadata
 from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig
@@ -18,7 +17,6 @@ from lerobot.robots.omx_follower.omx_follower import OmxFollower
 from configs.act.base import ACTConfig
 from models.act.act import ACTPolicy
 from utils.config import CAMERA_HEIGHT, CAMERA_WIDTH, CAMERAS, FOLLOWER_PORT, FPS, JOINT_NAMES
-from utils.rerun_utils import init_rerun
 
 
 def _disable_auto_calibration(robot):
@@ -162,8 +160,6 @@ def main():
     parser.add_argument("--model-height", type=int, default=CAMERA_HEIGHT, help="Image height fed to ACT.")
     parser.add_argument("--start-delay", type=float, default=3.0)
     parser.add_argument("--log-every", type=int, default=1, help="Print debug logs every N steps. Use 0 to disable detailed per-step logs.")
-    parser.add_argument("--no-rerun", action="store_true", help="Disable Rerun viewer and .rrd logging.")
-    parser.add_argument("--no-save-rrd", action="store_true", help="Show Rerun live viewer without saving outputs/rerun/act_eval.rrd.")
     parser.add_argument("--no-temporal-ensemble", action="store_true", help="Execute only the first action from each predicted chunk.")
     parser.add_argument("--save-camera", default=None, help="Camera name to save as MP4, e.g. top or wrist.")
     parser.add_argument("--video-path", default=None, help="Output MP4 path. Defaults to outputs/eval_videos/<camera>_<timestamp>.mp4.")
@@ -257,15 +253,6 @@ def main():
         camera_width=args.camera_width,
         camera_height=args.camera_height,
     )
-    if not args.no_rerun:
-        rrd_path = init_rerun(
-            "act_eval",
-            has_camera=True,
-            camera_names=list(cfg.camera_names),
-            save_rrd=not args.no_save_rrd,
-        )
-        if rrd_path is not None:
-            print(f"rerun_rrd={rrd_path}", flush=True)
     video_writer = None
     video_path = None
     if args.save_camera is not None:
@@ -365,26 +352,6 @@ def main():
                             raise RuntimeError(f"failed to open video writer: {video_path}")
                     video_writer.write(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
                     video_dt = time.perf_counter() - t_video_start
-                rerun_dt = 0.0
-                if not args.no_rerun:
-                    t_rerun_start = time.perf_counter()
-                    rr.set_time("step", sequence=step)
-                    for i, name in enumerate(JOINT_NAMES):
-                        rr.log(f"joints/{name}/state", rr.Scalars([float(obs["qpos"][i])]))
-                        rr.log(f"joints/{name}/policy_action", rr.Scalars([float(action[i])]))
-                        rr.log(f"joints/{name}/policy_action_normalized", rr.Scalars([float(action_normalized[i])]))
-                        rr.log(f"joints/{name}/sent_action", rr.Scalars([float(sent_action[f'{name}.pos'])]))
-                    for camera, frame in obs["raw_images"].items():
-                        rr.log(f"camera/{camera}/raw", rr.Image(frame))
-                    for camera, frame in obs["images"].items():
-                        rr.log(f"camera/{camera}/model", rr.Image(frame))
-                    for camera, debug in obs["camera_debug"].items():
-                        if debug["age_ms"] is not None:
-                            rr.log(f"camera/{camera}/age_ms", rr.Scalars([float(debug["age_ms"])]))
-                        rr.log(f"camera/{camera}/sample_crc32", rr.Scalars([float(debug["sample_crc32"])]))
-                        rr.log(f"camera/{camera}/mean", rr.Scalars([float(debug["mean"])]))
-                        rr.log(f"camera/{camera}/std", rr.Scalars([float(debug["std"])]))
-                    rerun_dt = time.perf_counter() - t_rerun_start
                 loop_dt = time.perf_counter() - start
                 sleep_dt = max(0.0, 1.0 / args.hz - loop_dt)
                 timing = {
@@ -393,14 +360,9 @@ def main():
                     "model_ms": (t_model - t_preproc) * 1000.0,
                     "send_ms": (t_send - t_model) * 1000.0,
                     "video_ms": video_dt * 1000.0,
-                    "rerun_ms": rerun_dt * 1000.0,
                     "loop_ms": loop_dt * 1000.0,
                     "sleep_ms": sleep_dt * 1000.0,
                 }
-                if not args.no_rerun:
-                    rr.log("metrics/loop_hz", rr.Scalars([1.0 / loop_dt if loop_dt > 0 else float("inf")]))
-                    for name, value in timing.items():
-                        rr.log(f"timing/{name}", rr.Scalars([float(value)]))
                 if trace_file is not None:
                     trace_record = {
                         "step": step,

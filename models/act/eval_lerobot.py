@@ -23,17 +23,11 @@ try:
 except ImportError:
     from lerobot.utils.utils import get_safe_torch_device
 
-try:
-    import rerun as rr
-except ImportError:
-    rr = None
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import models.act.lerobot_policy  # noqa: F401 -- register custom_act before config parsing
 from models.act.eval_common import dataset_start_statistics
 from utils.config import CAMERA_HEIGHT, CAMERA_WIDTH, CAMERAS, FOLLOWER_PORT, FPS, JOINT_NAMES
-from utils.rerun_utils import init_rerun
 
 
 def disable_auto_calibration(robot):
@@ -458,8 +452,6 @@ def main() -> None:
         default=1.0,
         help="Print start-state homing progress every N seconds. Use <=0 to disable.",
     )
-    parser.add_argument("--no-rerun", action="store_true")
-    parser.add_argument("--no-save-rrd", action="store_true")
     parser.add_argument(
         "--log-path",
         default=None,
@@ -639,18 +631,6 @@ def main() -> None:
         camera_width=args.camera_width,
         camera_height=args.camera_height,
     )
-    if not args.no_rerun:
-        if rr is None:
-            raise RuntimeError("rerun-sdk is not installed; pass --no-rerun or install rerun-sdk")
-        rrd_path = init_rerun(
-            "lerobot_eval",
-            has_camera=bool(capture_camera_names),
-            camera_names=capture_camera_names,
-            save_rrd=not args.no_save_rrd,
-        )
-        if rrd_path is not None:
-            print(f"rerun_rrd={rrd_path}", flush=True)
-
     follower.connect(calibrate=False)
     try:
         for camera, video_path in video_paths.items():
@@ -827,17 +807,6 @@ def main() -> None:
                     "delta": delta_values,
                 }
             )
-
-            if not args.no_rerun:
-                rr.set_time("step", sequence=step)
-                for i, name in enumerate(JOINT_NAMES):
-                    rr.log(f"joints/{name}/state", rr.Scalars([float(state[i])]))
-                    rr.log(f"joints/{name}/policy_action", rr.Scalars([float(action_values[i])]))
-                    rr.log(f"joints/{name}/sent_action", rr.Scalars([float(sent_action[f'{name}.pos'])]))
-                rr.log("metrics/loop_hz", rr.Scalars([loop_hz]))
-                for camera in raw_camera_frames:
-                    rr.log(f"camera/{camera}/raw", rr.Image(raw_camera_frames[camera]))
-                    rr.log(f"camera/{camera}/model", rr.Image(model_camera_frames[camera]))
 
             if args.log_every > 0 and step % args.log_every == 0:
                 state_preview = "  |  ".join(f"{name}: {state[i]:7.2f}" for i, name in enumerate(JOINT_NAMES))
