@@ -1,43 +1,35 @@
-"""Build the seed (014) + trimmed-DAgger-corrections aggregate as a fresh
-local LeRobot v3.0 dataset.
+"""Merge a seed demonstration set with DAgger corrections into one dataset.
 
-Combines the EXACT seed episodes the baseline custom_act checkpoint
-(`act_custom_lerobot_arch_chunk30_steps20000_all50`) was trained on
-(`RevanthGundala/014-place-sponge-in-bowl-diverse-50`, already no-op-trimmed,
-used verbatim/untouched) with the local DAgger corrections cache collected
-under the corrected custom_act takeover pipeline
-(`016-place-sponge-in-bowl-custom-act-dagger-corrections`, all 18 episodes --
-independently audited frame-by-frame with no corruption signature, so none are
-excluded by default). Every seed frame is tagged `intervention=False`; every
-correction frame is tagged `intervention=True`, so provenance survives into
-the aggregate.
+Produces a fresh local LeRobot v3.0 dataset. Every seed frame is tagged
+``intervention=False`` and every correction frame ``intervention=True``, so
+provenance survives into the aggregate -- RECAP advantage labelling depends on
+that column to force corrections positive (Sec. IV-B).
 
-This intentionally does NOT reuse `data.trim_dataset_noops` unchanged: that
-helper is Hub-only, single-source-repo, and always drops any `intervention`
-column -- none of which fit combining two datasets with per-frame provenance.
-It also cannot read a dataset that has never been pushed to the Hub, which is
-the case for the 016 corrections cache.
+Source datasets are required arguments. They previously defaulted to the
+014 -> 017 "place sponge in bowl" pair; that task was abandoned for the hot-pad
+task, and 017 is the dataset whose late motion onset caused the original ACT
+failure, so a no-argument run rebuilt precisely the wrong thing. This builder
+most recently produced ``028-custom48-dagger18``.
 
-Unlike `data.trim_dataset_noops` (which decodes every frame's video just to
-compute trim bounds and then decodes the kept frames again), this builder
-computes trim bounds from the parquet-only (state/action) columns via pandas
-first -- no video decode -- and only decodes video for frames that are
-actually kept, exactly once each.
+Why this does not reuse ``dataset_tools.trim_dataset_noops``: that helper is
+Hub-only, single-source, and always drops the ``intervention`` column, none of
+which fit combining two datasets with per-frame provenance. It also cannot read
+a corrections cache that was never pushed to the Hub.
 
-Lineage note: an earlier aggregate (`015-place-sponge-in-bowl-dagger18-trimmed`)
-combined the same 014 seed with an older, now-abandoned correction set
-(`013-place-sponge-in-bowl-diverse-50-dagger`, collected under the
-stock/official LeRobot policy). A warm-start finetune of the custom_act
-checkpoint on that aggregate is believed to be the run that made the model
-worse, motivating collection of a fresh correction set on the corrected
-custom_act takeover pipeline; that fresh set (016) is this builder's
-corrections source.
+Trim bounds are computed from the parquet state/action columns with pandas, so
+video is decoded only for frames that are actually kept, exactly once each.
+``trim_dataset_noops`` decodes every frame to find the bounds and then decodes
+the kept frames again.
 
 Usage (local build; never pushes by default):
-    uv run python -m data.build_dagger_aggregate \\
-        --output-dir outputs/datasets/017-place-sponge-in-bowl-custom-act-dagger18-trimmed
+    uv run python -m dataset_tools.build_dagger_aggregate \\
+        --seed-repo-id RevanthGundala/026-place-sponge-on-hot-pad-clean \\
+        --corrections-repo-id rollout_027-custom48-dagger \\
+        --corrections-root ~/.cache/huggingface/lerobot/rollout_027-custom48-dagger \\
+        --output-repo-id RevanthGundala/028-custom48-dagger18 \\
+        --output-dir outputs/datasets/028-custom48-dagger18
 
-Add `--push` only once the coordinator has explicitly approved a Hub push.
+Add ``--push`` only once a Hub push has been explicitly approved.
 """
 from __future__ import annotations
 
@@ -61,17 +53,14 @@ from dataset_tools.dagger_aggregate import (
 )
 from dataset_tools.noop_trim import find_noop_trim_bounds
 
-DEFAULT_SEED_REPO_ID = "RevanthGundala/014-place-sponge-in-bowl-diverse-50"
-DEFAULT_CORRECTIONS_REPO_ID = "016-place-sponge-in-bowl-custom-act-dagger-corrections"
-DEFAULT_CORRECTIONS_ROOT = Path(
-    "~/.cache/huggingface/lerobot/016-place-sponge-in-bowl-custom-act-dagger-corrections"
-).expanduser()
-DEFAULT_OUTPUT_REPO_ID = "RevanthGundala/017-place-sponge-in-bowl-custom-act-dagger18-trimmed"
-
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--seed-repo-id", default=DEFAULT_SEED_REPO_ID)
+    # Datasets are required rather than defaulted. These once defaulted to the
+    # 014 -> 017 "place sponge in bowl" pair; that task was abandoned, and 017
+    # is the dataset whose late motion onset caused the original ACT failure.
+    # A no-argument run would have quietly rebuilt it.
+    parser.add_argument("--seed-repo-id", required=True)
     parser.add_argument(
         "--seed-episodes",
         default=None,
@@ -80,10 +69,10 @@ def parse_args() -> argparse.Namespace:
             "By default all seed episodes are included."
         ),
     )
-    parser.add_argument("--corrections-repo-id", default=DEFAULT_CORRECTIONS_REPO_ID)
-    parser.add_argument("--corrections-root", type=Path, default=DEFAULT_CORRECTIONS_ROOT)
+    parser.add_argument("--corrections-repo-id", required=True)
+    parser.add_argument("--corrections-root", type=Path, required=True)
     parser.add_argument("--output-dir", required=True, type=Path, help="Fresh local target directory.")
-    parser.add_argument("--output-repo-id", default=DEFAULT_OUTPUT_REPO_ID)
+    parser.add_argument("--output-repo-id", required=True)
     parser.add_argument("--noop-threshold-deg", type=float, default=0.1)
     parser.add_argument("--noop-margin-frames", type=int, default=4)
     seed_edges = parser.add_mutually_exclusive_group()

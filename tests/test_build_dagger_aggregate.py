@@ -175,7 +175,16 @@ def test_action_range_tolerance_is_explicit_and_defaults_tight():
     from dataset_tools.build_dagger_aggregate import parse_args
     import sys
 
-    argv = ["prog", "--output-dir", "/tmp/x"]
+    # Source datasets are required: they once defaulted to the abandoned
+    # 014 -> 017 bowl pair, so a bare run rebuilt the wrong dataset.
+    argv = [
+        "prog",
+        "--seed-repo-id", "owner/seed",
+        "--corrections-repo-id", "owner/corrections",
+        "--corrections-root", "/tmp/corrections",
+        "--output-repo-id", "owner/out",
+        "--output-dir", "/tmp/x",
+    ]
     sys.argv = argv
     assert parse_args().action_range_tolerance == 1.0
 
