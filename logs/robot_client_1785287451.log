@@ -1,2 +1,0 @@
-DEBUG 2026-07-28 18:10:52 ionpool.py:1062 Starting new HTTPS connection (1): console.vast.ai:443
-DEBUG 2026-07-28 18:10:52 tionpool.py:544 https://console.vast.ai:443 "GET /api/v0/gpu_names/unique/ HTTP/1.1" 200 1305

@@ -1,5 +1,0 @@
-DEBUG 2026-07-24 12:25:01 ort_utils.py:65 Detected datasets version: 4.8.5
-DEBUG 2026-07-24 12:25:01 ort_utils.py:65 Detected av version: 15.1.0
-DEBUG 2026-07-24 12:25:02 ts/config.py:54 PyTorch version 2.11.0 available.
-DEBUG 2026-07-24 12:25:02 ionpool.py:1062 Starting new HTTPS connection (1): console.vast.ai:443
-DEBUG 2026-07-24 12:25:03 tionpool.py:544 https://console.vast.ai:443 "GET /api/v0/gpu_names/unique/ HTTP/1.1" 200 1292
