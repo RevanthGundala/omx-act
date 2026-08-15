@@ -1039,23 +1039,7 @@ def test_parse_episode_subset_rejects_bad_specs(spec):
 
 @pytest.fixture
 def act_helper(monkeypatch):
-    """Import models.act.helper with data.episode_split stubbed.
-
-    ``data`` lives in the omx-training checkout, so helper cannot be imported
-    standalone here; train_policy imports it lazily for the same reason.
-    """
-    import sys
-    import types
-
-    if "data.episode_split" not in sys.modules:
-        package = types.ModuleType("data")
-        package.__path__ = []
-        module = types.ModuleType("data.episode_split")
-        module.resolve_train_holdout_episodes = lambda total, split, seed: (list(range(total)), [])
-        package.episode_split = module
-        monkeypatch.setitem(sys.modules, "data", package)
-        monkeypatch.setitem(sys.modules, "data.episode_split", module)
-
+    """models.act.helper with the episode split stubbed to a no-op."""
     from models.act import helper
 
     monkeypatch.setattr(

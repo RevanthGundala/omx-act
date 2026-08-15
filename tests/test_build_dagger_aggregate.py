@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from data.build_dagger_aggregate import _intervention_correction_candidates, build_plans
+from dataset_tools.build_dagger_aggregate import _intervention_correction_candidates, build_plans
 
 
 def _make_frame(episode_index: int, frame_index: int, global_index: int, intervention: bool, action_val: float = 1.0) -> dict:
@@ -172,7 +172,7 @@ def test_build_plans_can_select_seed_episode_subset():
 def test_action_range_tolerance_is_explicit_and_defaults_tight():
     """Genuine DAgger corrections reach past the seed envelope; widening the
     guard must be a deliberate, recorded choice rather than a silent default."""
-    from data.build_dagger_aggregate import parse_args
+    from dataset_tools.build_dagger_aggregate import parse_args
     import sys
 
     argv = ["prog", "--output-dir", "/tmp/x"]
@@ -186,7 +186,7 @@ def test_action_range_tolerance_is_explicit_and_defaults_tight():
 def test_guard_still_rejects_corruption_scale_overshoot():
     import numpy as np
     import pytest
-    from data.dagger_aggregate import validate_action_maxima_within_seed
+    from dataset_tools.dagger_aggregate import validate_action_maxima_within_seed
 
     seed = np.array([[10.0, 10.0]])
     # Within a widened tolerance: allowed.

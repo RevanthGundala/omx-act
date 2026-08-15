@@ -9,7 +9,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from configs.act.base import ACTConfig
-from data.episode_split import resolve_train_holdout_episodes
+from dataset_tools.episode_split import resolve_train_holdout_episodes
 from lerobot.configs.types import FeatureType, PolicyFeature
 from lerobot.datasets import LeRobotDataset, LeRobotDatasetMetadata
 from lerobot.datasets.factory import resolve_delta_timestamps

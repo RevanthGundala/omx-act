@@ -27,7 +27,7 @@ def trimmed_dataset_dir(tmp_path_factory):
     output_dir = tmp_path_factory.mktemp("trim_dataset_noops_pytest") / "output"
     result = subprocess.run(
         [
-            sys.executable, "-m", "data.trim_dataset_noops",
+            sys.executable, "-m", "dataset_tools.trim_dataset_noops",
             "--repo-id", SOURCE_REPO_ID,
             "--output-repo-id", OUTPUT_REPO_ID,
             "--output-dir", str(output_dir),
@@ -72,7 +72,7 @@ def test_episode_count_preserved(trimmed_ds):
 
 
 def test_frame_counts_match_trim_bounds(source_ds, trimmed_ds):
-    from data.noop_trim import find_noop_trim_bounds
+    from dataset_tools.noop_trim import find_noop_trim_bounds
 
     for ep in range(MAX_EPISODES):
         source_idx = _episode_frame_indices(source_ds, ep)
@@ -92,7 +92,7 @@ def test_frame_counts_match_trim_bounds(source_ds, trimmed_ds):
 def test_kept_frames_match_source_at_correct_offset(source_ds, trimmed_ds):
     """The trimmed dataset's frame 0 of an episode must equal the SOURCE's frame `start`, not
     some other offset -- this catches any off-by-one/misalignment bug in the conversion."""
-    from data.noop_trim import find_noop_trim_bounds
+    from dataset_tools.noop_trim import find_noop_trim_bounds
 
     for ep in range(MAX_EPISODES):
         source_idx = _episode_frame_indices(source_ds, ep)

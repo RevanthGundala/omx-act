@@ -244,8 +244,8 @@ def save_checkpoint(checkpoint_dir, step, model, optim, cfg, metrics):
 
 
 def main():
-    # Imported lazily: models.act.helper pulls in data.episode_split, which is
-    # not present in every checkout.
+    # Imported inside main so that importing this module for its dataset and
+    # labelling helpers does not pull in LeRobot.
     from models.act.helper import make_dataloaders
 
     cfg = config_from_env()

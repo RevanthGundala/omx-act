@@ -8,6 +8,9 @@ __pycache__/
 uv.lock
 
 # Outputs / artifacts / data
+# NOTE: data/ is for downloaded benchmark datasets only. Dataset-building
+# *source* lives in dataset_tools/ and is tracked -- it used to sit in data/,
+# where this rule silently kept it out of version control.
 outputs/
 data/
 mlruns/

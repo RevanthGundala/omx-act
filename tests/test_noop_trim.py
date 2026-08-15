@@ -5,7 +5,7 @@ Ported/adapted from FastWAM's _find_noop_trim_bounds (see data/noop_trim.py docs
 import numpy as np
 import pytest
 
-from data.noop_trim import find_noop_trim_bounds
+from dataset_tools.noop_trim import find_noop_trim_bounds
 
 
 def make_action(deltas: list[float]) -> np.ndarray:
