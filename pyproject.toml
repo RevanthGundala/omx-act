@@ -1,7 +1,7 @@
 [project]
 name = "act-sim"
 version = "0.1.0"
-description = "ACT (Action Chunking Transformer) on the ALOHA sim transfer-cube task: custom implementation, a faithful vendored copy of the official tonyzhaozh/act DETRVAE, and stock-LeRobot training/eval. Extracted from omx-training."
+description = "ACT policy code for the OpenMANIPULATOR-X sponge/hot-pad task: custom ACT, DAgger fine-tuning, and RECAP advantage-conditioned training. Robot control lives in omx-training."
 requires-python = ">=3.12"
 dependencies = [
     # core
@@ -30,12 +30,18 @@ dependencies = [
 environments = ["sys_platform == 'darwin'", "sys_platform == 'linux'"]
 
 [tool.setuptools.packages.find]
-include = ["configs*", "models*", "utils*", "data*"]
+include = ["configs*", "models*", "utils*", "dataset_tools*"]
 
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
 ]
+
+[tool.pytest.ini_options]
+# Without this, every module import in the suite fails unless the caller
+# remembers PYTHONPATH=. -- friction that kept the tests from being run.
+pythonpath = ["."]
+testpaths = ["tests"]
 
 [[tool.uv.index]]
 name = "pytorch-cu128"
