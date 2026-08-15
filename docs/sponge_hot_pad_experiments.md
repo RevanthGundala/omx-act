@@ -276,6 +276,139 @@ worse**.
 
 Selected: `outputs/recap_critic/best_critic.pt`. Cost ≈ $1.60.
 
+A second run on the larger balanced dataset (§5.7) reached **val MAE 86.6**
+(+52.1% over its baseline, success AUC 0.815):
+`outputs/recap_critic_20k/best_critic.pt`. This is the critic used for
+labelling.
+
+### 5.7 Rebalancing the dataset (034)
+
+`031-recap-gen1` was 8 successes / 10 failures. That is a reasonable spread for
+learning a value function but a poor one for behaviour cloning, so the training
+set was rebuilt to combine everything collected to date.
+
+`034-recap-balanced`: 48 demos + 11 autonomous rollouts + 7 corrections = **66
+episodes, 19,437 frames**, 60 successes / 6 failures, C_fail = 476.
+
+### 5.8 Advantage labelling
+
+Labelled with N=50 lookahead against the 20k critic, threshold calibrated on
+non-correction frames to the paper's ~40% positive target, corrections forced
+positive (Sec. IV-B). Threshold ε_ℓ = **6.49**.
+
+| group | frames | positive |
+|---|---|---|
+| demonstrations | 13,484 | 40.1% |
+| autonomous rollouts | 3,469 | 34.7% |
+| correction episodes (all frames) | 2,484 | 79.7% |
+| — human-intervention frames | 1,352 | **100%** (forced) |
+| — policy frames within those episodes | 1,132 | 55.4% |
+| frames from successful episodes | 17,261 | 46.0% |
+| frames from failed episodes | 2,176 | **29.4%** |
+| **overall** | **19,437** | **44.2%** |
+
+The labels are not noise: failed episodes are 16.6 points less positive than
+successful ones, and the calibration target was hit on the frames it was
+calibrated over (40.1% / 34.7%). The 44.2% overall is higher only because the
+forced-positive correction frames sit on top.
+
+**Deviation, flagged for the writeup:** calibrating the threshold on
+non-correction frames only is our reading of App. A-F, which is not explicit on
+whether forced-positive frames participate in the percentile.
+
+### 5.9 The RECAP policy ignores its advantage token
+
+Trained the advantage-conditioned policy on all 66 episodes, warm-started from
+the custom ACT base, 20k steps, lr 1e-5, `train_split=1.0`, no image transforms
+(matched to the DAgger fine-tune for comparability). Loss fell 0.070 → 0.046.
+
+Training succeeded. **The resulting policy does not use its conditioning
+token**, which makes it behaviour cloning on a mixed dataset rather than an
+advantage-conditioned policy. Nothing in the loss detects this;
+`models/recap/check_token_sensitivity.py` was written to catch it and did.
+
+The check flips the token on identical observations and measures how far the
+predicted actions move, expressed as a fraction of how far they move when the
+*observation* changes. All values in standard deviations of the action
+distribution, 150 batches:
+
+| model | trained on | eval frames | sensitivity |
+|---|---|---|---|
+| baseline | all 66 eps (19,437 fr) | 48–65 | **0.93%** |
+| arm A | rollouts + corrections (5,953 fr) | 48–65 | **0.98%** |
+| arm B | rollouts only (3,469 fr) | 48–58 | **0.96%** |
+
+Pass threshold is 5%. All three fail, and in all three the residual effect
+points the **wrong way** on positive-labelled frames.
+
+Ablations that changed nothing:
+
+| variation | result |
+|---|---|
+| conditioning dropout 0.3 → 0 | 0.137% → 0.138% internal influence; loss 0.0555 → 0.0549 |
+| 10k vs 20k steps | influence 0.137% → 0.123% (*decreasing*) |
+| vs. random initialisation | 0.147% — training **reduced** token influence |
+| shrink dataset 5.6× (arms A/B) | 0.93% → 0.98% / 0.96% |
+
+Ruled out as causes: label/frame misalignment (verified exact 1:1), one-hot
+construction, dead token weights (embedding norm difference 10.27), conditioning
+dropout, class balance, and dataset composition.
+
+**Where the signal dies.** Tracing one token flip through the network:
+
+```
+11.17   at the token's own encoder slot
+ 0.065  leaked to the other 602 tokens
+ 0.0008 at the output
+```
+
+The token is loud where it enters and the transformer simply does not route it.
+
+**Why.** For a conditioning token to reduce the loss, the label must change the
+optimal action *given the observation* — i.e. `E[a | o, POS] ≠ E[a | o, NEG]`.
+A matched-neighbour test (each frame's 40 nearest neighbours in normalised state
+space, different episodes only; null = within-episode circular label shift)
+measures exactly this:
+
+| subset | frames | effect | z | p |
+|---|---|---|---|---|
+| all 66 eps | 19,437 | +2.86% | 3.82 | 0.005 |
+| demonstrations | 13,484 | +3.53% | 4.21 | 0.005 |
+| autonomous rollouts | 3,469 | −1.25% | −0.83 | 0.408 |
+| corrections | 2,484 | −3.11% | −1.89 | 0.055 |
+| rollouts + corrections | 5,953 | −0.17% | −0.62 | 0.562 |
+
+Even where significant, the effect is ~3% — against a policy already predicting
+actions to ~1 motor unit, that is roughly 0.03 units of headroom. Gradient
+descent correctly assigns the token almost no influence.
+
+Our policy is near-deterministic given an observation, and the advantage is
+driven largely by *sponge placement*, which the instantaneous action does not
+respond to. So the same action is labelled positive in one episode and negative
+in another. The label varies; the action does not.
+
+**This is a property of ACT, not of RECAP.** π\*₀.₆ conditions a flow-matching
+policy that is genuinely multimodal per observation, so the token has real
+alternatives to re-weight. ACT with `z` pinned to zero at inference emits one
+action per observation, so there is nothing to select between. The remaining
+untested option is AWR-style advantage *weighting*, which changes the loss
+rather than the input and so does not require the label to explain residual
+variance.
+
+### 5.10 Two measurement errors worth recording
+
+**Subset evaluation inflated the effect.** Arm A first measured 1.45% against a
+0.75% baseline — apparently a near-doubling. Running the *baseline* on the same
+episode subset gave 1.52%, higher than arm A. The gain came from evaluating on a
+narrower slice, not from training on one. Any conditioning-strength number is
+only interpretable against a control measured on identical frames.
+
+**The check under-sampled.** Its default of 16 batches is 128 frames read
+sequentially, so two different episode subsets returned identical numbers to
+five decimals — both were reading the start of episode 48. At 150 batches the
+baseline moved 1.52% → 0.93%. **The earlier 0.75% figure should not be quoted;
+use 0.93%.**
+
 ---
 
 ## 6. Transferable lessons
@@ -298,6 +431,17 @@ Selected: `outputs/recap_critic/best_critic.pt`. Cost ≈ $1.60.
    during training is being computed from predictions — we shipped exactly that
    bug and caught it mid-run.
 8. **With ~5k frames, freeze most of a warm-started model.**
+9. **A conditioning input only helps if it changes the optimal output given the
+   other inputs.** Class balance is irrelevant for an input — appending a
+   perfectly balanced coin flip to every observation teaches a model nothing.
+   Check `E[a | o, c=1] ≠ E[a | o, c=0]` in the data *before* training on it.
+10. **Measure conditioning strength against a control on identical frames.**
+    Evaluating on a narrower slice inflates the apparent effect; we briefly
+    believed a subset had doubled token use when the baseline scored higher on
+    the same slice.
+11. **A diagnostic with a small default sample can return identical numbers for
+    different data.** Ours read 128 sequential frames, so two different subsets
+    both measured the start of the same episode.
 
 ---
 
@@ -311,7 +455,8 @@ Datasets:
 | `rollout_027-custom48-dagger` | 18 DAgger corrections, 4,229 frames |
 | `028-custom48-dagger18` | demos + corrections, 66 eps, 17,549 frames |
 | `rollout_030-recap-corrections7` | 7 RECAP corrections, 1,854 frames |
-| `031-recap-gen1` | RECAP training set, 18 eps, 6,354 frames |
+| `031-recap-gen1` | RECAP critic set, 18 eps, 6,354 frames, C_fail 704 |
+| `034-recap-balanced` | RECAP policy set, 66 eps, 19,437 frames, C_fail 476 |
 
 Models:
 
@@ -319,7 +464,11 @@ Models:
 |---|---|
 | `outputs/modal_custom_act_clean48_chunk30_20k/` | custom ACT base, loss 0.070 |
 | `outputs/modal_custom_act_dagger18_ft10k/` | DAgger fine-tune, 9/15 live |
-| `outputs/recap_critic/best_critic.pt` | RECAP critic, val MAE 182.8 |
+| `outputs/recap_critic/best_critic.pt` | RECAP critic (gen1), val MAE 182.8 |
+| `outputs/recap_critic_20k/best_critic.pt` | RECAP critic (034), val MAE 86.6 |
+| `recap_policy_balanced66_20k` | RECAP policy, token sensitivity 0.93% (fails) |
+| `recap_policy_rollcorr_10k` | arm A, rollouts + corrections, 0.98% |
+| `recap_policy_rollonly_10k` | arm B, rollouts only, 0.96% |
 
 Raw scan JSON lives in the session state directory
 (`base_checkpoint_bias_scan.json`, `clean48_checkpoint_scan.json`,
@@ -330,9 +479,14 @@ Raw scan JSON lives in the session state directory
 
 ## 8. Open items
 
-- RECAP policy trainer is not written: advantage labelling with N=50 lookahead,
-  ~40th-percentile threshold, 30% conditioning dropout, corrections forced
-  positive.
+- **The RECAP-vs-DAgger success comparison is not yet valid.** The RECAP SFT
+  eval ran at sponge y ≈ 0.247 and the DAgger eval at y ≈ 0.348 — distributions
+  that barely overlap. The camera is stable (the fixed hot pad reads y =
+  0.468–0.469 across all sessions), so this is genuine placement variation, not
+  setup drift. Within existing data sponge y only weakly predicts success
+  (Mann-Whitney p = 0.121), but the fix is to re-evaluate the DAgger checkpoint
+  at the planned positions for a paired comparison. **This blocks the writeup.**
+- AWR-style advantage weighting is the one mechanism §5.9 does not rule out.
 - Custom-vs-stock closed-loop smoothness difference remains unexplained.
 - The RECAP-vs-DAgger comparison holds data budget equal (18 episodes each) but
   RECAP receives fewer expert corrections (7 vs 18) and 11 autonomous episodes
