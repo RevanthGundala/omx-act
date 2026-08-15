@@ -52,19 +52,54 @@ def test_an_unfinalized_dataset_is_reported_clearly(tmp_path):
         _episode_table(tmp_path)
 
 
-def test_demonstrations_are_not_marked_as_interventions():
+def test_demonstrations_are_not_marked_as_interventions(tmp_path, monkeypatch):
     """Sec. IV-B forces corrections positive, not demonstrations.
 
     Demonstrations are thresholded like any other data, so marking them would
     force the large majority of frames positive and flatten the signal.
     """
-    import inspect
+    import numpy as np
+    import pandas as pd
 
     from models.recap import lerobot_source
+    from models.recap.lerobot_source import LeRobotEpisodeRef, load_lerobot_episode
 
-    source = inspect.getsource(lerobot_source.load_lerobot_episode)
-    assert "np.zeros(ref.length, dtype=np.bool_)" in source
-    assert "np.ones(ref.length" not in source
+    # A demonstration dataset has no intervention column at all.
+    (tmp_path / "data").mkdir()
+    pd.DataFrame(
+        {
+            "episode_index": [0, 0],
+            "frame_index": [0, 1],
+            "observation.state": [np.zeros(2, np.float32), np.ones(2, np.float32)],
+            "action": [np.zeros(2, np.float32), np.ones(2, np.float32)],
+        }
+    ).to_parquet(tmp_path / "data" / "chunk-000.parquet")
+
+    monkeypatch.setattr(
+        lerobot_source,
+        "_read_video_slice",
+        lambda path, start, length: np.zeros((length, 4, 4, 3), np.uint8),
+    )
+    ref = LeRobotEpisodeRef(
+        root=tmp_path,
+        repo_id="owner/demos",
+        episode_index=0,
+        length=2,
+        task="t",
+        success=True,
+        joint_names=("a", "b"),
+        camera_names=("top",),
+        frame_shape=(4, 4, 3),
+        fps=30,
+        data_slice=(0, 2),
+        video_refs={"top": (tmp_path / "top.mp4", 0)},
+        has_intervention=False,
+    )
+
+    episode = load_lerobot_episode(ref)
+
+    assert episode.intervention.dtype == np.bool_
+    assert not episode.intervention.any()
 
 
 def test_autonomous_rollout_frames_are_not_interventions():
