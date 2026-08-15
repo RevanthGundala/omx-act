@@ -124,11 +124,22 @@ is one episode and not a representative sample.
 ## Tests
 
 ```bash
-PYTHONPATH=. python -m pytest tests/ -q
+pytest              # all 312
+pytest tests/recap  # just the RECAP suite, ~24s
 ```
 
-Two failures in `tests/test_act_eval.py` (wrist-flex seating) are known and
-pre-existing.
+Tests are grouped by the code they cover:
+
+| folder | covers |
+|---|---|
+| `tests/act/` | the ACT policy, eval, and training |
+| `tests/recap/` | critic, advantage labelling, conditioned policy |
+| `tests/dataset_tools/` | dataset surgery and DAgger aggregation |
+| `tests/deploy/` | Modal and vast.ai launchers |
+| `tests/evaluation/` | analysis scripts |
+
+Use the `repo_root` fixture rather than counting parent directories from
+`__file__`; test files are one level deeper than they look.
 
 ## Gotchas
 
