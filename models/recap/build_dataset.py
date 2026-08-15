@@ -549,192 +549,181 @@ def build_features(
     return features
 
 
-def build_dataset(
+def _recap_frame(
     *,
-    trials: list[RolloutTrial],
-    target_repo: str,
-    output_root: Path,
-    failure_penalty: float | None,
-    use_videos: bool,
-    corrections: list[CorrectionEpisode] | None = None,
-    correction_dataset: LeRobotDataset | None = None,
-    corrections_succeeded: bool = True,
-) -> tuple[LeRobotDataset, dict]:
-    if not trials:
-        raise ValueError("At least one rollout trial is required")
-    corrections = list(corrections or [])
-    if corrections and correction_dataset is None:
-        raise ValueError("correction_dataset is required when corrections are given")
-    camera_names, joint_names, fps, frame_shape = validate_compatible_trials(
-        trials
-    )
-    if corrections:
-        validate_correction_schema(
-            correction_dataset,
-            camera_names=camera_names,
-            joint_names=joint_names,
-            fps=fps,
-            frame_shape=frame_shape,
-        )
-    # C_fail must clear the longest episode from either source, or a long
-    # correction could outrank a short failure.
-    max_episode_steps = max(
-        [len(trial.actions) for trial in trials]
-        + [episode.steps for episode in corrections]
-    )
-    failure_penalty = resolve_failure_penalty(
-        max_episode_steps,
-        failure_penalty,
-    )
-    features = build_features(
-        camera_names=camera_names,
-        joint_names=joint_names,
-        frame_shape=frame_shape,
-        use_videos=use_videos,
-    )
-    target = LeRobotDataset.create(
-        repo_id=target_repo,
-        fps=fps,
-        features=features,
-        root=output_root,
-        robot_type="omx_follower",
-        use_videos=use_videos,
-        image_writer_threads=len(camera_names),
-    )
+    qpos: np.ndarray,
+    action: np.ndarray,
+    reward: float,
+    return_to_go: float,
+    terminal: bool,
+    success: bool,
+    intervention: bool,
+    observation_index: int,
+    observation_frame_index: int,
+    action_index: int,
+    task: str,
+    images: dict[str, np.ndarray],
+) -> dict:
+    """One LeRobot frame in the RECAP schema.
 
-    episode_summaries = []
-    for episode_index, trial in enumerate(trials):
-        trial_frames = decode_trial_frames(trial)
-        rewards, returns_to_go = recap_rewards(
-            len(trial.actions),
-            success=trial.success,
-            failure_penalty=failure_penalty,
+    Rollout and correction episodes carry the same keys so a single dataset can
+    hold both; they differ only in ``intervention`` and in whether the source
+    indices point back into a rollout trial or a correction episode.
+    """
+    if not np.isfinite(qpos).all() or not np.isfinite(action).all():
+        raise ValueError("Non-finite state/action")
+    frame = {
+        "observation.state": qpos,
+        "action": action,
+        "reward": np.asarray([reward], dtype=np.float32),
+        "return_to_go": np.asarray([return_to_go], dtype=np.float32),
+        "terminal": np.asarray([terminal], dtype=np.bool_),
+        "success": np.asarray([success], dtype=np.bool_),
+        "intervention": np.asarray([intervention], dtype=np.bool_),
+        "source.observation_index": np.asarray([observation_index], dtype=np.int64),
+        "source.observation_frame_index": np.asarray(
+            [observation_frame_index], dtype=np.int64
+        ),
+        "source.action_index": np.asarray([action_index], dtype=np.int64),
+        "task": task,
+    }
+    for camera, image in images.items():
+        frame[f"observation.images.{camera}"] = image
+    return frame
+
+
+def _write_rollout_episode(
+    target: LeRobotDataset,
+    trial: RolloutTrial,
+    *,
+    episode_index: int,
+    camera_names: list[str],
+    joint_names: list[str],
+    failure_penalty: float,
+) -> dict:
+    """Append one autonomous rollout to ``target`` and return its summary."""
+    trial_frames = decode_trial_frames(trial)
+    rewards, returns_to_go = recap_rewards(
+        len(trial.actions),
+        success=trial.success,
+        failure_penalty=failure_penalty,
+    )
+    observations_by_frame = {
+        observation["frame_index"]: observation for observation in trial.observations
+    }
+    for step, action in enumerate(trial.actions):
+        source_frame = action["observation_frame_index"]
+        observation = observations_by_frame[source_frame]
+        qpos = np.asarray(
+            [observation["qpos"][name] for name in joint_names], dtype=np.float32
         )
-        observations_by_frame = {
-            observation["frame_index"]: observation
-            for observation in trial.observations
-        }
-        for step, action in enumerate(trial.actions):
-            source_frame = action["observation_frame_index"]
-            observation = observations_by_frame[source_frame]
-            qpos = np.asarray(
-                [observation["qpos"][name] for name in joint_names],
-                dtype=np.float32,
-            )
-            executed_action = np.asarray(
-                [action["sent_action"][name] for name in joint_names],
-                dtype=np.float32,
-            )
-            if not np.isfinite(qpos).all() or not np.isfinite(executed_action).all():
-                raise ValueError(
-                    f"Non-finite state/action in {trial.root} at action {step}"
-                )
-            frame = {
-                "observation.state": qpos,
-                "action": executed_action,
-                "reward": np.asarray([rewards[step]], dtype=np.float32),
-                "return_to_go": np.asarray(
-                    [returns_to_go[step]],
-                    dtype=np.float32,
-                ),
-                "terminal": np.asarray(
-                    [step == len(trial.actions) - 1],
-                    dtype=np.bool_,
-                ),
-                "success": np.asarray([trial.success], dtype=np.bool_),
+        executed_action = np.asarray(
+            [action["sent_action"][name] for name in joint_names], dtype=np.float32
+        )
+        try:
+            frame = _recap_frame(
+                qpos=qpos,
+                action=executed_action,
+                reward=rewards[step],
+                return_to_go=returns_to_go[step],
+                terminal=step == len(trial.actions) - 1,
+                success=trial.success,
                 # An autonomous evaluation rollout has no human actions in it.
-                "intervention": np.asarray([False], dtype=np.bool_),
-                "source.observation_index": np.asarray(
-                    [observation["observation_index"]],
-                    dtype=np.int64,
-                ),
-                "source.observation_frame_index": np.asarray(
-                    [source_frame],
-                    dtype=np.int64,
-                ),
-                "source.action_index": np.asarray(
-                    [action["action_index"]],
-                    dtype=np.int64,
-                ),
-                "task": trial.metadata["task"],
-            }
-            for camera in camera_names:
-                frame[f"observation.images.{camera}"] = trial_frames[camera][
-                    source_frame
-                ]
-            target.add_frame(frame)
-        target.save_episode()
-        del trial_frames
-        episode_summaries.append(
-            {
-                "episode_index": episode_index,
-                "source_trial": str(trial.root),
-                "outcome_label": trial.metadata["outcome_label"],
-                "steps": len(trial.actions),
-                "initial_return": float(returns_to_go[0]),
-                "terminal_reward": float(rewards[-1]),
-                "intervention": False,
-            }
-        )
-
-    for offset, episode in enumerate(corrections):
-        episode_index = len(trials) + offset
-        rewards, returns_to_go = recap_rewards(
-            episode.steps,
-            success=corrections_succeeded,
-            failure_penalty=failure_penalty,
-        )
-        for step, index in enumerate(range(episode.start, episode.stop)):
-            qpos, executed_action, images = read_correction_step(
-                correction_dataset,
-                index,
-                camera_names,
-                joint_names,
+                intervention=False,
+                observation_index=observation["observation_index"],
+                observation_frame_index=source_frame,
+                action_index=action["action_index"],
+                task=trial.metadata["task"],
+                images={
+                    camera: trial_frames[camera][source_frame]
+                    for camera in camera_names
+                },
             )
-            if not np.isfinite(qpos).all() or not np.isfinite(executed_action).all():
-                raise ValueError(
-                    f"Non-finite state/action in correction episode "
-                    f"{episode.episode_index} at step {step}"
-                )
-            frame = {
-                "observation.state": qpos,
-                "action": executed_action,
-                "reward": np.asarray([rewards[step]], dtype=np.float32),
-                "return_to_go": np.asarray(
-                    [returns_to_go[step]],
-                    dtype=np.float32,
-                ),
-                "terminal": np.asarray(
-                    [step == episode.steps - 1],
-                    dtype=np.bool_,
-                ),
-                "success": np.asarray([corrections_succeeded], dtype=np.bool_),
+        except ValueError as error:
+            raise ValueError(
+                f"Non-finite state/action in {trial.root} at action {step}"
+            ) from error
+        target.add_frame(frame)
+    target.save_episode()
+    del trial_frames
+    return {
+        "episode_index": episode_index,
+        "source_trial": str(trial.root),
+        "outcome_label": trial.metadata["outcome_label"],
+        "steps": len(trial.actions),
+        "initial_return": float(returns_to_go[0]),
+        "terminal_reward": float(rewards[-1]),
+        "intervention": False,
+    }
+
+
+def _write_correction_episode(
+    target: LeRobotDataset,
+    episode: CorrectionEpisode,
+    correction_dataset: LeRobotDataset,
+    *,
+    episode_index: int,
+    camera_names: list[str],
+    joint_names: list[str],
+    failure_penalty: float,
+    succeeded: bool,
+) -> dict:
+    """Append one teleop correction to ``target`` and return its summary."""
+    rewards, returns_to_go = recap_rewards(
+        episode.steps,
+        success=succeeded,
+        failure_penalty=failure_penalty,
+    )
+    for step, index in enumerate(range(episode.start, episode.stop)):
+        qpos, executed_action, images = read_correction_step(
+            correction_dataset, index, camera_names, joint_names
+        )
+        try:
+            frame = _recap_frame(
+                qpos=qpos,
+                action=executed_action,
+                reward=rewards[step],
+                return_to_go=returns_to_go[step],
+                terminal=step == episode.steps - 1,
+                success=succeeded,
                 # RECAP Sec. IV-B forces human corrections to positive
                 # advantage, so the labeler must be able to find them.
-                "intervention": np.asarray([True], dtype=np.bool_),
-                "source.observation_index": np.asarray([step], dtype=np.int64),
-                "source.observation_frame_index": np.asarray([step], dtype=np.int64),
-                "source.action_index": np.asarray([step], dtype=np.int64),
-                "task": episode.task,
-            }
-            for camera in camera_names:
-                frame[f"observation.images.{camera}"] = images[camera]
-            target.add_frame(frame)
-        target.save_episode()
-        episode_summaries.append(
-            {
-                "episode_index": episode_index,
-                "source_trial": f"{episode.repo_id}#episode_{episode.episode_index}",
-                "outcome_label": "success" if corrections_succeeded else "failure",
-                "steps": episode.steps,
-                "initial_return": float(returns_to_go[0]),
-                "terminal_reward": float(rewards[-1]),
-                "intervention": True,
-            }
-        )
-    target.finalize()
+                intervention=True,
+                observation_index=step,
+                observation_frame_index=step,
+                action_index=step,
+                task=episode.task,
+                images={camera: images[camera] for camera in camera_names},
+            )
+        except ValueError as error:
+            raise ValueError(
+                f"Non-finite state/action in correction episode "
+                f"{episode.episode_index} at step {step}"
+            ) from error
+        target.add_frame(frame)
+    target.save_episode()
+    return {
+        "episode_index": episode_index,
+        "source_trial": f"{episode.repo_id}#episode_{episode.episode_index}",
+        "outcome_label": "success" if succeeded else "failure",
+        "steps": episode.steps,
+        "initial_return": float(returns_to_go[0]),
+        "terminal_reward": float(rewards[-1]),
+        "intervention": True,
+    }
 
-    manifest = {
+
+def _recap_manifest(
+    *,
+    target_repo: str,
+    output_root: Path,
+    failure_penalty: float,
+    corrections: list[CorrectionEpisode],
+    rollout_episodes: int,
+    max_episode_steps: int,
+    episode_summaries: list[dict],
+) -> dict:
+    return {
         "schema_version": 1,
         "target_repo": target_repo,
         "output_root": str(output_root),
@@ -756,11 +745,9 @@ def build_dataset(
             "the longest rollout to keep all critic targets finite"
         ),
         "return_target": "undiscounted Monte Carlo return_to_go",
-        "correction_repo": (
-            corrections[0].repo_id if corrections else None
-        ),
+        "correction_repo": corrections[0].repo_id if corrections else None,
         "correction_episodes": len(corrections),
-        "rollout_episodes": len(trials),
+        "rollout_episodes": rollout_episodes,
         "correction_advantage": (
             "intervention=True frames are forced to positive advantage per "
             "RECAP Sec. IV-B; the critic is not consulted for them"
@@ -768,6 +755,90 @@ def build_dataset(
         "max_episode_steps": max_episode_steps,
         "episodes": episode_summaries,
     }
+
+
+def build_dataset(
+    *,
+    trials: list[RolloutTrial],
+    target_repo: str,
+    output_root: Path,
+    failure_penalty: float | None,
+    use_videos: bool,
+    corrections: list[CorrectionEpisode] | None = None,
+    correction_dataset: LeRobotDataset | None = None,
+    corrections_succeeded: bool = True,
+) -> tuple[LeRobotDataset, dict]:
+    if not trials:
+        raise ValueError("At least one rollout trial is required")
+    corrections = list(corrections or [])
+    if corrections and correction_dataset is None:
+        raise ValueError("correction_dataset is required when corrections are given")
+    camera_names, joint_names, fps, frame_shape = validate_compatible_trials(trials)
+    if corrections:
+        validate_correction_schema(
+            correction_dataset,
+            camera_names=camera_names,
+            joint_names=joint_names,
+            fps=fps,
+            frame_shape=frame_shape,
+        )
+    # C_fail must clear the longest episode from either source, or a long
+    # correction could outrank a short failure.
+    max_episode_steps = max(
+        [len(trial.actions) for trial in trials]
+        + [episode.steps for episode in corrections]
+    )
+    failure_penalty = resolve_failure_penalty(max_episode_steps, failure_penalty)
+    target = LeRobotDataset.create(
+        repo_id=target_repo,
+        fps=fps,
+        features=build_features(
+            camera_names=camera_names,
+            joint_names=joint_names,
+            frame_shape=frame_shape,
+            use_videos=use_videos,
+        ),
+        root=output_root,
+        robot_type="omx_follower",
+        use_videos=use_videos,
+        image_writer_threads=len(camera_names),
+    )
+
+    episode_summaries = [
+        _write_rollout_episode(
+            target,
+            trial,
+            episode_index=episode_index,
+            camera_names=camera_names,
+            joint_names=joint_names,
+            failure_penalty=failure_penalty,
+        )
+        for episode_index, trial in enumerate(trials)
+    ]
+    episode_summaries += [
+        _write_correction_episode(
+            target,
+            episode,
+            correction_dataset,
+            episode_index=len(trials) + offset,
+            camera_names=camera_names,
+            joint_names=joint_names,
+            failure_penalty=failure_penalty,
+            succeeded=corrections_succeeded,
+        )
+        for offset, episode in enumerate(corrections)
+    ]
+    target.finalize()
+
+    manifest = _recap_manifest(
+        target_repo=target_repo,
+        output_root=output_root,
+        failure_penalty=failure_penalty,
+        corrections=corrections,
+        rollout_episodes=len(trials),
+        max_episode_steps=max_episode_steps,
+        episode_summaries=episode_summaries,
+    )
     write_metadata_atomic(output_root / "recap_manifest.json", manifest)
     return target, manifest
 

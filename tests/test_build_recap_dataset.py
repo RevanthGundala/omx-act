@@ -358,3 +358,74 @@ def test_failure_penalty_clears_the_longest_correction(tmp_path):
 
     # The 9-step correction, not the 3-step rollout, must set the bound.
     assert captured["max_episode_steps"] == 9
+
+
+def _frame_kwargs(**overrides):
+    defaults = dict(
+        qpos=np.asarray([1.0, 2.0], dtype=np.float32),
+        action=np.asarray([3.0, 4.0], dtype=np.float32),
+        reward=-1.0,
+        return_to_go=-2.0,
+        terminal=False,
+        success=True,
+        intervention=False,
+        observation_index=7,
+        observation_frame_index=9,
+        action_index=11,
+        task="Place the sponge on the hot pad",
+        images={"top": np.zeros((2, 2, 3), dtype=np.uint8)},
+    )
+    defaults.update(overrides)
+    return defaults
+
+
+def test_recap_frame_uses_one_schema_for_rollouts_and_corrections():
+    # Both episode kinds land in one dataset, so a key present on only one of
+    # them would surface as a null column rather than an error.
+    rollout = build_dataset_module._recap_frame(**_frame_kwargs(intervention=False))
+    correction = build_dataset_module._recap_frame(**_frame_kwargs(intervention=True))
+
+    assert set(rollout) == set(correction)
+    assert rollout["intervention"].item() is False
+    assert correction["intervention"].item() is True
+
+
+def test_recap_frame_dtypes_are_pinned():
+    # LeRobot infers column types from the first frame, so a float64 or a
+    # Python bool here silently changes the schema of the whole dataset.
+    frame = build_dataset_module._recap_frame(**_frame_kwargs())
+
+    assert frame["reward"].dtype == np.float32
+    assert frame["return_to_go"].dtype == np.float32
+    assert frame["terminal"].dtype == np.bool_
+    assert frame["success"].dtype == np.bool_
+    assert frame["intervention"].dtype == np.bool_
+    assert frame["source.observation_index"].dtype == np.int64
+    assert frame["source.observation_frame_index"].dtype == np.int64
+    assert frame["source.action_index"].dtype == np.int64
+    assert frame["observation.images.top"].shape == (2, 2, 3)
+
+
+@pytest.mark.parametrize("field", ["qpos", "action"])
+def test_recap_frame_rejects_non_finite_state_and_action(field):
+    bad = np.asarray([1.0, float("nan")], dtype=np.float32)
+    with pytest.raises(ValueError, match="Non-finite"):
+        build_dataset_module._recap_frame(**_frame_kwargs(**{field: bad}))
+
+
+def test_non_finite_rollout_frame_names_the_trial(tmp_path):
+    # The frame builder cannot know which trial it came from; the writer has to
+    # add that, or a bad value in one of 60 trials is untraceable.
+    trial_dir = _make_trial(tmp_path / "roll", outcome="success")
+    trial = load_trial(trial_dir)
+    trial.observations[0]["qpos"]["joint_a.pos"] = float("inf")
+
+    with pytest.raises(ValueError, match=str(trial.root)):
+        build_dataset_module._write_rollout_episode(
+            SimpleNamespace(add_frame=lambda frame: None, save_episode=lambda: None),
+            trial,
+            episode_index=0,
+            camera_names=["top"],
+            joint_names=list(JOINT_NAMES),
+            failure_penalty=4.0,
+        )

@@ -69,12 +69,27 @@ def test_demonstrations_are_not_marked_as_interventions():
 
 def test_autonomous_rollout_frames_are_not_interventions():
     """A rollout trial is entirely policy action."""
-    import inspect
+    import numpy as np
 
     from models.recap import build_dataset
 
-    source = inspect.getsource(build_dataset.build_dataset)
-    assert '"intervention": np.asarray([False], dtype=np.bool_)' in source
+    frame = build_dataset._recap_frame(
+        qpos=np.zeros(2, dtype=np.float32),
+        action=np.zeros(2, dtype=np.float32),
+        reward=-1.0,
+        return_to_go=-1.0,
+        terminal=True,
+        success=False,
+        intervention=False,
+        observation_index=0,
+        observation_frame_index=0,
+        action_index=0,
+        task="t",
+        images={},
+    )
+
+    assert frame["intervention"].dtype == np.bool_
+    assert frame["intervention"].item() is False
 
 
 def test_the_builder_stores_an_intervention_column():
