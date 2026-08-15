@@ -675,6 +675,42 @@ def test_locked_robot_client_disconnects_robot_on_partial_construction_failure()
     assert disconnected == [True]
 
 
+class _FakeArm:
+    """Follower stand-in for move_to_joint_state.
+
+    Position is served from ``bus.sync_read``, which is where the real code
+    reads it: ``get_observation`` returns the cached LeRobot observation and is
+    not guaranteed fresh enough to close a position loop against.
+    """
+
+    def __init__(self, commands: list, *, wrist_flex: float):
+        from utils.config import JOINT_NAMES
+
+        self._joint_names = JOINT_NAMES
+        self.state = {f"{name}.pos": 0.0 for name in JOINT_NAMES}
+        self.state["wrist_flex.pos"] = wrist_flex
+        self._commands = commands
+        self.bus = self._Bus(self)
+
+    class _Bus:
+        def __init__(self, arm):
+            self._arm = arm
+
+        def sync_read(self, _register):
+            return {
+                name: self._arm.state[f"{name}.pos"]
+                for name in self._arm._joint_names
+            }
+
+    def get_observation(self):
+        return dict(self.state)
+
+    def send_action(self, action):
+        self._commands.append(action["wrist_flex.pos"])
+        self.state.update(action)
+        return dict(action)
+
+
 def test_wrist_flex_seats_from_below_when_descending():
     """Regression: parking failed with wrist_flex 25 ticks short of goal.
 
@@ -690,22 +726,11 @@ def test_wrist_flex_seats_from_below_when_descending():
     target[wrist] = 46.5
     commands = []
 
-    class Robot:
-        def __init__(self):
-            self.state = {f"{n}.pos": 0.0 for n in JOINT_NAMES}
-            # Start ABOVE the target so the move descends.
-            self.state["wrist_flex.pos"] = 50.0
-
-        def get_observation(self):
-            return dict(self.state)
-
-        def send_action(self, action):
-            commands.append(action["wrist_flex.pos"])
-            self.state.update(action)
-            return dict(action)
+    # move_to_joint_state reads position off the bus, not get_observation.
+    robot = _FakeArm(commands, wrist_flex=50.0)  # start ABOVE so the move descends
 
     move_to_joint_state(
-        Robot(),
+        robot,
         target=target,
         timeout=1.0,
         ramp_seconds=0.2,
@@ -730,21 +755,10 @@ def test_wrist_flex_seating_skipped_when_ascending():
     target[wrist] = 46.5
     commands = []
 
-    class Robot:
-        def __init__(self):
-            self.state = {f"{n}.pos": 0.0 for n in JOINT_NAMES}
-            self.state["wrist_flex.pos"] = 44.0
-
-        def get_observation(self):
-            return dict(self.state)
-
-        def send_action(self, action):
-            commands.append(action["wrist_flex.pos"])
-            self.state.update(action)
-            return dict(action)
+    robot = _FakeArm(commands, wrist_flex=44.0)
 
     move_to_joint_state(
-        Robot(),
+        robot,
         target=target,
         timeout=1.0,
         ramp_seconds=0.2,
