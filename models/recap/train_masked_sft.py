@@ -23,6 +23,12 @@ import time
 import torch
 
 from models.recap.act_recap_masked import ACTPolicy, MASKED_ADVANTAGE
+
+# What this architecture adds on top of a behaviour-cloned ACT checkpoint.
+ADVANTAGE_PARAMETERS = (
+    "decoder.advantage_embedding.weight",
+    "decoder.adv_pos_emb.weight",
+)
 from models.recap.train_policy import (
     AdvantageDataset,
     compute_loss,
@@ -133,7 +139,7 @@ def main() -> None:
     pretrained = os.environ.get("RECAP_POLICY_PRETRAINED_CHECKPOINT")
     if not pretrained:
         raise ValueError("RECAP_POLICY_PRETRAINED_CHECKPOINT is required")
-    warm_start(model, pretrained, device)
+    warm_start(model, pretrained, device, allowed_missing=ADVANTAGE_PARAMETERS)
     print(
         f"Warm-started from {pretrained}; advantage token is freshly initialized",
         flush=True,

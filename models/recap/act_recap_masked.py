@@ -296,25 +296,21 @@ class Decoder(nn.Module):
         advantage = torch.as_tensor(advantage, device=joints.device)
         if advantage.ndim == 0:
             advantage = advantage.expand(bs)
-        if advantage.shape != (bs,) or advantage.is_floating_point():
+        if advantage.shape != (bs,):
+            # Worth catching by hand: act_recap.py takes a (bs, 3) one-hot, and
+            # passing one here otherwise fails much later with a shape error
+            # about the memory tensor.
             raise ValueError(
-                "advantage must be one integer class ID per batch item, got "
-                f"{tuple(advantage.shape)} of {advantage.dtype} for batch size {bs}"
+                f"advantage must be one class ID per batch item, got "
+                f"{tuple(advantage.shape)} for batch size {bs}"
             )
-        advantage = advantage.long()
         omitted = advantage == MASKED_ADVANTAGE
-        if (~omitted & ((advantage < 0) | (advantage >= len(AdvantageCondition)))).any():
-            raise ValueError(
-                "advantage class IDs must be "
-                f"{[f'{c.name}={int(c)}' for c in AdvantageCondition]} or "
-                f"MASKED_ADVANTAGE={MASKED_ADVANTAGE}; got "
-                f"{sorted(set(advantage[~omitted].tolist()))}"
-            )
 
         # Omitted samples still need a valid row for the lookup to be defined.
         # Which row is irrelevant: the mask below removes the slot entirely, so
-        # nothing about this vector can reach the output.
-        adv_token = self.advantage_embedding(advantage.clamp_min(0)).unsqueeze(1)
+        # nothing about this vector can reach the output. Rewriting only the
+        # sentinel leaves any other out-of-range id to fail in the lookup.
+        adv_token = self.advantage_embedding(advantage.masked_fill(omitted, 0)).unsqueeze(1)
         memory = torch.cat([adv_token.to(dtype=memory.dtype), memory], dim=1)
         adv_pos = self.adv_pos_emb.weight.unsqueeze(0).to(dtype=pos.dtype)
         pos = torch.cat([adv_pos, pos], dim=1)

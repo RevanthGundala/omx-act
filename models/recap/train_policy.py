@@ -183,8 +183,19 @@ def compute_loss(model, batch, device, kl_weight):
     return action_loss + kl_weight * kl_loss, action_loss, kl_loss
 
 
-def warm_start(model: ACTPolicy, checkpoint_path: str | Path, device: torch.device) -> ACTPolicy:
-    """Graft a behavior-cloned ACT checkpoint onto the advantage-conditioned policy."""
+def warm_start(
+    model: ACTPolicy,
+    checkpoint_path: str | Path,
+    device: torch.device,
+    *,
+    allowed_missing: tuple[str, ...] = ADVANTAGE_PARAMETERS,
+) -> ACTPolicy:
+    """Graft a behavior-cloned ACT checkpoint onto the advantage-conditioned policy.
+
+    ``allowed_missing`` names the parameters the checkpoint is expected not to
+    have, because they are what this architecture adds. It is an argument rather
+    than a constant: act_recap_masked.py adds a different set.
+    """
     checkpoint = torch.load(Path(checkpoint_path), map_location=device, weights_only=False)
     if not isinstance(checkpoint, dict) or "model_state_dict" not in checkpoint:
         raise ValueError(f"Checkpoint {checkpoint_path} has no model_state_dict")
@@ -193,7 +204,7 @@ def warm_start(model: ACTPolicy, checkpoint_path: str | Path, device: torch.devi
         raise ValueError(
             f"Checkpoint {checkpoint_path} has unexpected parameters: {incompatible.unexpected_keys}"
         )
-    unexpected_missing = set(incompatible.missing_keys) - set(ADVANTAGE_PARAMETERS)
+    unexpected_missing = set(incompatible.missing_keys) - set(allowed_missing)
     if unexpected_missing:
         raise ValueError(
             f"Checkpoint {checkpoint_path} is missing non-advantage parameters: {sorted(unexpected_missing)}"

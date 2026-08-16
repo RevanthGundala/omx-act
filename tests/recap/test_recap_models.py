@@ -1587,8 +1587,9 @@ def test_masked_model_has_no_unconditioned_condition():
     assert model.decoder.advantage_embedding.num_embeddings == 2
     assert not hasattr(model.decoder, "adv_proj")
 
-    # The baseline's UNCONDITIONED id is simply not a valid id here.
-    with pytest.raises(ValueError, match="MASKED_ADVANTAGE"):
+    # The baseline's UNCONDITIONED id is simply not a valid id here: the
+    # embedding has no row for it.
+    with pytest.raises(IndexError):
         model(
             torch.randn(1, 1, 3, 64, 64),
             torch.randn(1, 6),
@@ -1596,15 +1597,29 @@ def test_masked_model_has_no_unconditioned_condition():
         )
 
 
-def test_unknown_class_ids_are_rejected():
+@pytest.mark.parametrize("bad_id", [7, -5])
+def test_unknown_class_ids_are_rejected(bad_id):
+    # -5 is the interesting one: only the sentinel is rewritten before the
+    # lookup, so any other negative id reaches the embedding and raises rather
+    # than being silently floored onto NEGATIVE.
     model = MaskedRecapACTPolicy(_config(), pretrained_backbone=False)
 
-    with pytest.raises(ValueError, match="MASKED_ADVANTAGE"):
+    with pytest.raises(IndexError):
         model(
             torch.randn(1, 1, 3, 64, 64),
             torch.randn(1, 6),
-            advantage=torch.tensor([7]),
+            advantage=torch.tensor([bad_id]),
         )
+
+
+def test_a_legacy_one_hot_is_rejected_by_shape():
+    # act_recap.py takes a (bs, 3) one-hot; passing one here would otherwise
+    # fail deep in the memory concatenation.
+    model = MaskedRecapACTPolicy(_config(), pretrained_backbone=False)
+    one_hot = torch.nn.functional.one_hot(torch.tensor([1]), num_classes=3).float()
+
+    with pytest.raises(ValueError, match="one class ID per batch item"):
+        model(torch.randn(1, 1, 3, 64, 64), torch.randn(1, 6), advantage=one_hot)
 
 
 @pytest.mark.parametrize(
@@ -1710,4 +1725,48 @@ def test_advantage_dataset_refuses_synthetic_shift_with_real_labels():
             conditions=torch.zeros(2, dtype=torch.long),
             frame_ids=torch.arange(2),
             synthetic_shift=0.5,
+        )
+
+
+def test_masked_sft_warm_starts_from_a_plain_act_checkpoint(tmp_path):
+    # The masked model adds different parameters than the legacy RECAP policy,
+    # so warm_start's default allowed-missing list does not apply to it. Getting
+    # this wrong fails only once a paid GPU job has already started.
+    from dataclasses import asdict
+
+    from models.act.act import ACTPolicy as BaseACTPolicy
+
+    cfg = _config()
+    base = BaseACTPolicy(cfg, pretrained_backbone=False)
+    checkpoint = tmp_path / "last.pt"
+    torch.save({"model_state_dict": base.state_dict(), "config": asdict(cfg)}, checkpoint)
+
+    model = MaskedRecapACTPolicy(cfg, pretrained_backbone=False)
+    train_policy.warm_start(
+        model,
+        checkpoint,
+        torch.device("cpu"),
+        allowed_missing=train_masked_sft.ADVANTAGE_PARAMETERS,
+    )
+
+    assert torch.equal(model.decoder.act_proj.weight, base.decoder.act_proj.weight)
+
+
+def test_masked_sft_warm_start_still_rejects_a_truncated_checkpoint(tmp_path):
+    from dataclasses import asdict
+
+    from models.act.act import ACTPolicy as BaseACTPolicy
+
+    cfg = _config()
+    state = BaseACTPolicy(cfg, pretrained_backbone=False).state_dict()
+    del state["decoder.act_proj.weight"]
+    checkpoint = tmp_path / "truncated.pt"
+    torch.save({"model_state_dict": state, "config": asdict(cfg)}, checkpoint)
+
+    with pytest.raises(ValueError, match="missing non-advantage parameters"):
+        train_policy.warm_start(
+            MaskedRecapACTPolicy(cfg, pretrained_backbone=False),
+            checkpoint,
+            torch.device("cpu"),
+            allowed_missing=train_masked_sft.ADVANTAGE_PARAMETERS,
         )
