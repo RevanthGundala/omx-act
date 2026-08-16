@@ -11,13 +11,13 @@ from typing import TextIO
 import cv2
 import numpy as np
 
-from models.act.scene_check import (
+from models.act.eval.scene_check import (
     BLUE_RANGE,
     TABLE_FRACTION,
     WHITE_RANGE,
     coverage_from_frames,
 )
-from models.act.terminal_colors import colorize_status
+from models.act.eval.terminal_colors import colorize_status
 
 
 @dataclass(frozen=True)

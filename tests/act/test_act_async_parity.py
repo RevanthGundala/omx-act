@@ -7,8 +7,8 @@ import pytest
 import torch
 from lerobot.async_inference.helpers import TimedAction
 
-from models.act.eval_async import ActionStreamWatchdog, LockedRobotClient
-from models.act.eval_async_custom import limit_action_chunk
+from models.act.eval.async_lerobot import ActionStreamWatchdog, LockedRobotClient
+from models.act.eval.async_custom import limit_action_chunk
 
 
 def test_native_async_limits_actions_like_lerobot_policy_server():

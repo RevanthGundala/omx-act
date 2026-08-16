@@ -28,12 +28,12 @@ models/act/          the custom ACT policy
   act.py             backbone + CVAE encoder + transformer encoder/decoder
   train.py           training loop
   helper.py          dataloaders and the seeded train/holdout episode split
-  lerobot_policy.py  adapter exposing the custom model as a LeRobot policy
-  eval*.py           evaluation entrypoints (see "Evaluation" below)
-  compare_policies.py  policy-vs-policy end-effector diagnostics
-  export_checkpoint.py exports a .pt to LeRobot pretrained_model format
-  summarize_trace.py   summarises JSONL traces written by eval.py
-  camera_alignment.py, scene_check.py   pre-rollout scene validation
+  lerobot_policy.py  adapter exposing the custom model as a LeRobot policy;
+                     omx-training loads this by exact path, so do not move it
+  eval/              live-robot evaluation (see "Evaluation" below), plus
+                     pre-rollout scene validation and rollout capture
+  tools/             one-off diagnostics: compare_policies, export_checkpoint,
+                     summarize_trace
 
 models/recap/        RECAP (arXiv:2511.14759) on top of that policy
   act_recap.py       ACT plus a three-state advantage-conditioning token
@@ -104,14 +104,14 @@ clocked, and which checkpoint format they can load:
 
 | script | clocking | checkpoint |
 |---|---|---|
-| `eval.py` | synchronous control loop | custom `.pt` |
-| `eval_async_custom.py` | async, replays a full action chunk | custom `.pt` |
-| `eval_async.py` | async, via LeRobot `PolicyServer`/`RobotClient` over gRPC | LeRobot `pretrained_model/` |
-| `eval_lerobot.py` | synchronous | stock LeRobot policy |
+| `eval/local.py` | synchronous control loop | custom `.pt` |
+| `eval/async_custom.py` | async, replays a full action chunk | custom `.pt` |
+| `eval/async_lerobot.py` | async, via LeRobot `PolicyServer`/`RobotClient` over gRPC | LeRobot `pretrained_model/` |
+| `eval/stock_lerobot.py` | synchronous | stock LeRobot policy |
 
 The async pair exists because inference on MPS runs at ~10 Hz while the policy
 was trained at 30 Hz; replaying a chunk at the trained rate removes the
-resulting jerk. `eval_async_custom.py` is separate from `eval_async.py` because
+resulting jerk. `async_custom.py` is separate from `async_lerobot.py` because
 LeRobot's `PolicyServer` resolves policy classes through its own hardcoded
 factory and cannot load a custom checkpoint.
 

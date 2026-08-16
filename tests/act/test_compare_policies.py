@@ -3,8 +3,8 @@ import json
 import numpy as np
 import pytest
 
-import models.act.compare_policies as comparison
-from models.act.compare_policies import (
+import models.act.tools.compare_policies as comparison
+from models.act.tools.compare_policies import (
     omx_end_effector_transforms,
     pose_errors,
 )

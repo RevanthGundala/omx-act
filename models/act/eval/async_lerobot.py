@@ -11,7 +11,7 @@ This script launches the server for you and runs the client in one command. Poin
 ``--server-address`` at a remote GPU with ``--no-launch-server`` to offload inference.
 
 Example:
-    uv run python models/act/eval_async.py --task "Place the sponge in the bowl"
+    uv run python models/act/eval/async_lerobot.py --task "Place the sponge in the bowl"
 """
 
 from __future__ import annotations
@@ -30,7 +30,10 @@ from pathlib import Path
 
 import numpy as np
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+# Walk up to the marker rather than counting parents: a file that moves
+# depth silently puts the wrong directory on sys.path, and models/act on
+# sys.path makes models/act/train.py shadow the top-level train package.
+REPO_ROOT = next(p for p in Path(__file__).resolve().parents if (p / "pyproject.toml").is_file())
 sys.path.insert(0, str(REPO_ROOT))
 
 from lerobot.async_inference.configs import RobotClientConfig
@@ -42,19 +45,19 @@ from lerobot.robots.omx_follower.config_omx_follower import OmxFollowerConfig
 from lerobot.robots.omx_follower.omx_follower import OmxFollower
 from lerobot.transport import services_pb2
 
-from models.act.camera_alignment import (
+from models.act.eval.camera_alignment import (
     diagnostic_dataset_reference,
     load_session_diagnostics,
     resolve_dataset_start_pose,
 )
-from models.act.eval_common import (
+from models.act.eval.common import (
     clear_stuck_port,
     dataset_start_statistics,
     joint_positions,
     move_to_joint_state,
     start_state_violations,
 )
-from models.act.rollout_capture import (
+from models.act.eval.rollout_capture import (
     RolloutArtifactWriter,
     prompt_for_outcome,
     readline_with_idle_callback,
@@ -904,7 +907,7 @@ def should_prompt_for_outcome(reason: str, action_count: int) -> bool:
 
 def install_trace_logger(robot, trace_file=None, entry_callback=None) -> None:
     """Wrap robot.send_action to log qpos + target + actually-sent action per control tick, for
-    apples-to-apples comparison against models/act/eval_async_custom.py's trace.
+    apples-to-apples comparison against models/act/eval/async_custom.py's trace.
 
     Install AFTER install_action_smoother (main() does this): by the time this wraps
     robot.send_action, `send_action` already points at smoothed_send, so `action` here is the
@@ -1149,7 +1152,7 @@ def parse_args() -> argparse.Namespace:
         "--trace-path",
         default="auto",
         help="Output JSONL trace path (step/qpos/target_action/sent_action), same schema as "
-        "models/act/eval_async_custom.py's trace, for apples-to-apples comparison. Use 'auto' for "
+        "models/act/eval/async_custom.py's trace, for apples-to-apples comparison. Use 'auto' for "
         "outputs/eval_traces/act_eval_async_<timestamp>.jsonl or 'none' to disable.",
     )
     p.add_argument(
@@ -1627,7 +1630,7 @@ def run_robot_client(
                 )
             if "top" in client.robot.cameras:
                 try:
-                    from models.act.scene_check import print_scene_check
+                    from models.act.eval.scene_check import print_scene_check
 
                     frame = client.robot.cameras["top"].read_latest()
                     if scene_coverage is None:
@@ -1645,7 +1648,7 @@ def run_robot_client(
                             )
                         )
                     if camera_view_checker is not None:
-                        from models.act.camera_alignment import print_camera_view_check
+                        from models.act.eval.camera_alignment import print_camera_view_check
 
                         print_camera_view_check(
                             camera_view_checker,

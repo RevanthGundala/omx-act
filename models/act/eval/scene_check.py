@@ -24,9 +24,12 @@ from typing import TextIO
 import cv2
 import numpy as np
 
-from models.act.terminal_colors import colorize_status
+from models.act.eval.terminal_colors import colorize_status
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+# Walk up to the marker rather than counting parents: a file that moves
+# depth silently puts the wrong directory on sys.path, and models/act on
+# sys.path makes models/act/train.py shadow the top-level train package.
+REPO_ROOT = next(p for p in Path(__file__).resolve().parents if (p / "pyproject.toml").is_file())
 COVERAGE_JSON = REPO_ROOT / "outputs/dataset_audits/011_position_detections.json"
 
 # Tuned against outputs/dataset_audits/011_start_frames (50/50 detected correctly).

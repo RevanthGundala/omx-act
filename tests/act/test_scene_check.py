@@ -3,7 +3,7 @@ import io
 import cv2
 import numpy as np
 
-from models.act.scene_check import check_scene, coverage_from_frames, print_scene_check
+from models.act.eval.scene_check import check_scene, coverage_from_frames, print_scene_check
 
 
 class _TTYStringIO(io.StringIO):

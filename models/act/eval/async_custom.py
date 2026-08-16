@@ -1,6 +1,6 @@
 """Async (open-loop) live evaluation for the custom ACT checkpoint (models/act/act.py).
 
-This is the custom-checkpoint equivalent of models/act/eval_async.py, which only works with
+This is the custom-checkpoint equivalent of models/act/eval/async_lerobot.py, which only works with
 LeRobot-format ``pretrained_model`` directories (it launches LeRobot's PolicyServer/RobotClient
 over gRPC). Our custom .pt checkpoints can't go through that stack -- PolicyServer only resolves
 policy classes through LeRobot's own hardcoded factory (get_policy_class), which always points at
@@ -21,7 +21,7 @@ own ACTPolicy directly:
   triggers a replan once the queue drains below --chunk-size-threshold * chunk_size.
 
 Usage:
-    uv run python -m models.act.eval_async_custom \
+    uv run python -m models.act.eval.async_custom \
       --checkpoint <run>/checkpoints/step_020000.pt
 """
 import argparse
@@ -40,7 +40,7 @@ from lerobot.datasets import LeRobotDatasetMetadata
 
 from configs.act.base import ACTConfig
 from models.act.act import ACTPolicy
-from models.act.eval import (
+from models.act.eval.local import (
     create_follower,
     parse_camera_list,
     read_obs,
@@ -48,7 +48,7 @@ from models.act.eval import (
     send_action,
     validate_checkpoint_shapes,
 )
-from models.act.eval_common import clear_stuck_port, dataset_start_statistics, joint_positions, move_to_joint_state
+from models.act.eval.common import clear_stuck_port, dataset_start_statistics, joint_positions, move_to_joint_state
 from utils.config import CAMERA_HEIGHT, CAMERA_WIDTH, FOLLOWER_PORT, FPS, JOINT_NAMES
 
 AGGREGATE_FNS = {
@@ -301,7 +301,7 @@ def main() -> None:
     follower.connect(calibrate=False)
     if "top" in follower.cameras:
         try:
-            from models.act.scene_check import print_scene_check
+            from models.act.eval.scene_check import print_scene_check
             frame = follower.cameras["top"].read_latest()
             print_scene_check(frame, label="eval_async_custom")
         except Exception as exc:  # noqa: BLE001 -- informational only, must never block the eval

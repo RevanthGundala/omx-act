@@ -3,8 +3,8 @@ import io
 import cv2
 import numpy as np
 
-import models.act.camera_alignment as camera_alignment
-from models.act.camera_alignment import (
+import models.act.eval.camera_alignment as camera_alignment
+from models.act.eval.camera_alignment import (
     CameraAlignmentChecker,
     estimate_camera_transform,
     prepare_diagnostic_references,

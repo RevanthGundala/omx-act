@@ -20,7 +20,10 @@ from lerobot.configs.types import FeatureType, PolicyFeature
 from lerobot.datasets import LeRobotDatasetMetadata
 from lerobot.policies.factory import make_policy, make_pre_post_processors
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+# Walk up to the marker rather than counting parents: a file that moves
+# depth silently puts the wrong directory on sys.path, and models/act on
+# sys.path makes models/act/train.py shadow the top-level train package.
+sys.path.insert(0, str(next(p for p in Path(__file__).resolve().parents if (p / "pyproject.toml").is_file())))
 
 from configs.act.base import ACTConfig
 from models.act.train_diffusion import make_diffusion_policy_config

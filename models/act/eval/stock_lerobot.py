@@ -23,10 +23,13 @@ try:
 except ImportError:
     from lerobot.utils.utils import get_safe_torch_device
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+# Walk up to the marker rather than counting parents: a file that moves
+# depth silently puts the wrong directory on sys.path, and models/act on
+# sys.path makes models/act/train.py shadow the top-level train package.
+sys.path.insert(0, str(next(p for p in Path(__file__).resolve().parents if (p / "pyproject.toml").is_file())))
 
 import models.act.lerobot_policy  # noqa: F401 -- register custom_act before config parsing
-from models.act.eval_common import dataset_start_statistics
+from models.act.eval.common import dataset_start_statistics
 from utils.config import CAMERA_HEIGHT, CAMERA_WIDTH, CAMERAS, FOLLOWER_PORT, FPS, JOINT_NAMES
 
 

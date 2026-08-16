@@ -4,8 +4,8 @@ import json
 import numpy as np
 import pytest
 
-import models.act.rollout_capture as rollout_capture
-from models.act.rollout_capture import (
+import models.act.eval.rollout_capture as rollout_capture
+from models.act.eval.rollout_capture import (
     RolloutArtifactWriter,
     RolloutVideoRecorder,
     prompt_for_outcome,

@@ -5,7 +5,7 @@ gripper error, visual conditioning, and agreement between adjacent replans.
 All policies receive exactly the same recorded observations.
 
 Example:
-    uv run python models/act/compare_policies.py \
+    uv run python models/act/tools/compare_policies.py \
       --dataset RevanthGundala/014-place-sponge-in-bowl-diverse-50 \
       --policy "official=outputs/.../pretrained_model" \
       --policy "custom=outputs/.../pretrained_model" \
@@ -27,7 +27,10 @@ from lerobot.configs import PreTrainedConfig
 from lerobot.datasets import LeRobotDataset, LeRobotDatasetMetadata
 from lerobot.policies.factory import get_policy_class, make_pre_post_processors
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+# Walk up to the marker rather than counting parents: a file that moves
+# depth silently puts the wrong directory on sys.path, and models/act on
+# sys.path makes models/act/train.py shadow the top-level train package.
+sys.path.insert(0, str(next(p for p in Path(__file__).resolve().parents if (p / "pyproject.toml").is_file())))
 
 import models.act.lerobot_policy  # noqa: F401 -- register custom_act
 from utils.config import JOINT_NAMES

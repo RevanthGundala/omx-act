@@ -6,7 +6,7 @@ from lerobot.datasets import LeRobotDataset
 import numpy as np
 import pytest
 
-from models.act.rollout_capture import RolloutVideoRecorder
+from models.act.eval.rollout_capture import RolloutVideoRecorder
 import models.recap.build_dataset as build_dataset_module
 from models.recap.build_dataset import (
     build_dataset,

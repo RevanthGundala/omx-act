@@ -1,4 +1,10 @@
-"""LeRobot policy adapter, exporter, and async-server bootstrap for custom ACT."""
+"""LeRobot policy adapter, exporter, and async-server bootstrap for custom ACT.
+
+Do not move this file. omx-training loads it by exact path through
+--policy-code-root (see its evaluation/recap_policy.py, RECAP_ADAPTER_PATH =
+"models/act/lerobot_policy.py"), so a rename here breaks robot evaluation in the
+other repo with no failure visible from this one.
+"""
 
 from __future__ import annotations
 

@@ -26,7 +26,7 @@ Checkpoint:
 
 `outputs/modal/act_custom_lerobot_arch_chunk30_steps20000_all50/20260721T223816Z-824f6399/checkpoints/last.pt`
 
-Live evaluation used the shared `models/act/eval_async.py` path through the
+Live evaluation used the shared `models/act/eval/async_lerobot.py` path through the
 custom LeRobot adapter, with the same default async settings used for stock
 LeRobot:
 
@@ -128,7 +128,7 @@ missing decoder normalization are different.
 ### Repeat the decisive offline comparison
 
 ```bash
-uv run python models/act/compare_policies.py \
+uv run python models/act/tools/compare_policies.py \
   --dataset RevanthGundala/014-place-sponge-in-bowl-diverse-50 \
   --policy "official-20k=<official pretrained_model dir>" \
   --policy "custom-all50-20k=<custom exported pretrained_model dir>" \
@@ -230,7 +230,7 @@ latent). Evaluate ACT changes on multi-episode val, not single-episode overfit.
 We ran the MuJoCo rollout eval locally for **both** models, 50 rollouts each,
 with identical sim plumbing + temporal-ensemble action selection:
 
-- Patched custom: `models/act/eval.py`
+- Patched custom: `models/act/eval/local.py`
 - Official ACT:   `models/act_official/eval_official.py` (mirror; builds
   `ACTPolicy`, feeds raw `[0,1]` images since the policy ImageNet-normalizes
   internally)
@@ -554,7 +554,7 @@ uv run python evaluation/offline_lerobot_action_check.py \
   --action-space delta
 
 # 4. Live eval reconstructs command = current_state + policy_output.
-uv run python -m models.act.eval_lerobot \
+uv run python -m models.act.eval.stock_lerobot \
   --policy-path <delta_run>/pretrained_model --action-space delta
 ```
 
@@ -564,7 +564,7 @@ The relabel tool runs a built-in self-check that reconstructs `delta + state` an
 asserts it recovers the original absolute action (verified max error 1.8e-7 on
 `009 ep1-only`). The same relabeled dataset also works for the **custom** ACT
 path (`models/act/train.py` consumes the delta dataset unchanged; run the custom
-live eval with `python -m models.act.eval --action-space delta`). The offline
+live eval with `python -m models.act.eval.local --action-space delta`). The offline
 check supports `--action-space delta` too and reports errors in absolute joint
 units for apples-to-apples comparison with absolute runs.
 
@@ -761,7 +761,7 @@ modal volume get omx-custom-act-training-logs   /act_experiments/sim_transfer_cu
 modal volume get omx-official-act-training-logs /act_experiments/sim_transfer_cube_reference/ref_official_seed0/metrics.jsonl .
 
 # Real MuJoCo success-rate eval (needs ACT_REPO_DIR + MuJoCo) — NOT yet run:
-python -m models.act.eval --checkpoint <run_dir>/checkpoint_last.pt --act-repo-dir /path/to/tonyzhaozh/act
+python -m models.act.eval.local --checkpoint <run_dir>/checkpoint_last.pt --act-repo-dir /path/to/tonyzhaozh/act
 ```
 
 ## pi0.5 capability probe (2026-06-28)
@@ -793,7 +793,7 @@ Mac has only **8.6 GB RAM** (~2.6 GB free). A 3B-param PaliGemma VLA needs ~6 GB
 on BOTH MPS and CPU before completing a single inference. Consequences:
 - Offline scoring of pi0.5 cannot run on this machine (the ACT scoreboard works
   only because ACT is tiny ~50M params).
-- **Live OMX eval also cannot run here** — `models/act/eval_lerobot.py` drives the
+- **Live OMX eval also cannot run here** — `models/act/eval/stock_lerobot.py` drives the
   robot from this same 8 GB Mac and would OOM loading pi0.5.
 
 **Resolution:** offline scoring was moved to a Modal GPU container
@@ -838,7 +838,7 @@ state is decorrelated from object position, forcing the policy to use vision.
 **Run:** official LeRobot ACT trained for 20k steps on the no-op-trimmed
 `RevanthGundala/014-place-sponge-in-bowl-diverse-50` dataset (50 episodes,
 15,066 frames), chunk size 30. This checkpoint was trained without dataset image
-transforms. Live evaluation used `models/act/eval_async.py` with its default
+transforms. Live evaluation used `models/act/eval/async_lerobot.py` with its default
 closed-loop async settings: 30 actions per chunk, queue threshold 0.4,
 `conservative` chunk aggregation, and action smoothing 0.7.
 
@@ -879,7 +879,7 @@ requesting another observation. `latest_only` makes chunk boundaries explicit;
 all other important eval settings remain unchanged:
 
 ```bash
-uv run python models/act/eval_async.py \
+uv run python models/act/eval/async_lerobot.py \
   --policy-path outputs/vastai/instance-44620633/outputs/lerobot_official/lerobot_official_act_chunk30_steps20000/checkpoints/020000/pretrained_model \
   --task "Place the sponge in the bowl" \
   --chunk-size-threshold 0 \
@@ -1028,7 +1028,7 @@ without image transforms. It finished with loss `0.06656` and action L1
 `outputs/modal/act_custom_lerobot_arch_chunk30_steps20000_all50/20260721T223816Z-824f6399/checkpoints/last.pt`
 
 The checkpoint was exported through `models.act.lerobot_policy` and evaluated
-through the same `models/act/eval_async.py` client used by official LeRobot ACT.
+through the same `models/act/eval/async_lerobot.py` client used by official LeRobot ACT.
 
 | layout | old unaugmented LeRobot 20k | corrected custom 20k |
 |---:|---:|---:|

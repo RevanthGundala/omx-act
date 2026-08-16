@@ -9,7 +9,7 @@ import torch
 from lerobot.async_inference.helpers import TimedAction
 from lerobot.async_inference.robot_client import RobotClient
 
-from models.act.eval_async import (
+from models.act.eval.async_lerobot import (
     LockedRobotClient,
     TopCameraPreview,
     diagnostic_dataset_reference,
@@ -86,7 +86,7 @@ def test_locked_client_allows_only_one_replan_request_in_flight(monkeypatch):
     )
     now = {"value": 10.0}
     monkeypatch.setattr(
-        "models.act.eval_async.time.monotonic",
+        "models.act.eval.async_lerobot.time.monotonic",
         lambda: now["value"],
     )
     aggregate_calls = []
@@ -369,7 +369,7 @@ def test_trace_logger_can_dispatch_actions_without_global_trace(monkeypatch):
     )
     entries = []
     monkeypatch.setattr(
-        "models.act.eval_async.joint_positions",
+        "models.act.eval.async_lerobot.joint_positions",
         lambda _robot: {"joint.pos": 1.5},
     )
     install_trace_logger(

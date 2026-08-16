@@ -11,7 +11,7 @@ from lerobot.configs.types import FeatureType, PolicyFeature
 from lerobot.policies.factory import get_policy_class
 
 from configs.act.base import ACTConfig
-from models.act.eval_async import (
+from models.act.eval.async_lerobot import (
     LockedRobotClient,
     apply_wrist_flex_start_override,
     install_action_rate_limiter,
@@ -23,7 +23,7 @@ from models.act.eval_async import (
     trial_has_recorded_actions,
     visualize_action_queue_size_if_present,
 )
-from models.act.eval_common import move_to_joint_state, start_state_violations
+from models.act.eval.common import move_to_joint_state, start_state_violations
 from models.act.lerobot_policy import CustomACTConfig, CustomACTPolicy, export_checkpoint
 from utils.config import JOINT_NAMES
 
@@ -718,7 +718,7 @@ def test_wrist_flex_seats_from_below_when_descending():
     ~0.11. Approaching a lower target directly ends on the sticky direction, so
     the move must first go below the target and come back up.
     """
-    from models.act.eval_common import move_to_joint_state
+    from models.act.eval.common import move_to_joint_state
     from utils.config import JOINT_NAMES
 
     wrist = JOINT_NAMES.index("wrist_flex")
@@ -747,7 +747,7 @@ def test_wrist_flex_seats_from_below_when_descending():
 
 def test_wrist_flex_seating_skipped_when_ascending():
     """Rising into the target is already the reliable direction."""
-    from models.act.eval_common import move_to_joint_state
+    from models.act.eval.common import move_to_joint_state
     from utils.config import JOINT_NAMES
 
     wrist = JOINT_NAMES.index("wrist_flex")

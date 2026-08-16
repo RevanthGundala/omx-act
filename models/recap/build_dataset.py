@@ -31,7 +31,7 @@ from huggingface_hub import get_token
 from lerobot.datasets import LeRobotDataset
 import numpy as np
 
-from models.act.rollout_capture import VALID_OUTCOMES, write_metadata_atomic
+from models.act.eval.rollout_capture import VALID_OUTCOMES, write_metadata_atomic
 
 
 class UnlabeledRolloutError(ValueError):
