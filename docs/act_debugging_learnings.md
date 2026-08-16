@@ -10,7 +10,7 @@ actually measure.
 > `make_delta_action_dataset.py`, and `live_camera_viewer.py`. Their findings
 > are recorded here; recover a script with
 > `git log --diff-filter=D -- evaluation/<name>.py`. The tools that outlived the
-> investigation moved to `models/act/` and `dataset_tools/`.
+> investigation moved to `models/act/` and `scripts/dataset/`.
 
 ## Current diagnosis — read this first (updated 2026-07-21)
 

@@ -1,11 +1,11 @@
 """Clone selected episodes from one LeRobot dataset into a new dataset.
 
-The input split JSON is produced by ``dataset_tools/shortcut_audit.py`` and
+The input split JSON is produced by ``scripts/dataset/shortcut_audit.py`` and
 contains ``keep_episodes`` / ``drop_episodes``. By default this script clones
 the keep split locally; pass ``--push`` to upload to Hugging Face.
 
 Example:
-    uv run python dataset_tools/clone_split.py \
+    uv run python scripts/dataset/clone_split.py \
       --source-repo RevanthGundala/007-place-penne-pasta-in-bowl \
       --target-repo RevanthGundala/007-place-penne-pasta-in-bowl-diverse75 \
       --split-json outputs/dataset_audits/recommended_split.json \

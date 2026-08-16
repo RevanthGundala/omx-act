@@ -1,7 +1,7 @@
 """Unit tests for data.episode_split.resolve_train_holdout_episodes."""
 import pytest
 
-from dataset_tools.episode_split import resolve_train_holdout_episodes
+from models.act.episode_split import resolve_train_holdout_episodes
 
 
 def test_no_holdout_when_train_split_is_one():

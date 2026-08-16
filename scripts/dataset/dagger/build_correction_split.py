@@ -11,7 +11,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from dataset_tools.trimming.noop_trim import find_noop_trim_bounds
+from scripts.dataset.lerobot_schema import assert_mergeable, merged_features
+from scripts.dataset.trimming.noop_trim import find_noop_trim_bounds
 
 
 @dataclass(frozen=True)
@@ -145,26 +146,10 @@ def main() -> None:
         sources[source.label] = LeRobotDataset(source.repo_id, root=source.root)
         tables[source.label] = load_frame_table(source.root)
 
-    reference = next(iter(sources.values()))
-    fps = int(round(reference.fps))
-    camera_keys = sorted(
-        key for key in reference.meta.features if key.startswith("observation.images.")
-    )
-    state_feature = reference.meta.features["observation.state"]
-    action_feature = reference.meta.features["action"]
-    for label, dataset in sources.items():
-        if int(round(dataset.fps)) != fps:
-            raise AssertionError(f"FPS mismatch for {label}")
-        if sorted(
-            key for key in dataset.meta.features if key.startswith("observation.images.")
-        ) != camera_keys:
-            raise AssertionError(f"Camera mismatch for {label}")
-        if dataset.meta.features["observation.state"].get("names") != state_feature.get(
-            "names"
-        ):
-            raise AssertionError(f"State order mismatch for {label}")
-        if dataset.meta.features["action"].get("names") != action_feature.get("names"):
-            raise AssertionError(f"Action order mismatch for {label}")
+    schema = assert_mergeable(sources)
+    fps = schema.fps
+    camera_keys = schema.camera_keys
+    robot_type = schema.robot_type
 
     plans = build_plans(
         tables,
@@ -181,34 +166,14 @@ def main() -> None:
     if args.holdout and not split_plans["holdout"]:
         raise ValueError("Holdout split must be non-empty")
 
-    sample = reference[0]
-    height, width = sample[camera_keys[0]].shape[-2:]
-    features = {
-        "observation.state": {
-            "dtype": "float32",
-            "shape": tuple(state_feature["shape"]),
-            "names": state_feature.get("names"),
-        },
-        "action": {
-            "dtype": "float32",
-            "shape": tuple(action_feature["shape"]),
-            "names": action_feature.get("names"),
-        },
-        "intervention": {"dtype": "bool", "shape": (1,), "names": None},
-    }
-    for key in camera_keys:
-        features[key] = {
-            "dtype": "video",
-            "shape": (3, height, width),
-            "names": ["channels", "height", "width"],
-        }
+    features = merged_features(schema)
 
     outputs = {
         "train": LeRobotDataset.create(
             args.train_repo_id,
             fps,
             root=args.train_output_dir,
-            robot_type=reference.meta.robot_type,
+            robot_type=robot_type,
             features=features,
             use_videos=True,
         ),
@@ -218,7 +183,7 @@ def main() -> None:
             args.holdout_repo_id,
             fps,
             root=args.holdout_output_dir,
-            robot_type=reference.meta.robot_type,
+            robot_type=robot_type,
             features=features,
             use_videos=True,
         )

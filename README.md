@@ -27,7 +27,8 @@ not yet comparable.
 models/act/          the custom ACT policy
   act.py             backbone + CVAE encoder + transformer encoder/decoder
   train.py           training loop
-  helper.py          dataloaders and the seeded train/holdout episode split
+  helper.py          dataloaders
+  episode_split.py   the seeded train/holdout episode split
   lerobot_policy.py  adapter exposing the custom model as a LeRobot policy;
                      omx-training loads this by exact path, so do not move it
   eval/              live-robot evaluation (see "Evaluation" below), plus
@@ -44,15 +45,15 @@ models/recap/        RECAP (arXiv:2511.14759) on top of that policy
   check_token_sensitivity.py  asserts a trained policy uses its token
   build_dataset.py   composes demos + rollouts + corrections into a dataset
 
-dataset_tools/       dataset surgery (source, despite the name of the
-                     data/ directory it used to live in)
-  episode_split.py   deterministic train/holdout split, shared with training
-  lerobot_schema.py  merge-compatibility rules for combining datasets
-  shortcut_audit.py  does this dataset actually require object-conditioned actions?
-  clone_split.py     copy selected episodes into a new dataset
-  export_video.py    episode stills and MP4s, for figures
-  dagger/            aggregate demos with corrections, and validate the result
-  trimming/          drop the near-static settle frames at episode edges
+scripts/             command-line tools, none imported by the library code
+  dataset/           dataset surgery
+    shortcut_audit.py  does this dataset require object-conditioned actions?
+    clone_split.py     copy selected episodes into a new dataset
+    export_video.py    episode stills and MP4s, for figures
+    lerobot_schema.py  merge-compatibility rules for combining datasets
+    dagger/            aggregate demos with corrections, and validate the result
+    trimming/          drop the near-static settle frames at episode edges
+  set_hf_token.py, set_vast_key.py   credential setup
 
 configs/act/base.py  ACTConfig — the single source of hyperparameters
 train/               launchers for paid compute, plus their watchdogs
@@ -145,7 +146,7 @@ Tests are grouped by the code they cover:
 |---|---|
 | `tests/act/` | the ACT policy, eval, and training |
 | `tests/recap/` | critic, advantage labelling, conditioned policy |
-| `tests/dataset_tools/` | dataset surgery and DAgger aggregation |
+| `tests/dataset/` | dataset surgery and DAgger aggregation |
 | `tests/train/` | Modal and vast.ai launchers |
 
 Use the `repo_root` fixture rather than counting parent directories from

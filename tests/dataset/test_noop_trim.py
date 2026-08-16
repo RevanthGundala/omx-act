@@ -1,11 +1,11 @@
-"""Unit tests for dataset_tools.trimming.noop_trim.find_noop_trim_bounds -- pure logic, no dataset I/O.
+"""Unit tests for scripts.dataset.trimming.noop_trim.find_noop_trim_bounds -- pure logic, no dataset I/O.
 
-Ported/adapted from FastWAM's _find_noop_trim_bounds (see dataset_tools/trimming/noop_trim.py docstring).
+Ported/adapted from FastWAM's _find_noop_trim_bounds (see scripts/dataset/trimming/noop_trim.py docstring).
 """
 import numpy as np
 import pytest
 
-from dataset_tools.trimming.noop_trim import find_noop_trim_bounds
+from scripts.dataset.trimming.noop_trim import find_noop_trim_bounds
 
 
 def make_action(deltas: list[float]) -> np.ndarray:

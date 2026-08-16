@@ -1,10 +1,10 @@
-"""Unit tests for dataset_tools.dagger.validators (pure numpy/list helpers, no dataset I/O)."""
+"""Unit tests for scripts.dataset.dagger.validators (pure numpy/list helpers, no dataset I/O)."""
 from __future__ import annotations
 
 import numpy as np
 import pytest
 
-from dataset_tools.dagger.validators import (
+from scripts.dataset.dagger.validators import (
     EXCLUDED_CORRECTION_EPISODES,
     select_correction_episodes,
     validate_action_maxima_within_seed,

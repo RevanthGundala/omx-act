@@ -10,7 +10,7 @@ trajectory prior without grounding to objects even when the visual dataset looks
 diverse.
 
 Example:
-    uv run python dataset_tools/shortcut_audit.py \
+    uv run python scripts/dataset/shortcut_audit.py \
       --dataset RevanthGundala/007-place-penne-pasta-in-bowl \
       --output-json outputs/dataset_audits/shortcut_audit.json \
       --output-image outputs/dataset_audits/shortcut_audit.jpg

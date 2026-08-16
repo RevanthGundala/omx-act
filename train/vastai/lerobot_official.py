@@ -66,7 +66,7 @@ def resolve_train_episodes(dataset_repo_id: str, train_split: float, seed: int) 
         return None
     from lerobot.datasets.lerobot_dataset import LeRobotDatasetMetadata
 
-    from dataset_tools.episode_split import resolve_train_holdout_episodes
+    from models.act.episode_split import resolve_train_holdout_episodes
 
     n_episodes = LeRobotDatasetMetadata(dataset_repo_id).total_episodes
     train_episodes, holdout = resolve_train_holdout_episodes(n_episodes, train_split, seed)

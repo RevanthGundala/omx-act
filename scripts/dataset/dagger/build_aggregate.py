@@ -11,18 +11,18 @@ task, and 017 is the dataset whose late motion onset caused the original ACT
 failure, so a no-argument run rebuilt precisely the wrong thing. This builder
 most recently produced ``028-custom48-dagger18``.
 
-Why this does not reuse ``dataset_tools.trimming.trim_dataset``: that helper is
+Why this does not reuse ``scripts.dataset.trimming.trim_dataset``: that helper is
 Hub-only, single-source, and always drops the ``intervention`` column, none of
 which fit combining two datasets with per-frame provenance. It also cannot read
 a corrections cache that was never pushed to the Hub.
 
 Trim bounds are computed from the parquet state/action columns with pandas, so
 video is decoded only for frames that are actually kept, exactly once each.
-``dataset_tools.trimming.trim_dataset`` decodes every frame to find the bounds and then decodes
+``scripts.dataset.trimming.trim_dataset`` decodes every frame to find the bounds and then decodes
 the kept frames again.
 
 Usage (local build; never pushes by default):
-    uv run python -m dataset_tools.dagger.build_aggregate \\
+    uv run python -m scripts.dataset.dagger.build_aggregate \\
         --seed-repo-id RevanthGundala/026-place-sponge-on-hot-pad-clean \\
         --corrections-repo-id rollout_027-custom48-dagger \\
         --corrections-root ~/.cache/huggingface/lerobot/rollout_027-custom48-dagger \\
@@ -42,7 +42,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from dataset_tools.dagger.validators import (
+from scripts.dataset.dagger.validators import (
     select_correction_episodes,
     validate_action_maxima_within_seed,
     validate_contiguous_episode_indices,
@@ -51,7 +51,8 @@ from dataset_tools.dagger.validators import (
     validate_frame_correspondence,
     validate_no_unexpected_idle_edges,
 )
-from dataset_tools.trimming.noop_trim import find_noop_trim_bounds
+from scripts.dataset.lerobot_schema import assert_mergeable, merged_features
+from scripts.dataset.trimming.noop_trim import find_noop_trim_bounds
 
 
 def parse_args() -> argparse.Namespace:
@@ -269,29 +270,12 @@ def main() -> None:
     print(f"Loading corrections dataset metadata: {args.corrections_repo_id} (root={args.corrections_root})")
     corrections_ds = LeRobotDataset(args.corrections_repo_id, root=args.corrections_root)
 
-    fps = int(round(seed_ds.fps))
-    if int(round(corrections_ds.fps)) != fps:
-        raise AssertionError(f"fps mismatch: seed={seed_ds.fps} corrections={corrections_ds.fps}")
-
-    camera_keys = sorted(key for key in seed_ds.meta.features if key.startswith("observation.images."))
-    corrections_camera_keys = sorted(
-        key for key in corrections_ds.meta.features if key.startswith("observation.images.")
-    )
-    if camera_keys != corrections_camera_keys:
-        raise AssertionError(f"Camera keys differ: seed={camera_keys} corrections={corrections_camera_keys}")
-
-    state_names = seed_ds.meta.features["observation.state"].get("names")
-    action_names = seed_ds.meta.features["action"].get("names")
-    if state_names != corrections_ds.meta.features["observation.state"].get("names"):
-        raise AssertionError("observation.state joint names differ between seed and corrections.")
-    if action_names != corrections_ds.meta.features["action"].get("names"):
-        raise AssertionError("action joint names differ between seed and corrections.")
-
-    state_dim = int(seed_ds.meta.features["observation.state"]["shape"][0])
-    action_dim = int(seed_ds.meta.features["action"]["shape"][0])
-    sample_frame = seed_ds[0]
-    height, width = sample_frame[camera_keys[0]].shape[-2:]
-    robot_type = seed_ds.meta.robot_type
+    schema = assert_mergeable({"seed": seed_ds, "corrections": corrections_ds})
+    fps = schema.fps
+    camera_keys = schema.camera_keys
+    state_dim, action_dim = schema.state_dim, schema.action_dim
+    height, width = schema.height, schema.width
+    robot_type = schema.robot_type
 
     print("Loading per-frame tables (parquet only, no video decode)...")
     seed_df = _load_frame_table(Path(seed_ds.root))
@@ -384,17 +368,7 @@ def main() -> None:
             )
 
     # --- build the target dataset ------------------------------------------------------
-    features = {
-        "observation.state": {"dtype": "float32", "shape": (state_dim,), "names": state_names},
-        "action": {"dtype": "float32", "shape": (action_dim,), "names": action_names},
-        "intervention": {"dtype": "bool", "shape": (1,), "names": None},
-    }
-    for camera_key in camera_keys:
-        features[camera_key] = {
-            "dtype": "video",
-            "shape": (3, height, width),
-            "names": ["channels", "height", "width"],
-        }
+    features = merged_features(schema)
 
     target_ds = LeRobotDataset.create(
         repo_id=args.output_repo_id,

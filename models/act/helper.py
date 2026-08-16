@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 
 from configs.act.base import ACTConfig
-from dataset_tools.episode_split import resolve_train_holdout_episodes
+from models.act.episode_split import resolve_train_holdout_episodes
 from lerobot.datasets import LeRobotDataset, LeRobotDatasetMetadata
 from lerobot.transforms.transforms import ImageTransforms, ImageTransformsConfig
 
