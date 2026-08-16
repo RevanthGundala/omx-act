@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 from dataclasses import replace
+import ast
 import json
+import pathlib
 
 import pytest
 import torch
@@ -1770,3 +1772,125 @@ def test_masked_sft_warm_start_still_rejects_a_truncated_checkpoint(tmp_path):
             torch.device("cpu"),
             allowed_missing=train_masked_sft.ADVANTAGE_PARAMETERS,
         )
+
+
+def test_masked_sft_module_resolves_every_name_it_uses():
+    """Regression: ``AdvantageCondition`` was used but never imported.
+
+    Nothing referenced it until the checkpoint-metadata line, so import and
+    collection both passed and the failure only appeared after the dataset had
+    loaded and training had started -- on Modal, on a paid GPU.
+    """
+    import builtins
+
+    source = pathlib.Path(train_masked_sft.__file__).read_text()
+    tree = ast.parse(source)
+
+    assigned = {
+        node.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store)
+    }
+    assigned |= {
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.ClassDef))
+    }
+    assigned |= {
+        (node.asname or node.name).split(".")[0]
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+        for node in node.names
+    }
+    assigned |= {
+        arg.arg
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        for arg in [*node.args.args, *node.args.kwonlyargs, *node.args.posonlyargs]
+    }
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.comprehension,)):
+            for name in ast.walk(node.target):
+                if isinstance(name, ast.Name):
+                    assigned.add(name.id)
+
+    unresolved = sorted(
+        node.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name)
+        and isinstance(node.ctx, ast.Load)
+        and node.id not in assigned
+        and not hasattr(builtins, node.id)
+    )
+    assert unresolved == [], f"names used but never bound: {unresolved}"
+
+
+def test_from_scratch_requires_explicit_chunk_size_and_train_split(monkeypatch):
+    """Without a checkpoint there is no architecture to inherit.
+
+    ``ACTConfig`` defaults to chunk_size=100 / train_split=0.95, but every run
+    on this task used 30 / 1.0. Falling back silently would train a different
+    architecture on a different split and be incomparable, so refuse instead.
+    """
+    for name in (
+        "RECAP_POLICY_PRETRAINED_CHECKPOINT",
+        "RECAP_POLICY_CHUNK_SIZE",
+        "RECAP_POLICY_TRAIN_SPLIT",
+        "RECAP_POLICY_LABELS",
+        "RECAP_POLICY_SYNTHETIC_SHIFT",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("RECAP_POLICY_DATASET_REPO_ID", "someone/some-dataset")
+
+    with pytest.raises(ValueError, match="RECAP_POLICY_CHUNK_SIZE"):
+        train_masked_sft.main()
+
+    monkeypatch.setenv("RECAP_POLICY_CHUNK_SIZE", "30")
+    with pytest.raises(ValueError, match="RECAP_POLICY_TRAIN_SPLIT"):
+        train_masked_sft.main()
+
+
+def test_advantage_slot_gets_exactly_zero_attention_when_omitted():
+    """The mask must make the token absent, not merely small.
+
+    A zero-vector token would still get a finite score and a nonzero softmax
+    weight, so it would leak. Only masking before the softmax gives absence.
+    """
+    cfg = _config()
+    model = MaskedRecapACTPolicy(cfg, pretrained_backbone=False).eval()
+    bs = 4
+    images = torch.randn(bs, len(cfg.camera_names), 3, 480, 640)
+    joints = torch.randn(bs, cfg.joint_dim)
+
+    def attention_on_slot_zero(advantage):
+        with torch.no_grad():
+            model(images, joints, advantage=advantage)
+        encoder = torch.cat(
+            [
+                block.self_attn.last_attn_weights[..., 0].reshape(bs, -1)
+                for block in model.decoder.transformer_encoder
+            ],
+            dim=1,
+        )
+        decoder = torch.cat(
+            [
+                block.cross_attn.last_attn_weights[..., 0].reshape(bs, -1)
+                for block in model.decoder.transformer_decoder
+            ],
+            dim=1,
+        )
+        return encoder, decoder
+
+    visible_encoder, visible_decoder = attention_on_slot_zero(
+        torch.full((bs,), int(MaskedAdvantageCondition.POSITIVE))
+    )
+    assert visible_encoder.max() > 0
+    assert visible_decoder.max() > 0
+
+    # Per-sample, so one batch can mix conditioned and unconditioned examples.
+    mixed = torch.tensor([int(MaskedAdvantageCondition.POSITIVE), MASKED_ADVANTAGE] * 2)
+    encoder, decoder = attention_on_slot_zero(mixed)
+    assert (encoder[1::2] == 0).all()
+    assert (decoder[1::2] == 0).all()
+    assert encoder[0::2].max() > 0
+    assert decoder[0::2].max() > 0

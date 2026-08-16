@@ -13,7 +13,7 @@ versus NEGATIVE semantics.
 
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime
 import json
 import os
@@ -22,7 +22,11 @@ import time
 
 import torch
 
-from models.recap.act_recap_masked import ACTPolicy, MASKED_ADVANTAGE
+from models.recap.act_recap_masked import (
+    ACTPolicy,
+    MASKED_ADVANTAGE,
+    AdvantageCondition,
+)
 
 # What this architecture adds on top of a behaviour-cloned ACT checkpoint.
 ADVANTAGE_PARAMETERS = (
@@ -102,6 +106,25 @@ def main() -> None:
         )
 
     cfg = config_from_env()
+    pretrained = os.environ.get("RECAP_POLICY_PRETRAINED_CHECKPOINT")
+
+    # Without a checkpoint there is no architecture to inherit, and the
+    # ACTConfig defaults (chunk_size=100, train_split=0.95) are not what any
+    # other run on this task used. Refuse to guess rather than silently train
+    # something incomparable.
+    chunk_size = os.environ.get("RECAP_POLICY_CHUNK_SIZE")
+    train_split = os.environ.get("RECAP_POLICY_TRAIN_SPLIT")
+    if not pretrained and not (chunk_size and train_split):
+        raise ValueError(
+            "Training from scratch requires RECAP_POLICY_CHUNK_SIZE and "
+            "RECAP_POLICY_TRAIN_SPLIT: with no checkpoint to inherit from, the "
+            "ACTConfig defaults would quietly differ from every other run"
+        )
+    if chunk_size:
+        cfg = replace(cfg, chunk_size=int(chunk_size))
+    if train_split:
+        cfg = replace(cfg, train_split=float(train_split))
+
     device_name = os.environ.get("RECAP_DEVICE")
     if device_name is None:
         device_name = (
@@ -136,14 +159,16 @@ def main() -> None:
     )
 
     model = ACTPolicy(cfg, pretrained_backbone=True).to(device)
-    pretrained = os.environ.get("RECAP_POLICY_PRETRAINED_CHECKPOINT")
-    if not pretrained:
-        raise ValueError("RECAP_POLICY_PRETRAINED_CHECKPOINT is required")
-    warm_start(model, pretrained, device, allowed_missing=ADVANTAGE_PARAMETERS)
-    print(
-        f"Warm-started from {pretrained}; advantage token is freshly initialized",
-        flush=True,
-    )
+    if pretrained:
+        warm_start(model, pretrained, device, allowed_missing=ADVANTAGE_PARAMETERS)
+        print(
+            f"Warm-started from {pretrained}; advantage token is freshly initialized",
+            flush=True,
+        )
+    else:
+        # The token is then present from the first step, rather than bolted onto
+        # a network that has already converged without it.
+        print("Training from scratch; no warm start", flush=True)
 
     optimizer = torch.optim.AdamW(
         model.parameters(),

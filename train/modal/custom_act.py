@@ -296,6 +296,8 @@ def train_recap_policy_remote(
     episodes: str | None = None,
     synthetic_shift: str | None = None,
     masked_sft: bool = False,
+    chunk_size: int | None = None,
+    train_split: float | None = None,
 ) -> str:
     """Train the advantage-conditioned RECAP policy.
 
@@ -318,13 +320,15 @@ def train_recap_policy_remote(
     import threading
 
     pretrained_checkpoint = validate_pretrained_checkpoint_path(pretrained_checkpoint)
-    if pretrained_checkpoint is None:
+    if pretrained_checkpoint is None and not masked_sft:
         raise ValueError("pretrained_checkpoint is required for RECAP policy training.")
-    pretrained_path = REMOTE_OUTPUTS / pretrained_checkpoint
-    if not pretrained_path.is_file():
-        raise FileNotFoundError(
-            f"Warm-start checkpoint is missing from Modal volume: {pretrained_path}"
-        )
+    pretrained_path = None
+    if pretrained_checkpoint is not None:
+        pretrained_path = REMOTE_OUTPUTS / pretrained_checkpoint
+        if not pretrained_path.is_file():
+            raise FileNotFoundError(
+                f"Warm-start checkpoint is missing from Modal volume: {pretrained_path}"
+            )
     labels_full_path = ""
     if masked_sft and (labels_path or synthetic_shift):
         raise ValueError(
@@ -351,12 +355,13 @@ def train_recap_policy_remote(
         "HF_TOKEN": os.environ.get("HF_TOKEN", ""),
         "HUGGINGFACE_HUB_TOKEN": os.environ.get("HF_TOKEN", ""),
         "RECAP_DEVICE": "cuda",
-        "RECAP_POLICY_PRETRAINED_CHECKPOINT": str(pretrained_path),
         "RECAP_POLICY_STEPS": str(steps),
         "RECAP_POLICY_SAVE_FREQ": str(save_freq),
         "RECAP_POLICY_JOB_NAME": job_name,
         "RECAP_POLICY_OUTPUT_ROOT": str(REMOTE_OUTPUTS / "act_experiments"),
     }
+    if pretrained_path is not None:
+        environment["RECAP_POLICY_PRETRAINED_CHECKPOINT"] = str(pretrained_path)
     if labels_full_path:
         environment["RECAP_POLICY_LABELS"] = labels_full_path
     if dataset_repo_id:
@@ -365,6 +370,10 @@ def train_recap_policy_remote(
         environment["RECAP_POLICY_DROPOUT"] = str(dropout)
     if episodes:
         environment["RECAP_POLICY_EPISODES"] = str(episodes)
+    if chunk_size is not None:
+        environment["RECAP_POLICY_CHUNK_SIZE"] = str(chunk_size)
+    if train_split is not None:
+        environment["RECAP_POLICY_TRAIN_SPLIT"] = str(train_split)
     if synthetic_shift:
         environment["RECAP_POLICY_SYNTHETIC_SHIFT"] = str(synthetic_shift)
     os.environ.update(environment)
@@ -587,19 +596,29 @@ def recap_policy(
 
 @app.local_entrypoint()
 def recap_masked_sft(
-    pretrained_checkpoint: str,
     dataset_repo_id: str,
+    pretrained_checkpoint: str | None = None,
     steps: int = 2_000,
     save_freq: int = 1_000,
     job_name: str = "recap_masked_sft",
     dropout: str = "0.3",
     episodes: str | None = None,
+    chunk_size: int = 30,
+    train_split: float = 1.0,
 ):
-    """Launch all-positive SFT with true per-example token omission."""
+    """Launch all-positive SFT with true per-example token omission.
+
+    Omit ``pretrained_checkpoint`` to train from scratch, which puts the
+    advantage token in front of the model from the first step instead of adding
+    it to a network that has already converged without it. ``chunk_size`` and
+    ``train_split`` default to what every other run on this task used, since
+    there is then no checkpoint to inherit them from.
+    """
     print("=== MASKED RECAP SFT LAUNCH ===")
     print("stage=masked_sft_positive")
     print(f"dataset={dataset_repo_id}")
-    print(f"warm_start={pretrained_checkpoint}")
+    print(f"warm_start={pretrained_checkpoint or '(from scratch)'}")
+    print(f"chunk_size={chunk_size} train_split={train_split}")
     print(f"steps={steps} save_freq={save_freq} mask_dropout={dropout}")
     print(f"episodes={episodes or '(all)'}")
     print(f"MODAL_GPU={MODAL_GPU}")
@@ -614,6 +633,8 @@ def recap_masked_sft(
         dataset_repo_id=dataset_repo_id,
         episodes=episodes,
         masked_sft=True,
+        chunk_size=chunk_size,
+        train_split=train_split,
     )
     print(result)
     print("Outputs volume: omx-custom-act-training-logs")
