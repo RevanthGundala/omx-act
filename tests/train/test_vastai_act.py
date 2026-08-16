@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from deploy.train_act_vastai import (
+from train.vastai.act import (
     _validated_checkpoint_path,
     _version_tuple,
     assert_no_managed_instances,

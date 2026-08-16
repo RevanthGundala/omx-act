@@ -41,11 +41,17 @@ models/recap/        RECAP (arXiv:2511.14759) on top of that policy
   check_token_sensitivity.py  asserts a trained policy uses its token
   build_dataset.py   composes demos + rollouts + corrections into a dataset
 
-dataset_tools/       dataset surgery: episode splits, no-op trimming,
-                     DAgger aggregation. Source, despite the name of the
-                     data/ directory it used to live in.
+dataset_tools/       dataset surgery (source, despite the name of the
+                     data/ directory it used to live in)
+  episode_split.py   deterministic train/holdout split, shared with training
+  lerobot_schema.py  merge-compatibility rules for combining datasets
+  dagger/            aggregate demos with corrections, and validate the result
+  trimming/          drop the near-static settle frames at episode edges
+
 configs/act/base.py  ACTConfig — the single source of hyperparameters
-deploy/              Modal and vast.ai launchers, plus run watchdogs
+train/               launchers for paid compute, plus their watchdogs
+  modal/             Modal: custom ACT, RECAP critic, RECAP policy
+  vastai/            vast.ai: launcher, resume, instance watchdog, image
 evaluation/          one-off analysis scripts (dataset audits, probes)
 tests/               pytest suite
 docs/                experiment logs and write-ups
@@ -57,20 +63,20 @@ All current training runs on Modal:
 
 ```bash
 # base ACT from demonstrations
-modal run --detach deploy/train_custom_act_modal.py \
+modal run --detach train/modal/custom_act.py \
   --dataset-repo-id RevanthGundala/026-place-sponge-on-hot-pad-clean \
   --job-name act_custom_clean48_chunk30_20k --steps 20000
 
 # fine-tune from a checkpoint (DAgger)
-modal run --detach deploy/train_custom_act_modal.py \
+modal run --detach train/modal/custom_act.py \
   --dataset-repo-id RevanthGundala/028-custom48-dagger18 \
   --pretrained-checkpoint act_experiments/<run>/checkpoints/last.pt \
   --job-name act_custom_clean48_dagger18_ft10k --steps 10000
 
 # RECAP: critic, then labels, then the advantage-conditioned policy
-modal run --detach deploy/train_recap_critic_modal.py
+modal run --detach train/modal/recap_critic.py
 python -m models.recap.label_advantage --help
-modal run --detach deploy/train_custom_act_modal.py::recap_policy \
+modal run --detach train/modal/custom_act.py::recap_policy \
   --pretrained-checkpoint act_experiments/<run>/checkpoints/last.pt \
   --dataset-repo-id RevanthGundala/034-recap-balanced \
   --labels-path act_experiments/recap_labels/034-recap-balanced.json
@@ -80,7 +86,7 @@ Architecture and optimizer settings are inherited from the warm-start
 checkpoint, so those commands only carry run identity and budget.
 
 **Any paid GPU run needs an independent watchdog** — see
-`deploy/modal_call_watchdog.py`. A `finally` block in the launcher is not
+`train/modal/call_watchdog.py`. A `finally` block in the launcher is not
 enough, because it dies with the launcher.
 
 ## Evaluation
@@ -135,7 +141,7 @@ Tests are grouped by the code they cover:
 | `tests/act/` | the ACT policy, eval, and training |
 | `tests/recap/` | critic, advantage labelling, conditioned policy |
 | `tests/dataset_tools/` | dataset surgery and DAgger aggregation |
-| `tests/deploy/` | Modal and vast.ai launchers |
+| `tests/train/` | Modal and vast.ai launchers |
 | `tests/evaluation/` | analysis scripts |
 
 Use the `repo_root` fixture rather than counting parent directories from
@@ -144,7 +150,7 @@ Use the `repo_root` fixture rather than counting parent directories from
 ## Gotchas
 
 - **This repo and `omx-training` share top-level package names** (`configs`,
-  `deploy`, `docs`, `evaluation`, `models`, `tests`, `utils`). Whichever is
+  `docs`, `evaluation`, `models`, `tests`, `utils`). Whichever is
   first on `sys.path` wins, and it has silently resolved `utils.config` to the
   wrong repo's copy before. Pin the repo root first in entry scripts; never put
   act-sim on `PYTHONPATH` for an omx-training run.

@@ -31,6 +31,7 @@ COPY pyproject.toml README.md ./
 COPY configs ./configs
 COPY models ./models
 COPY utils ./utils
+COPY dataset_tools ./dataset_tools
 RUN python -m pip install --no-cache-dir -e .
 
 WORKDIR /workspace

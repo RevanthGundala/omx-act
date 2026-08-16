@@ -2,11 +2,11 @@
 Train the custom models/act ACT implementation on Modal.
 
 Usage:
-    modal run --detach deploy/train_custom_act_modal.py \
+    modal run --detach train/modal/custom_act.py \
       --dataset-repo-id RevanthGundala/026-place-sponge-on-hot-pad-clean \
       --job-name act_custom_clean48_chunk30_20k --steps 20000
 
-    modal run deploy/train_custom_act_modal.py::recap_policy \
+    modal run train/modal/custom_act.py::recap_policy \
       --pretrained-checkpoint act_experiments/<run>/checkpoints/last.pt \
       --dataset-repo-id RevanthGundala/034-recap-balanced \
       --labels-path act_experiments/recap_labels/034-recap-balanced.json
@@ -25,13 +25,13 @@ import uuid
 import modal
 
 try:
-    from modal_training_common import (
+    from modal_common import (
         validate_dataset_run,
         validate_pretrained_checkpoint_path,
         validate_volume_relative_path,
     )
 except ModuleNotFoundError:
-    from deploy.modal_training_common import (
+    from train.modal.common import (
         validate_dataset_run,
         validate_pretrained_checkpoint_path,
         validate_volume_relative_path,
@@ -70,7 +70,7 @@ image = (
     .add_local_dir("configs", remote_path=str(REMOTE_WORKSPACE / "configs"))
     .add_local_dir("utils", remote_path=str(REMOTE_WORKSPACE / "utils"))
     .add_local_dir("data", remote_path=str(REMOTE_WORKSPACE / "data"))
-    .add_local_file("deploy/modal_training_common.py", remote_path="/root/modal_training_common.py")
+    .add_local_file("train/modal/common.py", remote_path="/root/modal_common.py")
 )
 app = modal.App("omx-custom-act-training", image=image)
 vol = modal.Volume.from_name("omx-custom-act-training-logs", create_if_missing=True)

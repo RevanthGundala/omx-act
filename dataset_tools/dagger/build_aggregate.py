@@ -11,18 +11,18 @@ task, and 017 is the dataset whose late motion onset caused the original ACT
 failure, so a no-argument run rebuilt precisely the wrong thing. This builder
 most recently produced ``028-custom48-dagger18``.
 
-Why this does not reuse ``dataset_tools.trim_dataset_noops``: that helper is
+Why this does not reuse ``dataset_tools.trimming.trim_dataset``: that helper is
 Hub-only, single-source, and always drops the ``intervention`` column, none of
 which fit combining two datasets with per-frame provenance. It also cannot read
 a corrections cache that was never pushed to the Hub.
 
 Trim bounds are computed from the parquet state/action columns with pandas, so
 video is decoded only for frames that are actually kept, exactly once each.
-``trim_dataset_noops`` decodes every frame to find the bounds and then decodes
+``dataset_tools.trimming.trim_dataset`` decodes every frame to find the bounds and then decodes
 the kept frames again.
 
 Usage (local build; never pushes by default):
-    uv run python -m dataset_tools.build_dagger_aggregate \\
+    uv run python -m dataset_tools.dagger.build_aggregate \\
         --seed-repo-id RevanthGundala/026-place-sponge-on-hot-pad-clean \\
         --corrections-repo-id rollout_027-custom48-dagger \\
         --corrections-root ~/.cache/huggingface/lerobot/rollout_027-custom48-dagger \\
@@ -42,7 +42,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from dataset_tools.dagger_aggregate import (
+from dataset_tools.dagger.validators import (
     select_correction_episodes,
     validate_action_maxima_within_seed,
     validate_contiguous_episode_indices,
@@ -51,7 +51,7 @@ from dataset_tools.dagger_aggregate import (
     validate_frame_correspondence,
     validate_no_unexpected_idle_edges,
 )
-from dataset_tools.noop_trim import find_noop_trim_bounds
+from dataset_tools.trimming.noop_trim import find_noop_trim_bounds
 
 
 def parse_args() -> argparse.Namespace:

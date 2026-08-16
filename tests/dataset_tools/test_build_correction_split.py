@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from dataset_tools.build_dagger_correction_split import (
+from dataset_tools.dagger.build_correction_split import (
     build_plans,
     parse_holdout,
     parse_source,

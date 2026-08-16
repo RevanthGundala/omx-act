@@ -3,12 +3,12 @@ FastWAM-style format conversion) so both models/act/train.py and stock lerobot-t
 the result directly by repo_id, exactly like the source dataset.
 
 Trims only the leading/trailing near-static "settle" segment of each episode (see
-data/noop_trim.py docstring for why this matters for ACT chunk quality). Uses the OFFICIAL
+dataset_tools/trimming/noop_trim.py docstring for why this matters for ACT chunk quality). Uses the OFFICIAL
 lerobot package for both reading (v3.0, handles the packed/chunked parquet+video format) and
 writing (LeRobotDataset.create() -> add_frame() -> save_episode() -> finalize()).
 
 Usage:
-    uv run python -m data.trim_dataset_noops \
+    uv run python -m dataset_tools.trimming.trim_dataset \
         --repo-id RevanthGundala/011-place-sponge-in-bowl \
         --output-repo-id RevanthGundala/012-place-sponge-in-bowl \
         --output-dir outputs/datasets/012-place-sponge-in-bowl \
@@ -22,7 +22,7 @@ from pathlib import Path
 
 import numpy as np
 
-from dataset_tools.noop_trim import find_noop_trim_bounds
+from dataset_tools.trimming.noop_trim import find_noop_trim_bounds
 
 
 def parse_args() -> argparse.Namespace:

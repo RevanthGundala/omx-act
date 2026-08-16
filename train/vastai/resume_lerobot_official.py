@@ -8,7 +8,7 @@ and runs `lerobot-train --resume=true`, continuing the optimizer/step state unti
 the new (larger) `--steps` target.
 
 Example (continue the 10k sponge run to 20k):
-    uv run python deploy/resume_lerobot_official_vastai.py \
+    uv run python train/vastai/resume_lerobot_official.py \
       --local-run-dir outputs/vastai/instance-43132629/outputs/lerobot_official/lerobot_official_act_chunk30_steps10000 \
       --steps 20000
 """
@@ -26,7 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from deploy import train_act_vastai as vast
+from train.vastai import act as vast
 
 
 def parse_args() -> argparse.Namespace:

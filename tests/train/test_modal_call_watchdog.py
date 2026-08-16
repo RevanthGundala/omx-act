@@ -1,4 +1,4 @@
-from deploy.modal_call_watchdog import record_value
+from train.modal.call_watchdog import record_value
 
 
 def test_record_value_supports_modal_cli_json_formats():

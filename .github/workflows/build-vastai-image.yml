@@ -6,12 +6,13 @@ on:
     branches: [main]
     paths:
       - .github/workflows/build-vastai-image.yml
-      - deploy/vastai.Dockerfile
+      - train/vastai/Dockerfile
       - pyproject.toml
       - README.md
       - configs/**
       - models/**
       - utils/**
+      - dataset_tools/**
 
 permissions:
   contents: read
@@ -41,7 +42,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: deploy/vastai.Dockerfile
+          file: train/vastai/Dockerfile
           platforms: linux/amd64
           push: true
           tags: |

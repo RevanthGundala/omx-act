@@ -12,7 +12,7 @@ from vastai_sdk import VastAI
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from deploy.train_act_vastai import read_local_vast_key
+from train.vastai.act import read_local_vast_key
 
 
 def main() -> None:

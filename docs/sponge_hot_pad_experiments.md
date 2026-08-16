@@ -235,7 +235,9 @@ Position coverage, sponge bucket counts:
 ### 5.5 The MLP sanity check
 
 Before spending GPU time, trained a ~140K-param state-only MLP on the same
-returns.
+returns. The script (`models/recap/sanity_mlp.py`) has since been removed; it
+was a one-off probe, and recovering it means `git log --diff-filter=D --
+models/recap/sanity_mlp.py`.
 
 - Normalization verified: returns map to exactly [−1.0000, 0.0000], bins span
   [0, 200], 160 distinct bins used.

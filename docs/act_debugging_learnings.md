@@ -191,7 +191,7 @@ shows that layout-level rollout evaluation is still decisive.
 - `models/act_official/train_official.py` reuses our **exact** dataloader, norm
   stats, and L1+KL objective from `models/act/train.py` — only the model is
   swapped. This is what made the comparison trustworthy.
-- Modal launchers: `deploy/train_custom_act_modal.py` and
+- Modal launchers: `train/modal/custom_act.py` and
   `deploy/train_official_act_modal.py` (mirrors of each other, same image and
   benchmark volume).
 
@@ -535,7 +535,7 @@ uv run python evaluation/make_delta_action_dataset.py \
   --push
 
 # 2. Train stock lerobot-train on the delta dataset (NO code change).
-uv run python deploy/train_lerobot_official_vastai.py \
+uv run python train/vastai/lerobot_official.py \
   --dataset-repo-id RevanthGundala/009-place-towel-in-bowl-10fps-delta ...
 
 # 3. Offline sanity (errors reported in absolute joint units, comparable to
@@ -587,7 +587,7 @@ zero deltas. Checkpoint: `RevanthGundala` delta run, instance-42791229. Next:
 live OMX eval with `--action-space delta` to confirm the offline gain transfers
 to real pickup.
 
-> Launcher note: `deploy/train_lerobot_official_vastai.py` monkey-patches the
+> Launcher note: `train/vastai/lerobot_official.py` monkey-patches the
 > remote command and (on the bare CUDA image) must install lerobot **with** deps
 > and extras, not `--no-deps`. It now runs
 > `pip install "lerobot[diffusion,dynamixel,training] @ git+...@<ref>"`. Any shell
@@ -746,7 +746,7 @@ add the fixed-home-pose protocol to also kill the qpos shortcut.
 ```bash
 # Multi-episode reference comparison (Modal A10G), val L1:
 modal run --detach deploy/train_official_act_modal.py --profile sim_transfer_cube_reference --run-name ref_official_seed0
-modal run --detach deploy/train_custom_act_modal.py   --profile sim_transfer_cube_reference --run-name ref_patched_seed0
+modal run --detach train/modal/custom_act.py   --profile sim_transfer_cube_reference --run-name ref_patched_seed0
 
 # Metrics land in the volumes (root = /outputs; do NOT prefix /outputs in `modal volume get`):
 modal volume get omx-custom-act-training-logs   /act_experiments/sim_transfer_cube_reference/ref_patched_seed0/metrics.jsonl .

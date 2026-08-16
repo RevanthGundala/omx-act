@@ -344,7 +344,7 @@ def test_warm_start_rejects_a_checkpoint_without_decoder_weights(tmp_path):
 
 
 def test_validate_critic_run_rejects_unsafe_configurations():
-    from deploy.train_recap_critic_modal import validate_critic_run
+    from train.modal.recap_critic import validate_critic_run
 
     ok = dict(
         dataset_repo_id="owner/dataset",

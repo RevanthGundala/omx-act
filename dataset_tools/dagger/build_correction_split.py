@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from dataset_tools.noop_trim import find_noop_trim_bounds
+from dataset_tools.trimming.noop_trim import find_noop_trim_bounds
 
 
 @dataclass(frozen=True)

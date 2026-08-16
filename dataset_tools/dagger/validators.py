@@ -1,16 +1,16 @@
 """Pure, dataset-I/O-free helpers for building the seed+DAgger-correction aggregate.
 
-`data/trim_dataset_noops.py` is Hub-only, single-repo, and always drops any
+`dataset_tools/trimming/trim_dataset.py` is Hub-only, single-repo, and always drops any
 `intervention` column, so it can't be reused unchanged for this job: we need to
 combine TWO source datasets (an already-trimmed seed and a raw corrections
 cache), trim only the corrections, and attach per-frame provenance. This module
 holds the selection/validation logic that makes that combination auditable and
 unit-testable without touching a real dataset. The actual dataset I/O
 (`LeRobotDataset` loading / `add_frame` / `save_episode`) lives in
-`data/build_dagger_aggregate.py`, which composes these helpers.
+`dataset_tools/dagger/build_aggregate.py`, which composes these helpers.
 
 Everything here operates on plain numpy arrays / ints so it can be tested with
-small synthetic inputs (see tests/test_dagger_aggregate.py).
+small synthetic inputs (see tests/dataset_tools/test_validators.py).
 
 Note: an earlier aggregate (015, built from the now-abandoned
 013-place-sponge-in-bowl-diverse-50-dagger corrections) hardcoded an
@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from dataset_tools.noop_trim import find_noop_trim_bounds
+from dataset_tools.trimming.noop_trim import find_noop_trim_bounds
 
 EXCLUDED_CORRECTION_EPISODES: frozenset[int] = frozenset()
 

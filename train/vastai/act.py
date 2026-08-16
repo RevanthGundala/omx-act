@@ -4,9 +4,9 @@ Launch the local act-sim one-batch ACT debug run on a Vast.ai GPU.
 Usage:
     export VASTAI_API_KEY="..."
     export HF_TOKEN="..."  # optional for private datasets
-    uv run python deploy/train_act_vastai.py --steps 300
+    uv run python train/vastai/act.py --steps 300
 
-For faster, more reliable startup, build/push deploy/vastai.Dockerfile and run
+For faster, more reliable startup, build/push train/vastai/Dockerfile and run
 with OMX_VAST_IMAGE set to that image. The launcher still bootstraps missing
 pieces over SSH so the generic CUDA image remains usable as a fallback.
 """
@@ -628,7 +628,7 @@ def assert_no_managed_instances(vast: VastAI, allowed_instance_ids: list[int] | 
 def start_instance_watchdog(instance_id: int, max_runtime_minutes: int) -> subprocess.Popen:
     if max_runtime_minutes <= 0:
         raise ValueError("--max-runtime-minutes must be positive.")
-    watchdog = repo_root() / "deploy" / "vastai_instance_watchdog.py"
+    watchdog = repo_root() / "train" / "vastai" / "instance_watchdog.py"
     log_dir = repo_root() / "outputs" / "vastai"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = (log_dir / f"watchdog-{instance_id}.log").open("a")

@@ -5,7 +5,7 @@ It uploads this repo for dependency/config context, installs LeRobot, then runs
 the upstream `lerobot-train` CLI with explicit ACT arguments.
 
 Example:
-    uv run python deploy/train_lerobot_official_vastai.py \
+    uv run python train/vastai/lerobot_official.py \
       --dataset-repo-id RevanthGundala/009-place-towel-in-bowl-10fps \
       --steps 10000 \
       --chunk-size 30
@@ -22,7 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from deploy import train_act_vastai as vast
+from train.vastai import act as vast
 
 
 PHOTOMETRIC_TRANSFORMS = {

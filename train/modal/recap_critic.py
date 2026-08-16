@@ -4,7 +4,7 @@ The critic is far too slow to train locally: a ResNet18 over 480x640 frames plus
 a 602-token transformer does not complete a single step in minutes on MPS.
 
 Usage:
-    modal run deploy/train_recap_critic_modal.py \
+    modal run train/modal/recap_critic.py \
         --dataset-repo-id RevanthGundala/031-recap-gen1 \
         --steps 20000
 
@@ -19,9 +19,9 @@ from pathlib import Path
 import modal
 
 try:
-    from modal_training_common import validate_volume_relative_path
+    from modal_common import validate_volume_relative_path
 except ModuleNotFoundError:
-    from deploy.modal_training_common import validate_volume_relative_path
+    from train.modal.common import validate_volume_relative_path
 
 
 REMOTE_WORKSPACE = Path("/workspace")
@@ -54,7 +54,7 @@ image = (
     .add_local_dir("models", remote_path=str(REMOTE_WORKSPACE / "models"))
     .add_local_dir("configs", remote_path=str(REMOTE_WORKSPACE / "configs"))
     .add_local_dir("utils", remote_path=str(REMOTE_WORKSPACE / "utils"))
-    .add_local_file("deploy/modal_training_common.py", remote_path="/root/modal_training_common.py")
+    .add_local_file("train/modal/common.py", remote_path="/root/modal_common.py")
 )
 
 # Warm-start checkpoints are baked into the image rather than uploaded to a

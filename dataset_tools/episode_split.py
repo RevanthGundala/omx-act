@@ -1,5 +1,5 @@
 """Deterministic episode-level train/holdout split, shared between models/act/helper.py (the
-custom trainer's dataloaders) and deploy/train_lerobot_official_vastai.py (the stock lerobot-train
+custom trainer's dataloaders) and train/vastai/lerobot_official.py (the stock lerobot-train
 launcher), so both trainers hold out the SAME fraction of data using the SAME algorithm for a fair
 comparison.
 

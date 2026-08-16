@@ -1,6 +1,6 @@
 import pytest
 
-from deploy.modal_training_common import (
+from train.modal.common import (
     validate_dataset_run,
     validate_pretrained_checkpoint_path,
     validate_volume_relative_path,
@@ -80,7 +80,7 @@ def _recap_entrypoint_source(repo_root) -> str:
     """
     import ast
 
-    path = repo_root / "deploy" / "train_custom_act_modal.py"
+    path = repo_root / "train" / "modal" / "custom_act.py"
     tree = ast.parse(path.read_text())
     for node in tree.body:
         if isinstance(node, ast.FunctionDef) and node.name == "train_recap_policy_remote":
@@ -95,7 +95,7 @@ def test_recap_entrypoint_is_bounded_by_the_hard_runtime(repo_root):
     """
     import ast
 
-    path = repo_root / "deploy" / "train_custom_act_modal.py"
+    path = repo_root / "train" / "modal" / "custom_act.py"
     source = path.read_text()
     tree = ast.parse(source)
     decorators = [
