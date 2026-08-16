@@ -1576,16 +1576,36 @@ def test_conversion_rejects_a_non_legacy_state_dict():
         convert_legacy_state_dict({"decoder.act_proj.weight": torch.zeros(1)})
 
 
-def test_masked_architecture_has_no_unconditioned_class():
-    model = MaskedRecapACTPolicy(_config(), pretrained_backbone=False)
+def test_masked_architecture_has_no_unconditioned_vector():
+    # UNCONDITIONED keeps its meaning -- "not conditioned" -- but is implemented
+    # by omitting the token rather than by a third learned row, so the legacy
+    # call signature keeps working and no vector exists for it.
+    torch.manual_seed(0)
+    model = MaskedRecapACTPolicy(_config(), pretrained_backbone=False).eval()
+    images = torch.randn(2, 1, 3, 64, 64)
+    qpos = torch.randn(2, 6)
 
     assert model.decoder.advantage_embedding.num_embeddings == 2
     assert not hasattr(model.decoder, "adv_proj")
+
+    with torch.no_grad():
+        by_enum, _, _ = model(
+            images,
+            qpos,
+            advantage=torch.full((2,), int(AdvantageCondition.UNCONDITIONED)),
+        )
+        by_none, _, _ = model(images, qpos, advantage=None)
+    assert torch.equal(by_enum, by_none)
+
+
+def test_unknown_class_ids_are_rejected():
+    model = MaskedRecapACTPolicy(_config(), pretrained_backbone=False)
+
     with pytest.raises(ValueError, match="MASKED_ADVANTAGE"):
         model(
             torch.randn(1, 1, 3, 64, 64),
             torch.randn(1, 6),
-            advantage=torch.tensor([int(AdvantageCondition.UNCONDITIONED)]),
+            advantage=torch.tensor([7]),
         )
 
 
