@@ -39,6 +39,13 @@ def _config() -> ACTConfig:
 
 
 def test_recap_attention_matches_base_attention():
+    """models/recap/attention.py is a deliberate copy of models/act/attention.py.
+
+    RECAP's model code is kept independent of the baseline it is compared
+    against. This pair of tests is what makes that copy safe: the two must stay
+    numerically identical and state-dict compatible, because the RECAP policy
+    warm-starts from an ACT checkpoint.
+    """
     torch.manual_seed(0)
     base = BaseAttention(32, num_heads=4, dropout=0.0).eval()
     recap = RecapAttention(32, num_heads=4, dropout=0.0).eval()

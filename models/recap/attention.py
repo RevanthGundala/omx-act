@@ -1,3 +1,17 @@
+"""Transformer blocks for the RECAP models.
+
+This is deliberately a copy of models/act/attention.py rather than an import.
+RECAP's model code is kept independent of the ACT baseline it is compared
+against, so editing the baseline cannot silently change the RECAP policy or
+critic and invalidate the comparison.
+
+The two are numerically identical and share a state dict, which is what lets
+the RECAP policy warm-start from an ACT checkpoint. Do not deduplicate them;
+test_recap_attention_matches_base_attention and its cross-attention
+counterpart in tests/recap/test_recap_models.py exist to catch drift between
+them, and will fail if this copy diverges.
+"""
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
