@@ -73,7 +73,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--runner",
-        choices=["custom", "lerobot", "diffusion"],
+        choices=["custom", "lerobot"],
         default="custom",
         help="Which normal dataset trainer to execute.",
     )
@@ -422,7 +422,6 @@ def remote_training_command(args: argparse.Namespace) -> str:
     module = {
         "custom": "models.act.train",
         "lerobot": "models.act.train_lerobot",
-        "diffusion": "models.act.train_diffusion",
     }[args.runner]
     job_name = args.job_name or f"act_{args.runner}_train_chunk{args.chunk_size}_steps{args.steps}"
     return f"""bash -lc 'set -euo pipefail

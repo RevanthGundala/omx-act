@@ -33,8 +33,7 @@ models/act/          the custom ACT policy
                      omx-training loads this by exact path, so do not move it
   eval/              live-robot evaluation (see "Evaluation" below), plus
                      pre-rollout scene validation and rollout capture
-  tools/             one-off diagnostics: compare_policies, export_checkpoint,
-                     summarize_trace
+  tools/             compare_policies: policy-vs-policy end-effector diagnostics
 
 models/recap/        RECAP (arXiv:2511.14759) on top of that policy
   act_recap.py       ACT plus a three-state advantage-conditioning token
