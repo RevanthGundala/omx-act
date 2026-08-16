@@ -290,16 +290,39 @@ class Decoder(nn.Module):
         joint_z_pos = self.joint_z_pos_emb.weight.unsqueeze(0)
         pos = torch.cat([joint_z_pos, image_pos], dim=1)
 
-        indices, present = self._prepare_advantage(advantage, batch_size=bs, device=joints.device)
-        adv_token = self.advantage_embedding(indices).unsqueeze(1).to(dtype=memory.dtype)
-        memory = torch.cat([adv_token, memory], dim=1)
+        # One class id per sample; MASKED_ADVANTAGE (or advantage=None) omits it.
+        if advantage is None:
+            advantage = MASKED_ADVANTAGE
+        advantage = torch.as_tensor(advantage, device=joints.device)
+        if advantage.ndim == 0:
+            advantage = advantage.expand(bs)
+        if advantage.shape != (bs,) or advantage.is_floating_point():
+            raise ValueError(
+                "advantage must be one integer class ID per batch item, got "
+                f"{tuple(advantage.shape)} of {advantage.dtype} for batch size {bs}"
+            )
+        advantage = advantage.long()
+        omitted = advantage == MASKED_ADVANTAGE
+        if (~omitted & ((advantage < 0) | (advantage >= len(AdvantageCondition)))).any():
+            raise ValueError(
+                "advantage class IDs must be "
+                f"{[f'{c.name}={int(c)}' for c in AdvantageCondition]} or "
+                f"MASKED_ADVANTAGE={MASKED_ADVANTAGE}; got "
+                f"{sorted(set(advantage[~omitted].tolist()))}"
+            )
+
+        # Omitted samples still need a valid row for the lookup to be defined.
+        # Which row is irrelevant: the mask below removes the slot entirely, so
+        # nothing about this vector can reach the output.
+        adv_token = self.advantage_embedding(advantage.clamp_min(0)).unsqueeze(1)
+        memory = torch.cat([adv_token.to(dtype=memory.dtype), memory], dim=1)
         adv_pos = self.adv_pos_emb.weight.unsqueeze(0).to(dtype=pos.dtype)
         pos = torch.cat([adv_pos, pos], dim=1)
 
         # The advantage token is memory slot 0. Masking it is what makes an
         # omitted token genuinely absent rather than a third learned value.
         key_mask = torch.ones((bs, 1, 1, memory.shape[1]), dtype=torch.bool, device=memory.device)
-        key_mask[:, :, :, 0] = present.view(bs, 1, 1)
+        key_mask[:, :, :, 0] = ~omitted.view(bs, 1, 1)
 
         for block in self.transformer_encoder:
             memory = self._run_block(block, memory, self_key_mask=key_mask, pos=pos)
@@ -318,41 +341,6 @@ class Decoder(nn.Module):
         out = self.final_norm(out)
         act_pred = self.act_proj(out)
         return act_pred
-
-    @staticmethod
-    def _prepare_advantage(advantage, *, batch_size, device):
-        """Return (embedding indices, per-sample present mask).
-
-        ``None`` omits the token for the whole batch; ``MASKED_ADVANTAGE`` omits
-        it for one sample. Omitted entries are clamped to a valid row only so
-        the embedding lookup is defined -- the mask is what removes them, so the
-        clamp target is arbitrary and cannot reach the output.
-        """
-        if advantage is None:
-            advantage = MASKED_ADVANTAGE
-
-        advantage = torch.as_tensor(advantage, device=device)
-        if advantage.ndim == 0:
-            advantage = advantage.expand(batch_size)
-        if advantage.is_floating_point() and not torch.equal(advantage, advantage.round()):
-            raise ValueError("advantage class IDs must be integers")
-        advantage = advantage.long()
-        if advantage.shape != (batch_size,):
-            raise ValueError(
-                "advantage must contain one class ID per batch item, got "
-                f"{tuple(advantage.shape)} for batch size {batch_size}"
-            )
-
-        present = advantage != MASKED_ADVANTAGE
-        invalid = present & ((advantage < 0) | (advantage >= len(AdvantageCondition)))
-        if invalid.any():
-            raise ValueError(
-                "advantage class IDs must be "
-                f"{[f'{c.name}={int(c)}' for c in AdvantageCondition]} or "
-                f"MASKED_ADVANTAGE={MASKED_ADVANTAGE}; got "
-                f"{sorted(set(advantage[invalid].tolist()))}"
-            )
-        return advantage.clamp_min(0), present
 
     @staticmethod
     def _run_block(
