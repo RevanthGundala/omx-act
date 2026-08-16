@@ -136,3 +136,22 @@ def test_recap_entrypoint_defaults_to_the_sft_stage(repo_root):
     assert "labels_path: str | None = None" in source
     assert 'RECAP_POLICY_LABELS' in source
     assert 'stage = "improvement_loop" if labels_full_path else "sft_positive"' in source
+
+
+def test_masked_sft_uses_a_separate_trainer_path(repo_root):
+    source = _recap_entrypoint_source(repo_root)
+
+    # The masked experiment must not quietly run through the legacy trainer;
+    # they differ in architecture, not just hyperparameters.
+    assert "masked_sft: bool = False" in source
+    assert "from models.recap.train_masked_sft import main as train_main" in source
+    assert 'stage = "masked_sft_positive"' in source
+
+
+def test_masked_sft_refuses_labels_and_synthetic_shift(repo_root):
+    source = _recap_entrypoint_source(repo_root)
+
+    # All-positive SFT with omission is a different question from either the
+    # improvement loop or the planted-token capability test.
+    assert "masked_sft is all-positive SFT" in source
+    assert "synthetic_shift replaces critic labels" in source

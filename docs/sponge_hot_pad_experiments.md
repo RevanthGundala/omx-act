@@ -389,15 +389,80 @@ driven largely by *sponge placement*, which the instantaneous action does not
 respond to. So the same action is labelled positive in one episode and negative
 in another. The label varies; the action does not.
 
-**This is a property of ACT, not of RECAP.** π\*₀.₆ conditions a flow-matching
-policy that is genuinely multimodal per observation, so the token has real
-alternatives to re-weight. ACT with `z` pinned to zero at inference emits one
-action per observation, so there is nothing to select between. The remaining
-untested option is AWR-style advantage *weighting*, which changes the loss
-rather than the input and so does not require the label to explain residual
-variance.
+**What we know and what we do not.** We know **that** the real-label token is
+inert, across every ablation above. We do **not** have a single proven cause.
+Hypotheses still live: the critic labels do not change the action target given
+the observation; the CVAE `z` already carries the action during training, so the
+token is redundant; chunk dilution. An earlier draft of this section asserted
+that ACT is unimodal and therefore *cannot* condition — §5.10 refutes that, and
+the claim is withdrawn.
 
-### 5.10 Two measurement errors worth recording
+We also cannot claim, on this evidence, that PI's method requires matched
+good/bad trajectories from the same state. That is a hypothesis we have not
+tested, not a finding.
+
+The remaining untested option is AWR-style advantage *weighting*, which changes
+the loss rather than the input and so does not require the label to explain
+residual variance.
+
+### 5.10 Test A: the trainer can learn a token
+
+To separate "this trainer cannot learn *any* token" from "our labels are not a
+token task," we discarded the critic labels and planted a bit that is
+**required** to reduce L1: a deterministic coin flip per frame, plus +0.5
+z-units on every joint when the bit is POSITIVE. Same architecture, same warm
+start, 10k steps, dropout 0. This is a capability probe, **not** RECAP — RECAP
+still clones whatever action was taken and only hopes the tag lines up with
+better actions.
+
+| | planted | measured after 10k |
+|---|---|---|
+| token effect (POS − NEG) | 0.50 | **0.519** |
+| relative to changing the scene | — | **1387%** |
+| direction | POS matches the shifted target | **PASS** |
+
+App `ap-Q5o55iTBj4ZyBqgDUVys8X`, A10, ~$0.64. Checkpoint
+`recap_policy_synth_shift05_10k/20260815-205025/step_010000.pt`.
+
+So the wiring works: when using the token cuts the loss, this trainer uses it
+almost exactly. The 0.93% real-label result is therefore **not** "ACT cannot
+condition." What remains open is why *these* labels do not create that
+incentive.
+
+### 5.11 The all-positive SFT also ignores its token
+
+`recap_sft_positive_10k` trained on the 48 demonstrations with every indicator
+fixed to POSITIVE and no conditioning dropout.
+
+Reading that checkpoint needed an architecture that can *omit* the token rather
+than substitute a third value. `models/recap/act_recap_masked.py` is that
+architecture: `nn.Embedding(2, d_model)` over NEGATIVE and POSITIVE only, with a
+`MASKED_ADVANTAGE` sentinel whose slot is masked out of encoder self-attention
+and decoder cross-attention. It is a separate file; the legacy model is
+untouched. Its parameter layout differs deliberately, so a legacy checkpoint is
+ported with `convert_legacy_state_dict`, which sets each embedding row to the
+legacy `adv_proj` column plus bias and reproduces the legacy outputs exactly for
+visible tokens. That parity is asserted before any masked number is reported.
+
+On 256 identical observations, removing the POSITIVE token had essentially no
+causal effect:
+
+| checkpoint | visible-versus-masked output effect |
+|---|---:|
+| SFT step 2k | **0.04%** of observation-driven variation |
+| SFT step 10k | **0.04%** |
+
+Encoder attention to the advantage slot was approximately uniform (1.12× uniform
+at 2k, 1.01× at 10k); decoder cross-attention was 0.27× and 0.29×. A few heads
+attended more strongly, yet masking the slot still did not move the actions — so
+attention maps here are descriptive, not evidence that the condition affects
+behaviour. Attention maps are session artifacts, not repo files.
+
+This means the SFT's 82% live result should be read as ordinary fine-tuning with
+a constant, unused token — not as evidence that all-positive SFT pretrained a
+useful advantage channel.
+
+### 5.12 Two measurement errors worth recording
 
 **Subset evaluation inflated the effect.** Arm A first measured 1.45% against a
 0.75% baseline — apparently a near-doubling. Running the *baseline* on the same
@@ -444,6 +509,15 @@ use 0.93%.**
 11. **A diagnostic with a small default sample can return identical numbers for
     different data.** Ours read 128 sequential frames, so two different subsets
     both measured the start of the same episode.
+12. **To test whether a conditioner *can* be learned, plant a bit the loss
+    requires.** Test A is not RECAP; it only asks whether the trainer will use a
+    token when ignoring it is impossible. Ours does (0.519 against a planted
+    0.50), which rules out "the trainer cannot condition" without identifying
+    what is wrong with the real labels.
+13. **Omitting a conditioning token is not the same as setting it to a third
+    value.** A learned UNCONDITIONED embedding is still a token the encoder
+    attends to. Testing real absence needed a separate architecture that masks
+    the slot.
 
 ---
 
@@ -471,6 +545,7 @@ Models:
 | `recap_policy_balanced66_20k` | RECAP policy, token sensitivity 0.93% (fails) |
 | `recap_policy_rollcorr_10k` | arm A, rollouts + corrections, 0.98% |
 | `recap_policy_rollonly_10k` | arm B, rollouts only, 0.96% |
+| `recap_policy_synth_shift05_10k` | Test A, planted +0.5 shift, token effect 0.519 **PASS** |
 
 Raw scan JSON lives in the session state directory
 (`base_checkpoint_bias_scan.json`, `clean48_checkpoint_scan.json`,
@@ -489,6 +564,12 @@ Raw scan JSON lives in the session state directory
   (Mann-Whitney p = 0.121), but the fix is to re-evaluate the DAgger checkpoint
   at the planned positions for a paired comparison. **This blocks the writeup.**
 - AWR-style advantage weighting is the one mechanism §5.9 does not rule out.
+- The cause of the real-label token being inert is still unidentified. §5.10
+  rules out "the trainer cannot learn a token"; it does not tell us which of the
+  remaining hypotheses is right.
+- Masked all-positive SFT (`models/recap/train_masked_sft.py`) is implemented but
+  not yet run: 30% true token omission rather than a learned UNCONDITIONED
+  value.
 - Custom-vs-stock closed-loop smoothness difference remains unexplained.
 - The RECAP-vs-DAgger comparison holds data budget equal (18 episodes each) but
   RECAP receives fewer expert corrections (7 vs 18) and 11 autonomous episodes

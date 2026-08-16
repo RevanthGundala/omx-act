@@ -11,6 +11,11 @@ from models.act.attention import Attention as BaseAttention
 from models.recap import train_critic
 from models.recap.act_critic import ACTCritic
 from models.recap.act_recap import ACTPolicy as RecapACTPolicy, AdvantageCondition
+from models.recap.act_recap_masked import (
+    ACTPolicy as MaskedRecapACTPolicy,
+    MASKED_ADVANTAGE,
+    convert_legacy_state_dict,
+)
 from models.recap.attention import Attention as RecapAttention
 
 
@@ -18,7 +23,12 @@ NUM_BINS_FOR_TEST = 11
 from dataclasses import asdict, replace
 from lerobot.datasets import LeRobotDataset
 import numpy as np
-from models.recap import label_advantage, train_critic, train_policy
+from models.recap import (
+    label_advantage,
+    train_critic,
+    train_masked_sft,
+    train_policy,
+)
 from models.recap.build_dataset import build_features, recap_rewards
 
 def _config() -> ACTConfig:
@@ -1448,3 +1458,238 @@ def test_out_of_range_frame_ids_are_still_caught():
     dataset = _FrameIdACTDataset(range(60))
     with pytest.raises(ValueError, match="relabel"):
         AdvantageDataset(dataset, torch.zeros(48, dtype=torch.long), total_frames=48)
+
+
+def test_none_and_sentinel_both_omit_the_advantage_token():
+    torch.manual_seed(0)
+    model = MaskedRecapACTPolicy(_config(), pretrained_backbone=False).eval()
+    images = torch.randn(2, 1, 3, 64, 64)
+    qpos = torch.randn(2, 6)
+
+    with torch.no_grad():
+        by_none, _, _ = model(images, qpos, advantage=None)
+        by_sentinel, _, _ = model(
+            images, qpos, advantage=torch.full((2,), MASKED_ADVANTAGE)
+        )
+        visible, _, _ = model(
+            images, qpos, advantage=torch.full((2,), int(AdvantageCondition.POSITIVE))
+        )
+
+    assert torch.equal(by_none, by_sentinel)
+    # Omission has to actually change the output, or the mask proves nothing.
+    assert not torch.allclose(by_none, visible, atol=1e-6)
+
+
+def test_masked_slot_receives_no_attention():
+    torch.manual_seed(0)
+    model = MaskedRecapACTPolicy(_config(), pretrained_backbone=False).eval()
+
+    with torch.no_grad():
+        model(torch.randn(2, 1, 3, 64, 64), torch.randn(2, 6), advantage=None)
+
+    for block in model.decoder.transformer_encoder:
+        assert block.self_attn.last_attn_weights[:, :, :, 0].abs().max() == 0.0
+    for block in model.decoder.transformer_decoder:
+        assert block.cross_attn.last_attn_weights[:, :, :, 0].abs().max() == 0.0
+
+
+def test_clamped_placeholder_row_cannot_reach_the_output():
+    # Missing entries are clamped to row 0 only so the lookup is defined. If
+    # that row ever influenced the output, the clamp target would be a silent
+    # hyperparameter.
+    torch.manual_seed(0)
+    model = MaskedRecapACTPolicy(_config(), pretrained_backbone=False).eval()
+    images = torch.randn(3, 1, 3, 64, 64)
+    qpos = torch.randn(3, 6)
+
+    with torch.no_grad():
+        before, _, _ = model(images, qpos, advantage=None)
+        model.decoder.advantage_embedding.weight[0] += 100.0
+        after, _, _ = model(images, qpos, advantage=None)
+
+    assert torch.equal(before, after)
+
+
+def test_sentinel_masks_only_the_selected_batch_items():
+    torch.manual_seed(0)
+    model = MaskedRecapACTPolicy(_config(), pretrained_backbone=False).eval()
+    images = torch.randn(3, 1, 3, 64, 64)
+    qpos = torch.randn(3, 6)
+    positive = int(AdvantageCondition.POSITIVE)
+
+    with torch.no_grad():
+        all_visible, _, _ = model(images, qpos, advantage=torch.full((3,), positive))
+        all_masked, _, _ = model(images, qpos, advantage=None)
+        mixed, _, _ = model(
+            images,
+            qpos,
+            advantage=torch.tensor([positive, MASKED_ADVANTAGE, positive]),
+        )
+
+    assert torch.allclose(mixed[0], all_visible[0], atol=1e-6)
+    assert torch.allclose(mixed[2], all_visible[2], atol=1e-6)
+    assert torch.allclose(mixed[1], all_masked[1], atol=1e-6)
+
+
+def test_legacy_conversion_reproduces_legacy_outputs_exactly():
+    # The architectures store the token differently, so state-dict keys do NOT
+    # match. What has to hold is that a converted checkpoint behaves like the
+    # checkpoint it came from whenever the token is visible.
+    torch.manual_seed(0)
+    cfg = _config()
+    legacy = RecapACTPolicy(cfg, pretrained_backbone=False).eval()
+    masked = MaskedRecapACTPolicy(cfg, pretrained_backbone=False).eval()
+    masked.load_state_dict(convert_legacy_state_dict(legacy.state_dict()), strict=True)
+
+    images = torch.randn(2, 1, 3, 64, 64)
+    qpos = torch.randn(2, 6)
+    for condition in (AdvantageCondition.NEGATIVE, AdvantageCondition.POSITIVE):
+        ids = torch.full((2,), int(condition))
+        one_hot = torch.nn.functional.one_hot(
+            ids, num_classes=len(AdvantageCondition)
+        ).float()
+        with torch.no_grad():
+            from_legacy, _, _ = legacy(images, qpos, advantage=one_hot)
+            from_masked, _, _ = masked(images, qpos, advantage=ids)
+        assert torch.equal(from_legacy, from_masked)
+
+
+def test_legacy_conversion_matches_the_linear_column_formula():
+    # nn.Linear computes x @ W.T + b, so a one-hot for class c selects column c.
+    torch.manual_seed(0)
+    legacy = RecapACTPolicy(_config(), pretrained_backbone=False)
+    state = legacy.state_dict()
+    converted = convert_legacy_state_dict(state)
+
+    embedding = converted["decoder.advantage_embedding.weight"]
+    weight = state["decoder.adv_proj.weight"]
+    bias = state["decoder.adv_proj.bias"]
+    for class_id in (int(AdvantageCondition.NEGATIVE), int(AdvantageCondition.POSITIVE)):
+        assert torch.equal(embedding[class_id], weight[:, class_id] + bias)
+    # The legacy UNCONDITIONED column has no counterpart and must be dropped.
+    assert embedding.shape[0] == 2
+    assert "decoder.adv_proj.weight" not in converted
+
+
+def test_conversion_rejects_a_non_legacy_state_dict():
+    with pytest.raises(KeyError, match="legacy RECAP checkpoint"):
+        convert_legacy_state_dict({"decoder.act_proj.weight": torch.zeros(1)})
+
+
+def test_masked_architecture_has_no_unconditioned_class():
+    model = MaskedRecapACTPolicy(_config(), pretrained_backbone=False)
+
+    assert model.decoder.advantage_embedding.num_embeddings == 2
+    assert not hasattr(model.decoder, "adv_proj")
+    with pytest.raises(ValueError, match="MASKED_ADVANTAGE"):
+        model(
+            torch.randn(1, 1, 3, 64, 64),
+            torch.randn(1, 6),
+            advantage=torch.tensor([int(AdvantageCondition.UNCONDITIONED)]),
+        )
+
+
+@pytest.mark.parametrize(
+    "dropout,expected_masked",
+    [(0.0, 0), (1.0, 4)],
+)
+def test_masked_sft_dropout_uses_the_sentinel(dropout, expected_masked):
+    conditions = torch.full((4,), int(AdvantageCondition.POSITIVE))
+
+    out, dropped = train_masked_sft.apply_masked_conditioning_dropout(
+        conditions, dropout
+    )
+
+    assert int(dropped.sum()) == expected_masked
+    assert int((out == MASKED_ADVANTAGE).sum()) == expected_masked
+    # Survivors keep their original id rather than becoming a third value.
+    assert torch.equal(out[~dropped], conditions[~dropped])
+
+
+def test_masked_sft_dropout_is_seeded_and_near_requested_rate():
+    conditions = torch.full((4096,), int(AdvantageCondition.POSITIVE))
+
+    first, dropped = train_masked_sft.apply_masked_conditioning_dropout(
+        conditions, 0.3, torch.Generator().manual_seed(0)
+    )
+    second, _ = train_masked_sft.apply_masked_conditioning_dropout(
+        conditions, 0.3, torch.Generator().manual_seed(0)
+    )
+
+    assert torch.equal(first, second)
+    assert 0.27 <= dropped.float().mean().item() <= 0.33
+
+
+def test_masked_sft_train_step_handles_present_and_omitted_tokens():
+    model = MaskedRecapACTPolicy(_config(), pretrained_backbone=False).train()
+    conditions = torch.full((4,), int(AdvantageCondition.POSITIVE))
+    conditions[::2] = MASKED_ADVANTAGE
+    batch = {
+        "images": torch.randn(4, 1, 3, 64, 64),
+        "qpos": torch.randn(4, 6),
+        "actions": torch.randn(4, 4, 6),
+        "action_mask": torch.ones(4, 4, dtype=torch.bool),
+        "advantage_condition": conditions,
+    }
+
+    loss, action_loss, kl_loss = train_policy.compute_loss(
+        model,
+        batch,
+        torch.device("cpu"),
+        kl_weight=1.0,
+    )
+    loss.backward()
+
+    assert torch.isfinite(loss)
+    assert torch.isfinite(action_loss)
+    assert torch.isfinite(kl_loss)
+    assert model.decoder.advantage_embedding.weight.grad is not None
+
+
+def test_synthetic_conditions_are_deterministic_and_balanced():
+    ids = torch.arange(10_000)
+    first = train_policy.synthetic_conditions(ids, seed=1000)
+    second = train_policy.synthetic_conditions(ids, seed=1000)
+    other = train_policy.synthetic_conditions(ids, seed=1001)
+
+    assert torch.equal(first, second)
+    assert not torch.equal(first, other)
+    assert set(first.tolist()) == {0, 1}
+    rate = float(first.float().mean())
+    assert 0.45 < rate < 0.55
+
+
+def test_synthetic_shift_only_moves_positive_actions():
+    actions = torch.zeros(4, 3, 6)
+    conditions = torch.tensor([1, 0, 1, 0])
+    shifted = train_policy.shift_actions_for_synthetic_token(actions, conditions, 0.5)
+
+    assert torch.equal(shifted[1], torch.zeros(3, 6))
+    assert torch.equal(shifted[3], torch.zeros(3, 6))
+    assert torch.allclose(shifted[0], torch.full((3, 6), 0.5))
+    assert torch.allclose(shifted[2], torch.full((3, 6), 0.5))
+
+
+def test_advantage_dataset_synthetic_shift_plants_a_token_task():
+    dataset = train_policy.AdvantageDataset(
+        _StubACTDataset(4),
+        frame_ids=torch.tensor([10, 11, 12, 13]),
+        synthetic_shift=0.4,
+        synthetic_seed=0,
+    )
+    bits = train_policy.synthetic_conditions(torch.tensor([10, 11, 12, 13]), seed=0)
+    for index in range(4):
+        item = dataset[index]
+        assert int(item["advantage_condition"]) == int(bits[index])
+        expected = 0.4 if bits[index] == AdvantageCondition.POSITIVE else 0.0
+        assert torch.allclose(item["actions"], torch.full((2, 2), expected))
+
+
+def test_advantage_dataset_refuses_synthetic_shift_with_real_labels():
+    with pytest.raises(ValueError, match="replaces the advantage labels"):
+        train_policy.AdvantageDataset(
+            _StubACTDataset(2),
+            conditions=torch.zeros(2, dtype=torch.long),
+            frame_ids=torch.arange(2),
+            synthetic_shift=0.5,
+        )

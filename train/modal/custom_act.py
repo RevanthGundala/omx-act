@@ -294,6 +294,8 @@ def train_recap_policy_remote(
     dropout: str | None = None,
     dataset_repo_id: str | None = None,
     episodes: str | None = None,
+    synthetic_shift: str | None = None,
+    masked_sft: bool = False,
 ) -> str:
     """Train the advantage-conditioned RECAP policy.
 
@@ -324,6 +326,12 @@ def train_recap_policy_remote(
             f"Warm-start checkpoint is missing from Modal volume: {pretrained_path}"
         )
     labels_full_path = ""
+    if masked_sft and (labels_path or synthetic_shift):
+        raise ValueError(
+            "masked_sft is all-positive SFT; omit labels_path and synthetic_shift"
+        )
+    if synthetic_shift and labels_path:
+        raise ValueError("synthetic_shift replaces critic labels; omit labels_path")
     if labels_path:
         if not dataset_repo_id:
             raise ValueError(
@@ -357,6 +365,8 @@ def train_recap_policy_remote(
         environment["RECAP_POLICY_DROPOUT"] = str(dropout)
     if episodes:
         environment["RECAP_POLICY_EPISODES"] = str(episodes)
+    if synthetic_shift:
+        environment["RECAP_POLICY_SYNTHETIC_SHIFT"] = str(synthetic_shift)
     os.environ.update(environment)
 
     sys.path.insert(0, str(REMOTE_WORKSPACE))
@@ -375,6 +385,8 @@ def train_recap_policy_remote(
         flush=True,
     )
     stage = "improvement_loop" if labels_full_path else "sft_positive"
+    if masked_sft:
+        stage = "masked_sft_positive"
     print(
         f"recap_config stage={stage} pretrained={pretrained_path} steps={steps} "
         f"save_freq={save_freq} job_name={job_name} labels={labels_full_path or None}",
@@ -421,7 +433,10 @@ def train_recap_policy_remote(
     monitor_thread = threading.Thread(target=sample_gpu, name="gpu-telemetry", daemon=True)
     monitor_thread.start()
     try:
-        from models.recap.train_policy import main as train_main
+        if masked_sft:
+            from models.recap.train_masked_sft import main as train_main
+        else:
+            from models.recap.train_policy import main as train_main
 
         train_main()
     finally:
@@ -530,6 +545,7 @@ def recap_policy(
     job_name: str = "recap_policy",
     dropout: str | None = None,
     episodes: str | None = None,
+    synthetic_shift: str | None = None,
 ):
     """Launch advantage-conditioned RECAP policy training.
 
@@ -549,6 +565,7 @@ def recap_policy(
     print(f"labels={labels_path or '(none)'}")
     print(f"steps={steps} save_freq={save_freq} dropout={dropout or '(config default)'}")
     print(f"episodes={episodes or '(all)'}")
+    print(f"synthetic_shift={synthetic_shift or '(off)'}")
     print(f"MODAL_GPU={MODAL_GPU}")
     print(f"MODAL_HARD_TIMEOUT_SECONDS={MODAL_MAX_RUNTIME_SECONDS}")
 
@@ -561,6 +578,42 @@ def recap_policy(
         dropout=dropout,
         dataset_repo_id=dataset_repo_id,
         episodes=episodes,
+        synthetic_shift=synthetic_shift,
+    )
+    print(result)
+    print("Outputs volume: omx-custom-act-training-logs")
+    print(f"  modal volume get omx-custom-act-training-logs act_experiments/{job_name} .")
+
+
+@app.local_entrypoint()
+def recap_masked_sft(
+    pretrained_checkpoint: str,
+    dataset_repo_id: str,
+    steps: int = 2_000,
+    save_freq: int = 1_000,
+    job_name: str = "recap_masked_sft",
+    dropout: str = "0.3",
+    episodes: str | None = None,
+):
+    """Launch all-positive SFT with true per-example token omission."""
+    print("=== MASKED RECAP SFT LAUNCH ===")
+    print("stage=masked_sft_positive")
+    print(f"dataset={dataset_repo_id}")
+    print(f"warm_start={pretrained_checkpoint}")
+    print(f"steps={steps} save_freq={save_freq} mask_dropout={dropout}")
+    print(f"episodes={episodes or '(all)'}")
+    print(f"MODAL_GPU={MODAL_GPU}")
+    print(f"MODAL_HARD_TIMEOUT_SECONDS={MODAL_MAX_RUNTIME_SECONDS}")
+
+    result = train_recap_policy_remote.remote(
+        pretrained_checkpoint=pretrained_checkpoint,
+        steps=steps,
+        save_freq=save_freq,
+        job_name=job_name,
+        dropout=dropout,
+        dataset_repo_id=dataset_repo_id,
+        episodes=episodes,
+        masked_sft=True,
     )
     print(result)
     print("Outputs volume: omx-custom-act-training-logs")

@@ -34,6 +34,8 @@ include = ["configs*", "models*", "utils*"]
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    # models/recap/inspect_advantage_attention.py renders attention maps
+    "matplotlib",
 ]
 
 [tool.pytest.ini_options]

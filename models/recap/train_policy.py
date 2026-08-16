@@ -51,12 +51,39 @@ def load_conditions(labels_path: str | Path) -> torch.Tensor:
     return conditions
 
 
+def synthetic_conditions(frame_ids: torch.Tensor, seed: int = 0) -> torch.Tensor:
+    """Deterministic coin-flip tokens, one bit per absolute frame id.
+
+    Used by the capability test: the bit is independent of the critic, so a
+    policy that learns it cannot be riding our real advantage labels.
+    """
+    mixed = frame_ids.to(torch.int64) * 2654435761 + int(seed) * 1_000_003
+    return (mixed % 2).long()
+
+
+def shift_actions_for_synthetic_token(
+    actions: torch.Tensor, conditions: torch.Tensor, shift: float
+) -> torch.Tensor:
+    """Add ``shift`` (in z-units) to every joint when the token is POSITIVE."""
+    if shift <= 0:
+        raise ValueError(f"synthetic shift must be positive, got {shift}")
+    positive = conditions == int(AdvantageCondition.POSITIVE)
+    while positive.ndim < actions.ndim:
+        positive = positive.unsqueeze(-1)
+    return actions + shift * positive.to(dtype=actions.dtype)
+
+
 class AdvantageDataset(Dataset):
     """Attach a conditioning token to each ACT training sample.
 
     ``dataset`` is a models.act.helper.ACTDataset. ``conditions`` is indexed by
     global frame index; passing None pins every sample to POSITIVE for the SFT
     stage.
+
+    ``synthetic_shift`` replaces the labels with a coin flip and adds that
+    many z-units to the action target on POSITIVE frames. The token is then
+    the only way to reduce L1, which is the capability test for whether this
+    trainer can learn to use a token at all.
     """
 
     def __init__(
@@ -65,8 +92,18 @@ class AdvantageDataset(Dataset):
         conditions: torch.Tensor | None = None,
         frame_ids: torch.Tensor | None = None,
         total_frames: int | None = None,
+        synthetic_shift: float | None = None,
+        synthetic_seed: int = 0,
     ):
         self.dataset = dataset
+        self.synthetic_shift = synthetic_shift
+        self.synthetic_seed = synthetic_seed
+        if synthetic_shift is not None and synthetic_shift <= 0:
+            raise ValueError(f"synthetic shift must be positive, got {synthetic_shift}")
+        if synthetic_shift is not None and conditions is not None:
+            raise ValueError(
+                "synthetic_shift replaces the advantage labels; do not also pass conditions"
+            )
         self.conditions = conditions
         if frame_ids is None:
             # The 'index' column is the absolute frame index, so it stays correct
@@ -99,12 +136,20 @@ class AdvantageDataset(Dataset):
     def __len__(self):
         return len(self.dataset)
 
+    def _condition_for(self, idx: int) -> torch.Tensor:
+        if self.synthetic_shift is not None:
+            return synthetic_conditions(self.frame_ids[idx : idx + 1], self.synthetic_seed)[0]
+        if self.conditions is None:
+            return torch.tensor(int(AdvantageCondition.POSITIVE), dtype=torch.long)
+        return self.conditions[self.frame_ids[idx]]
+
     def __getitem__(self, idx):
         item = self.dataset[idx]
-        if self.conditions is None:
-            condition = torch.tensor(int(AdvantageCondition.POSITIVE), dtype=torch.long)
-        else:
-            condition = self.conditions[self.frame_ids[idx]]
+        condition = self._condition_for(idx)
+        if self.synthetic_shift is not None:
+            item["actions"] = shift_actions_for_synthetic_token(
+                item["actions"], condition, self.synthetic_shift
+            )
         item["advantage_condition"] = condition
         return item
 
@@ -272,8 +317,21 @@ def main():
 
     labels_path = os.environ.get("RECAP_POLICY_LABELS")
     conditions = load_conditions(labels_path) if labels_path else None
+    synthetic_raw = os.environ.get("RECAP_POLICY_SYNTHETIC_SHIFT")
+    if synthetic_raw and labels_path:
+        raise ValueError(
+            "RECAP_POLICY_SYNTHETIC_SHIFT replaces the critic labels; "
+            "unset RECAP_POLICY_LABELS"
+        )
+    synthetic_shift = float(synthetic_raw) if synthetic_raw else None
     # SFT pins the indicator to True, so dropout only applies once real labels do.
-    default_dropout = cfg.recap_conditioning_dropout if conditions is not None else 0.0
+    # The synthetic capability test also defaults to 0: dropout would hide the
+    # planted bit on 30% of updates and muddy the only question we are asking.
+    default_dropout = (
+        0.0
+        if synthetic_shift is not None or conditions is None
+        else cfg.recap_conditioning_dropout
+    )
     dropout = float(os.environ.get("RECAP_POLICY_DROPOUT", default_dropout))
 
     episodes = parse_episode_subset(os.environ.get("RECAP_POLICY_EPISODES"))
@@ -290,7 +348,11 @@ def main():
     ).total_frames
     train_loader = torch.utils.data.DataLoader(
         dataset=AdvantageDataset(
-            train_loader.dataset, conditions, total_frames=total_frames
+            train_loader.dataset,
+            conditions,
+            total_frames=total_frames,
+            synthetic_shift=synthetic_shift,
+            synthetic_seed=cfg.seed,
         ),
         batch_size=cfg.batch_size,
         shuffle=True,
@@ -313,7 +375,16 @@ def main():
     (run_dir / "config.json").write_text(json.dumps(asdict(cfg), indent=2) + "\n")
     save_freq = max(1, min(cfg.save_freq, cfg.num_train_steps // 2))
 
-    stage = "improvement loop" if conditions is not None else "SFT (indicator fixed to POSITIVE)"
+    if synthetic_shift is not None:
+        stage = f"synthetic capability test (shift={synthetic_shift:g} z-units)"
+    elif conditions is not None:
+        stage = "improvement loop"
+    else:
+        stage = "SFT (indicator fixed to POSITIVE)"
+    if synthetic_shift is not None:
+        (run_dir / "synthetic.json").write_text(
+            json.dumps({"shift": synthetic_shift, "seed": cfg.seed}) + "\n"
+        )
     print(f"Dataset: {cfg.dataset_repo_id}@{cfg.dataset_revision}")
     if episodes is not None:
         (run_dir / "episodes.json").write_text(json.dumps(episodes) + "\n")
