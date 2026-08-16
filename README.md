@@ -30,6 +30,9 @@ models/act/          the custom ACT policy
   helper.py          dataloaders and the seeded train/holdout episode split
   lerobot_policy.py  adapter exposing the custom model as a LeRobot policy
   eval*.py           evaluation entrypoints (see "Evaluation" below)
+  compare_policies.py  policy-vs-policy end-effector diagnostics
+  export_checkpoint.py exports a .pt to LeRobot pretrained_model format
+  summarize_trace.py   summarises JSONL traces written by eval.py
   camera_alignment.py, scene_check.py   pre-rollout scene validation
 
 models/recap/        RECAP (arXiv:2511.14759) on top of that policy
@@ -45,6 +48,9 @@ dataset_tools/       dataset surgery (source, despite the name of the
                      data/ directory it used to live in)
   episode_split.py   deterministic train/holdout split, shared with training
   lerobot_schema.py  merge-compatibility rules for combining datasets
+  shortcut_audit.py  does this dataset actually require object-conditioned actions?
+  clone_split.py     copy selected episodes into a new dataset
+  export_video.py    episode stills and MP4s, for figures
   dagger/            aggregate demos with corrections, and validate the result
   trimming/          drop the near-static settle frames at episode edges
 
@@ -52,7 +58,6 @@ configs/act/base.py  ACTConfig — the single source of hyperparameters
 train/               launchers for paid compute, plus their watchdogs
   modal/             Modal: custom ACT, RECAP critic, RECAP policy
   vastai/            vast.ai: launcher, resume, instance watchdog, image
-evaluation/          one-off analysis scripts (dataset audits, probes)
 tests/               pytest suite
 docs/                experiment logs and write-ups
 ```
@@ -142,7 +147,6 @@ Tests are grouped by the code they cover:
 | `tests/recap/` | critic, advantage labelling, conditioned policy |
 | `tests/dataset_tools/` | dataset surgery and DAgger aggregation |
 | `tests/train/` | Modal and vast.ai launchers |
-| `tests/evaluation/` | analysis scripts |
 
 Use the `repo_root` fixture rather than counting parent directories from
 `__file__`; test files are one level deeper than they look.
@@ -150,7 +154,7 @@ Use the `repo_root` fixture rather than counting parent directories from
 ## Gotchas
 
 - **This repo and `omx-training` share top-level package names** (`configs`,
-  `docs`, `evaluation`, `models`, `tests`, `utils`). Whichever is
+  `docs`, `models`, `tests`, `utils`). Whichever is
   first on `sys.path` wins, and it has silently resolved `utils.config` to the
   wrong repo's copy before. Pin the repo root first in entry scripts; never put
   act-sim on `PYTHONPATH` for an omx-training run.

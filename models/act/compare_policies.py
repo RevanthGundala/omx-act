@@ -5,7 +5,7 @@ gripper error, visual conditioning, and agreement between adjacent replans.
 All policies receive exactly the same recorded observations.
 
 Example:
-    uv run python evaluation/compare_act_policies.py \
+    uv run python models/act/compare_policies.py \
       --dataset RevanthGundala/014-place-sponge-in-bowl-diverse-50 \
       --policy "official=outputs/.../pretrained_model" \
       --policy "custom=outputs/.../pretrained_model" \

@@ -4,6 +4,14 @@ Record of the investigation into why the custom `models/act` ACT policy was
 training poorly, what we changed, and (importantly) what we did and did not
 actually measure.
 
+> Several one-off probes cited below have since been removed, along with the
+> `evaluation/` directory they lived in: `act_counterfactual_probe.py`,
+> `normalization_roundtrip_check.py`, `offline_lerobot_action_check.py`,
+> `make_delta_action_dataset.py`, and `live_camera_viewer.py`. Their findings
+> are recorded here; recover a script with
+> `git log --diff-filter=D -- evaluation/<name>.py`. The tools that outlived the
+> investigation moved to `models/act/` and `dataset_tools/`.
+
 ## Current diagnosis — read this first (updated 2026-07-21)
 
 ### Latest result: corrected custom architecture works live
@@ -120,7 +128,7 @@ missing decoder normalization are different.
 ### Repeat the decisive offline comparison
 
 ```bash
-uv run python evaluation/compare_act_policies.py \
+uv run python models/act/compare_policies.py \
   --dataset RevanthGundala/014-place-sponge-in-bowl-diverse-50 \
   --policy "official-20k=<official pretrained_model dir>" \
   --policy "custom-all50-20k=<custom exported pretrained_model dir>" \

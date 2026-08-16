@@ -1,9 +1,9 @@
 """Export LeRobot dataset episodes to local video and image files.
 
 Examples:
-    uv run python evaluation/visualize_dataset.py --episodes 50:70 --export-mp4
-    uv run python evaluation/visualize_dataset.py --episodes all --export-raw-mp4
-    uv run python evaluation/visualize_dataset.py --episode 0 --export-stills
+    uv run python dataset_tools/export_video.py --episodes 50:70 --export-mp4
+    uv run python dataset_tools/export_video.py --episodes all --export-raw-mp4
+    uv run python dataset_tools/export_video.py --episode 0 --export-stills
 """
 
 import argparse
