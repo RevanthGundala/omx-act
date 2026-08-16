@@ -298,6 +298,7 @@ def train_recap_policy_remote(
     masked_sft: bool = False,
     chunk_size: int | None = None,
     train_split: float | None = None,
+    log_freq: int | None = None,
 ) -> str:
     """Train the advantage-conditioned RECAP policy.
 
@@ -372,6 +373,8 @@ def train_recap_policy_remote(
         environment["RECAP_POLICY_EPISODES"] = str(episodes)
     if chunk_size is not None:
         environment["RECAP_POLICY_CHUNK_SIZE"] = str(chunk_size)
+    if log_freq is not None:
+        environment["RECAP_POLICY_LOG_FREQ"] = str(log_freq)
     if train_split is not None:
         environment["RECAP_POLICY_TRAIN_SPLIT"] = str(train_split)
     if synthetic_shift:
@@ -605,6 +608,7 @@ def recap_masked_sft(
     episodes: str | None = None,
     chunk_size: int = 30,
     train_split: float = 1.0,
+    log_freq: int = 100,
 ):
     """Launch all-positive SFT with true per-example token omission.
 
@@ -635,6 +639,7 @@ def recap_masked_sft(
         masked_sft=True,
         chunk_size=chunk_size,
         train_split=train_split,
+        log_freq=log_freq,
     )
     print(result)
     print("Outputs volume: omx-custom-act-training-logs")

@@ -295,6 +295,7 @@ def config_from_env() -> ACTConfig:
         output_root=os.environ.get("RECAP_POLICY_OUTPUT_ROOT", ACTConfig.output_root),
         num_train_steps=int(os.environ.get("RECAP_POLICY_STEPS", base_cfg.num_train_steps)),
         save_freq=int(os.environ.get("RECAP_POLICY_SAVE_FREQ", base_cfg.save_freq)),
+        log_freq=int(os.environ.get("RECAP_POLICY_LOG_FREQ", base_cfg.log_freq)),
     )
 
 

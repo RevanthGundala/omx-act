@@ -42,6 +42,48 @@ from models.recap.train_policy import (
 )
 
 
+def advantage_attention(model, dropped: torch.Tensor) -> dict[str, float]:
+    """Softmax weight placed on the advantage token during the last forward.
+
+    Reads the weights the attention modules already cached, so this measures
+    the training step that just ran rather than costing an extra forward. The
+    cache is populated before attention dropout, so these are true softmax
+    probabilities.
+
+    Reported separately for examples whose token was kept and examples whose
+    token was dropped, which is what distinguishes "the model attends to the
+    token" from "the mask actually removes it".
+    """
+    decoder = model.decoder
+    batch_size = dropped.shape[0]
+
+    def slot_zero(blocks, attribute):
+        weights = [
+            getattr(block, attribute).last_attn_weights
+            for block in blocks
+            if getattr(block, attribute) is not None
+            and getattr(block, attribute).last_attn_weights is not None
+        ]
+        if not weights:
+            return None
+        return torch.cat([w[..., 0].reshape(batch_size, -1) for w in weights], dim=1)
+
+    metrics: dict[str, float] = {}
+    for name, weights in (
+        ("encoder", slot_zero(decoder.transformer_encoder, "self_attn")),
+        ("decoder", slot_zero(decoder.transformer_decoder, "cross_attn")),
+    ):
+        if weights is None:
+            continue
+        kept = ~dropped
+        if kept.any():
+            metrics[f"{name}_attention_visible"] = float(weights[kept].mean())
+            metrics[f"{name}_attention_visible_max"] = float(weights[kept].max())
+        if dropped.any():
+            metrics[f"{name}_attention_omitted_max"] = float(weights[dropped].max())
+    return metrics
+
+
 def apply_masked_conditioning_dropout(
     conditions: torch.Tensor,
     dropout: float,
@@ -247,6 +289,7 @@ def main() -> None:
                 "grad_norm": float(grad_norm),
                 "masked_fraction": float(dropped.float().mean()),
                 "step_seconds": time.perf_counter() - step_start,
+                **advantage_attention(model, dropped.to(device)),
             }
             if step % cfg.log_freq == 0:
                 with (run_dir / "metrics.jsonl").open("a") as file:
@@ -254,7 +297,9 @@ def main() -> None:
                 print(
                     f"step={step} loss={loss.item():.4f} "
                     f"action={action_loss.item():.4f} "
-                    f"masked={metrics['masked_fraction']:.1%}",
+                    f"masked={metrics['masked_fraction']:.1%} "
+                    f"attn_vis={metrics.get('decoder_attention_visible', float('nan')):.2e} "
+                    f"attn_omit={metrics.get('decoder_attention_omitted_max', 0.0):.2e}",
                     flush=True,
                 )
             if (step + 1) % save_freq == 0 or (
