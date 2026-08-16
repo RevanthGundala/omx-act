@@ -1,70 +1,273 @@
-"""RECAP ACT whose advantage token can be genuinely absent.
+"""ACT with an advantage token that can be genuinely absent.
 
-The legacy architecture in ``act_recap.py`` feeds a one-hot vector through
-``nn.Linear(3, d_model)``, so it always contributes a token: "no advantage" is
-spelled as a third learned class (``UNCONDITIONED``) that the encoder still
-attends to. That file is left untouched.
+A standalone model, deliberately not a subclass of ``act_recap.py``. That file
+is the RECAP baseline this one is compared against, and the two are meant to be
+readable and changeable independently -- the same reason ``attention.py`` is a
+copy rather than an import.
 
-This variant implements the same intent the way PI's conditioning dropout
-describes it -- the token is *absent* rather than set to a third value:
+The difference is how "no advantage" is represented:
 
-* an embedding over the real conditions only, so there is no learned
-  "unconditioned" vector to attend to;
-* ``MASKED_ADVANTAGE`` marks a single sample whose token is missing, and
-  ``advantage=None`` or ``UNCONDITIONED`` marks the whole batch;
-* the advantage slot is masked out of encoder self-attention and decoder
-  cross-attention, so a missing token cannot reach the output.
+* ``act_recap.py`` projects a one-hot through ``nn.Linear(3, d_model)``, so
+  "unconditioned" is a third *learned* class that the encoder still attends to.
+* here the token is an ``nn.Embedding`` over NEGATIVE and POSITIVE only, and a
+  missing token is genuinely missing: its memory slot is masked out of encoder
+  self-attention and decoder cross-attention.
 
-The parameter layout therefore differs from the legacy model on purpose. A
-legacy checkpoint does not load directly; ``convert_legacy_state_dict`` ports
-one and reproduces its outputs exactly wherever the token is visible.
+Pass ``MASKED_ADVANTAGE`` for a single sample or ``advantage=None`` for a whole
+batch. The parameter layout therefore differs from the baseline on purpose;
+``convert_legacy_state_dict`` ports a baseline checkpoint and reproduces its
+outputs exactly wherever the token is visible.
 """
 
-from __future__ import annotations
+from enum import IntEnum
+from itertools import chain
 
 import torch
 import torch.nn as nn
-from itertools import chain
-
-import torch.nn.init as init
 from einops import rearrange, repeat
+from torchvision.models.resnet import ResNet18_Weights, resnet18
+from torchvision.ops import FrozenBatchNorm2d
 
-from .act_recap import ACTPolicy as LegacyACTPolicy, AdvantageCondition, Decoder
+from configs.act.base import ACTConfig
+from .attention import TransformerBlock
+from ..act.pos_emb import ACTSinusoidalPositionEmbedding2d, create_sinusoidal_pos_embedding
 
-# Condition id meaning "this sample has no advantage token". Deliberately
-# outside the embedding's index range so it cannot name a learned vector.
+
+class AdvantageCondition(IntEnum):
+    """The conditions that have a learned vector.
+
+    There is no UNCONDITIONED member: this model omits the token instead of
+    embedding a third value for "no advantage".
+    """
+
+    NEGATIVE = 0
+    POSITIVE = 1
+
+
+# Condition id meaning "this sample has no advantage token". Outside the
+# embedding's index range so it can never name a learned vector.
 MASKED_ADVANTAGE = -1
 
-# The conditions that get a learned vector. UNCONDITIONED is excluded because
-# this architecture omits the token rather than embedding a third value for it.
-EMBEDDED_CONDITIONS = tuple(
-    condition
-    for condition in AdvantageCondition
-    if condition is not AdvantageCondition.UNCONDITIONED
-)
 
-# Embedding rows are indexed by the condition's own value, and
-# convert_legacy_state_dict maps legacy column c onto row c, so those values
-# have to be 0..n-1. Reordering or extending the enum must fail here rather
-# than silently mapping one condition onto another's row.
-if tuple(int(condition) for condition in EMBEDDED_CONDITIONS) != tuple(
-    range(len(EMBEDDED_CONDITIONS))
-):
-    raise RuntimeError(
-        "AdvantageCondition values must start at 0 and be contiguous with "
-        f"UNCONDITIONED last; got {[(c.name, int(c)) for c in AdvantageCondition]}"
-    )
+class ACTPolicy(nn.Module):
+    """ACT whose advantage token can be omitted per example."""
+
+    def __init__(self, config: ACTConfig, pretrained_backbone: bool = False):
+        super().__init__()
+        self.d_z = config.d_z
+        self.cvae_encoder = CVAE_Encoder(
+            joint_dim=config.joint_dim,
+            d_model=config.d_model,
+            d_z=config.d_z,
+            num_encoder_layers=config.num_vae_encoder_layers,
+            chunk_size=config.chunk_size,
+            num_heads=config.num_heads,
+            mlp_dim=config.mlp_dim,
+            dropout=config.dropout,
+        )
+        self.decoder = Decoder(
+            d_model=config.d_model,
+            joint_dim=config.joint_dim,
+            num_encoder_layers=config.num_encoder_layers,
+            num_decoder_layers=config.num_decoder_layers,
+            d_z=config.d_z,
+            chunk_size=config.chunk_size,
+            num_cameras=len(config.camera_names),
+            num_heads=config.num_heads,
+            mlp_dim=config.mlp_dim,
+            dropout=config.dropout,
+            pretrained_backbone=pretrained_backbone,
+        )
+        for parameter in chain(
+            self.decoder.transformer_encoder.parameters(),
+            self.decoder.transformer_decoder.parameters(),
+        ):
+            if parameter.dim() > 1:
+                nn.init.xavier_uniform_(parameter)
+        temporal_weights = torch.exp(
+            -config.exp_weight * torch.arange(0, config.chunk_size, dtype=torch.float32)
+        )
+        self.register_buffer("temporal_weights", temporal_weights, persistent=False)
+        self.register_buffer(
+            "temporal_weights_cumsum", torch.cumsum(temporal_weights, dim=0), persistent=False
+        )
+        self.action_buffer = None
+        self.actions_number = None
+
+    def forward(
+        self,
+        images,
+        qpos,
+        future_actions=None,
+        action_mask=None,
+        advantage=None,
+    ):
+        if future_actions is None or not self.training:
+            z = torch.zeros(qpos.shape[0], self.d_z, dtype=qpos.dtype, device=qpos.device)
+            mu, log_var = None, None
+        else:
+            z, mu, log_var = self.cvae_encoder(qpos, future_actions, action_mask)
+        act_pred = self.decoder(images, qpos, z, advantage)
+        return act_pred, mu, log_var
+
+    @torch.no_grad()
+    def select_action(self, images, qpos, use_temporal_ensemble=True, *, advantage=None):
+        act_pred, _, _ = self.forward(images, qpos, advantage=advantage)  # [B, K, A]
+
+        if use_temporal_ensemble is False:
+            return act_pred[:, 0]
+
+        chunk_size = act_pred.shape[1]
+        device = act_pred.device
+
+        if self.action_buffer is None:
+            self.action_buffer = act_pred.clone()
+            self.actions_number = torch.ones((chunk_size,), device=device, dtype=torch.long)
+        else:
+            old_len = self.action_buffer.shape[1]
+            old_count = self.actions_number[:old_len]
+
+            old_weight_sum = (
+                self.temporal_weights_cumsum[old_count - 1]
+                .to(device=device, dtype=act_pred.dtype)
+                .view(1, old_len, 1)
+            )
+            new_weight = (
+                self.temporal_weights[old_count]
+                .to(device=device, dtype=act_pred.dtype)
+                .view(1, old_len, 1)
+            )
+            overlap = (
+                self.action_buffer * old_weight_sum + act_pred[:, :old_len] * new_weight
+            ) / (old_weight_sum + new_weight)
+
+            self.action_buffer = torch.cat(
+                [overlap, act_pred[:, old_len : old_len + 1]],
+                dim=1,
+            )
+            self.actions_number = torch.cat(
+                [old_count + 1, torch.ones((1,), device=device, dtype=torch.long)],
+                dim=0,
+            )
+
+        action = self.action_buffer[:, 0]
+        self.action_buffer = self.action_buffer[:, 1:]
+        self.actions_number = self.actions_number[1:]
+        return action
+
+    def reset_action_selection(self):
+        self.action_buffer = None
+        self.actions_number = None
 
 
-class MaskedDecoder(Decoder):
-    """The legacy decoder with a maskable advantage embedding."""
+class CVAE_Encoder(nn.Module):
+    def __init__(
+        self,
+        joint_dim,
+        d_model,
+        d_z,
+        num_encoder_layers,
+        chunk_size,
+        num_heads=8,
+        mlp_dim=2048,
+        dropout=0.1,
+    ):
+        super().__init__()
+        # 2 separate projections for future actions and current joint pos
+        self.joint_proj = nn.Linear(joint_dim, d_model)
+        self.act_proj = nn.Linear(joint_dim, d_model)
+        self.cls_token = nn.Parameter(torch.randn((1, 1, d_model)))
+        self.out_proj = nn.Linear(d_model, d_z * 2)
+        self.transformer_encoder = nn.ModuleList([
+            TransformerBlock(
+                dim=d_model,
+                num_heads=num_heads,
+                mlp_dim=mlp_dim,
+                dropout=dropout,
+                use_cross_attention=False,
+            ) for _ in range(num_encoder_layers)
+        ])
+        self.chunk_size = chunk_size
+        self.register_buffer(
+            "encoder_pos_table",
+            create_sinusoidal_pos_embedding(1 + 1 + chunk_size, d_model),
+            persistent=False,
+        )
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        del self.adv_proj
-        self.advantage_embedding = nn.Embedding(len(EMBEDDED_CONDITIONS), self.d_model)
+    def forward(self, qpos, future_actions, action_mask=None):
+        bs = future_actions.shape[0]
+        qpos_token = self.joint_proj(qpos).unsqueeze(1)
+        cls_token = self.cls_token.expand(bs, -1, -1)
+        act_tokens = self.act_proj(future_actions)
+        pos = self.encoder_pos_table.unsqueeze(0)
+        x = torch.cat([cls_token, qpos_token, act_tokens], dim=1)
+        key_padding_mask = None
+        if action_mask is not None:
+            cls_joint_is_pad = torch.ones((bs, 2), dtype=torch.bool, device=action_mask.device)
+            key_padding_mask = torch.cat([cls_joint_is_pad, action_mask.bool()], dim=1)
+            key_padding_mask = key_padding_mask[:, None, None, :]
+        for block in self.transformer_encoder:
+            x = block(x, key_padding_mask=key_padding_mask, pos=pos)
+        # reparameterize
+        cls = x[:, 0]
+        mu, log_var = self.out_proj(cls).chunk(2, dim=-1)
+        std = torch.exp(0.5 * log_var)
+        z = mu + std * torch.randn_like(mu)
+        return z, mu, log_var
 
-    def forward(self, images, joints, z, advantage=MASKED_ADVANTAGE):
+
+class Decoder(nn.Module):
+    def __init__(
+        self,
+        d_model,
+        joint_dim,
+        num_encoder_layers,
+        num_decoder_layers,
+        d_z,
+        chunk_size,
+        num_cameras=1,
+        num_heads=8,
+        mlp_dim=2048,
+        dropout=0.1,
+        pretrained_backbone=False,
+    ):
+        super().__init__()
+        self.d_model = d_model
+        self.num_cameras = num_cameras
+        weights = ResNet18_Weights.DEFAULT if pretrained_backbone else None
+        backbone = resnet18(weights=weights, norm_layer=FrozenBatchNorm2d)
+        self.backbone = nn.Sequential(*list(backbone.children())[:-2])
+        self.image_proj = nn.Linear(512, d_model)
+        self.image_pos_emb = ACTSinusoidalPositionEmbedding2d(d_model // 2)
+        self.z_proj = nn.Linear(d_z, d_model)
+        self.joint_proj = nn.Linear(joint_dim, d_model)
+        self.transformer_encoder = nn.ModuleList([
+            TransformerBlock(
+                dim=d_model,
+                num_heads=num_heads,
+                mlp_dim=mlp_dim,
+                dropout=dropout,
+                use_cross_attention=False,
+            ) for _ in range(num_encoder_layers)
+        ])
+        self.transformer_decoder = nn.ModuleList([
+            TransformerBlock(
+                dim=d_model,
+                num_heads=num_heads,
+                mlp_dim=mlp_dim,
+                dropout=dropout,
+                use_cross_attention=True,
+            ) for _ in range(num_decoder_layers)
+        ])
+        self.joint_z_pos_emb = nn.Embedding(2, d_model)
+        self.q_emb = nn.Parameter(torch.randn(1, chunk_size, d_model))
+        self.act_proj = nn.Linear(d_model, joint_dim)
+        self.final_norm = nn.LayerNorm(d_model)
+
+        self.advantage_embedding = nn.Embedding(len(AdvantageCondition), d_model)
+        self.adv_pos_emb = nn.Embedding(1, d_model)
+
+    def forward(self, images, joints, z, advantage=None):
         images = self._prepare_images(images)
         bs, num_cameras = images.shape[:2]
         if num_cameras != self.num_cameras:
@@ -76,12 +279,7 @@ class MaskedDecoder(Decoder):
             "1 d h w -> 1 (m h w) d",
             m=num_cameras,
         ).to(dtype=image_features.dtype)
-        image_tokens = rearrange(
-            image_features,
-            "(b m) c h w -> (b m) (h w) c",
-            b=bs,
-            m=num_cameras,
-        )
+        image_tokens = rearrange(image_features, "(b m) c h w -> (b m) (h w) c", b=bs, m=num_cameras)
         image_tokens = self.image_proj(image_tokens)
         image_tokens = rearrange(image_tokens, "(b m) n d -> b (m n) d", b=bs, m=num_cameras)
 
@@ -91,27 +289,19 @@ class MaskedDecoder(Decoder):
         joint_z_pos = self.joint_z_pos_emb.weight.unsqueeze(0)
         pos = torch.cat([joint_z_pos, image_pos], dim=1)
 
-        indices, present = self._prepare_advantage(
-            advantage,
-            batch_size=bs,
-            device=joints.device,
-        )
+        indices, present = self._prepare_advantage(advantage, batch_size=bs, device=joints.device)
         adv_token = self.advantage_embedding(indices).unsqueeze(1).to(dtype=memory.dtype)
         memory = torch.cat([adv_token, memory], dim=1)
         adv_pos = self.adv_pos_emb.weight.unsqueeze(0).to(dtype=pos.dtype)
         pos = torch.cat([adv_pos, pos], dim=1)
 
-        # Slot 0 is the advantage token. Masking it is what makes a missing
-        # token genuinely absent rather than a third learned value.
-        memory_key_mask = torch.ones(
-            (bs, 1, 1, memory.shape[1]),
-            dtype=torch.bool,
-            device=memory.device,
-        )
-        memory_key_mask[:, :, :, 0] = present.view(bs, 1, 1)
+        # The advantage token is memory slot 0. Masking it is what makes an
+        # omitted token genuinely absent rather than a third learned value.
+        key_mask = torch.ones((bs, 1, 1, memory.shape[1]), dtype=torch.bool, device=memory.device)
+        key_mask[:, :, :, 0] = present.view(bs, 1, 1)
 
         for block in self.transformer_encoder:
-            memory = self._run_block(block, memory, self_key_mask=memory_key_mask, pos=pos)
+            memory = self._run_block(block, memory, self_key_mask=key_mask, pos=pos)
 
         q_tok = self.q_emb.expand(bs, -1, -1)
         out = torch.zeros_like(q_tok)
@@ -120,20 +310,22 @@ class MaskedDecoder(Decoder):
                 block,
                 out,
                 encoder_out=memory,
-                encoder_key_mask=memory_key_mask,
+                encoder_key_mask=key_mask,
                 pos=pos,
                 query_pos=q_tok,
             )
-        return self.act_proj(self.final_norm(out))
+        out = self.final_norm(out)
+        act_pred = self.act_proj(out)
+        return act_pred
 
     @staticmethod
     def _prepare_advantage(advantage, *, batch_size, device):
         """Return (embedding indices, per-sample present mask).
 
-        ``None`` and ``UNCONDITIONED`` mean the whole batch is missing;
-        ``MASKED_ADVANTAGE`` means a single sample is. Indices for missing
-        samples are clamped to a valid row only so the lookup is defined -- the
-        mask is what removes them.
+        ``None`` omits the token for the whole batch; ``MASKED_ADVANTAGE`` omits
+        it for one sample. Omitted entries are clamped to a valid row only so
+        the embedding lookup is defined -- the mask is what removes them, so the
+        clamp target is arbitrary and cannot reach the output.
         """
         if advantage is None:
             advantage = MASKED_ADVANTAGE
@@ -141,9 +333,8 @@ class MaskedDecoder(Decoder):
         advantage = torch.as_tensor(advantage, device=device)
         if advantage.ndim == 0:
             advantage = advantage.expand(batch_size)
-        if advantage.is_floating_point():
-            if not torch.equal(advantage, advantage.round()):
-                raise ValueError("advantage class IDs must be integers")
+        if advantage.is_floating_point() and not torch.equal(advantage, advantage.round()):
+            raise ValueError("advantage class IDs must be integers")
         advantage = advantage.long()
         if advantage.shape != (batch_size,):
             raise ValueError(
@@ -151,20 +342,13 @@ class MaskedDecoder(Decoder):
                 f"{tuple(advantage.shape)} for batch size {batch_size}"
             )
 
-        # UNCONDITIONED has no learned vector here; it means the same thing the
-        # sentinel does, so the legacy call signature keeps working.
-        advantage = torch.where(
-            advantage == int(AdvantageCondition.UNCONDITIONED),
-            torch.full_like(advantage, MASKED_ADVANTAGE),
-            advantage,
-        )
         present = advantage != MASKED_ADVANTAGE
-        invalid = present & ((advantage < 0) | (advantage >= len(EMBEDDED_CONDITIONS)))
+        invalid = present & ((advantage < 0) | (advantage >= len(AdvantageCondition)))
         if invalid.any():
             raise ValueError(
-                "advantage class IDs must name an embedded condition "
-                f"{[c.name for c in EMBEDDED_CONDITIONS]}, MASKED_ADVANTAGE "
-                f"({MASKED_ADVANTAGE}), or UNCONDITIONED; got "
+                "advantage class IDs must be "
+                f"{[f'{c.name}={int(c)}' for c in AdvantageCondition]} or "
+                f"MASKED_ADVANTAGE={MASKED_ADVANTAGE}; got "
                 f"{sorted(set(advantage[invalid].tolist()))}"
             )
         return advantage.clamp_min(0), present
@@ -182,8 +366,8 @@ class MaskedDecoder(Decoder):
     ):
         """One TransformerBlock with separate self- and cross-attention masks.
 
-        The stock block applies a single mask to both, which cannot express
-        "mask the advantage key in cross-attention but not the queries".
+        ``TransformerBlock.forward`` applies one mask to both, which cannot say
+        "mask the advantage key when the decoder reads memory".
         """
         self_pos = query_pos if block.cross_attn is not None else pos
         skip = x
@@ -203,48 +387,38 @@ class MaskedDecoder(Decoder):
 
         return block.mlp_norm(x + block.mlp(x))
 
-
-class ACTPolicy(LegacyACTPolicy):
-    """Legacy RECAP ACT wired to the maskable decoder."""
-
-    def __init__(self, config, pretrained_backbone: bool = False):
-        # The base class builds a legacy Decoder that is replaced below, so it
-        # is built without the pretrained backbone: loading those weights twice
-        # would be pure waste.
-        super().__init__(config, pretrained_backbone=False)
-        self.decoder = MaskedDecoder(
-            d_model=config.d_model,
-            joint_dim=config.joint_dim,
-            num_encoder_layers=config.num_encoder_layers,
-            num_decoder_layers=config.num_decoder_layers,
-            d_z=config.d_z,
-            chunk_size=config.chunk_size,
-            num_cameras=len(config.camera_names),
-            num_heads=config.num_heads,
-            mlp_dim=config.mlp_dim,
-            dropout=config.dropout,
-            pretrained_backbone=pretrained_backbone,
-        )
-        # The base class already ran this over the decoder it built, and that
-        # decoder is gone.
-        for parameter in chain(
-            self.decoder.transformer_encoder.parameters(),
-            self.decoder.transformer_decoder.parameters(),
-        ):
-            if parameter.dim() > 1:
-                init.xavier_uniform_(parameter)
+    def _prepare_images(self, images):
+        if images.dim() == 4:
+            if images.shape[1] in (1, 3):
+                images = images.unsqueeze(1)
+            elif images.shape[-1] in (1, 3):
+                images = rearrange(images, "b h w c -> b 1 c h w")
+            else:
+                raise ValueError(
+                    f"Expected image shape (B,C,H,W) or (B,H,W,C), got {tuple(images.shape)}"
+                )
+        elif images.dim() == 5:
+            if images.shape[2] not in (1, 3) and images.shape[-1] in (1, 3):
+                images = rearrange(images, "b m h w c -> b m c h w")
+        else:
+            raise ValueError(f"Expected images with 4 or 5 dimensions, got {tuple(images.shape)}")
+        # run real normalization in preprocessor
+        if not images.is_floating_point():
+            images = images.float() / 255.0
+        return images
 
 
 def convert_legacy_state_dict(state_dict: dict) -> dict:
-    """Port a legacy RECAP checkpoint onto this architecture.
+    """Port an ``act_recap.py`` checkpoint onto this model.
 
-    The legacy advantage token is ``nn.Linear(3, d_model)`` applied to a one-hot
-    row, and ``nn.Linear`` computes ``x @ W.T + b``. A one-hot for class ``c``
-    therefore selects column ``c``: the token is ``W[:, c] + b``. Each embedding
-    row is set to exactly that, so visible tokens reproduce the legacy outputs.
+    The baseline advantage token is ``nn.Linear(3, d_model)`` applied to a
+    one-hot row, and ``nn.Linear`` computes ``x @ W.T + b``. A one-hot for class
+    ``c`` therefore selects column ``c``: the token is ``W[:, c] + b``. Each
+    embedding row is set to exactly that, so a converted checkpoint reproduces
+    the baseline's outputs wherever the token is visible.
 
-    The legacy UNCONDITIONED column is dropped -- this architecture omits the
-    token rather than embedding a third class. ``adv_pos_emb`` is untouched.
+    The baseline's UNCONDITIONED column is dropped -- this model omits the token
+    instead of embedding a third class. ``adv_pos_emb`` is untouched.
     """
     converted = dict(state_dict)
     weight = converted.pop("decoder.adv_proj.weight", None)
@@ -252,13 +426,14 @@ def convert_legacy_state_dict(state_dict: dict) -> dict:
     if weight is None or bias is None:
         raise KeyError(
             "state dict has no decoder.adv_proj.{weight,bias}; it does not look "
-            "like a legacy RECAP checkpoint"
+            "like an act_recap.py checkpoint"
         )
-    embedded = len(EMBEDDED_CONDITIONS)
+    embedded = len(AdvantageCondition)
     if weight.shape[1] < embedded:
         raise ValueError(
-            f"legacy adv_proj has {weight.shape[1]} input classes, need at least {embedded}"
+            f"checkpoint adv_proj has {weight.shape[1]} input classes, need at least {embedded}"
         )
-    columns = weight[:, :embedded].transpose(0, 1)
-    converted["decoder.advantage_embedding.weight"] = columns + bias.unsqueeze(0)
+    converted["decoder.advantage_embedding.weight"] = (
+        weight[:, :embedded].transpose(0, 1) + bias.unsqueeze(0)
+    )
     return converted
