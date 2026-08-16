@@ -476,6 +476,51 @@ five decimals — both were reading the start of episode 48. At 150 batches the
 baseline moved 1.52% → 0.93%. **The earlier 0.75% figure should not be quoted;
 use 0.93%.**
 
+### 5.13 Training from scratch: the model learns to ignore the token
+
+Every earlier RECAP run warm-started from a policy that had already converged
+without a token, which left one objection open: perhaps the token was inert
+because it arrived too late to matter, not because it was unusable.
+
+`recap_masked_scratch_2k` closes that. Random init, no warm start, token present
+from step 0, 2,000 steps on `031-recap-gen1`, 30% omission, chunk 30 and
+train_split 1.0 to match the baseline recipe. A10G, 7m33s, ~$0.14. The trainer
+logs attention on the advantage slot from the weights the forward pass already
+cached, so these are the training steps themselves rather than a later probe.
+
+The architecture question first: the masked model differs from the base custom
+ACT by exactly two tensors, `decoder.advantage_embedding.weight` (2x512) and
+`decoder.adv_pos_emb.weight` (1x512) — 1,536 of 52,350,854 parameters, or
+0.0029%. Every one of the base's 239 tensors has an identically-shaped
+counterpart. Warm start is therefore a scientific choice, not a compatibility
+one.
+
+**Both mechanisms work.** Omission was 32.5% over 640 sampled examples
+(z = +1.38 against the 30% target). Attention on an omitted slot was
+**exactly 0.000e+00** at all 79 logged steps, in encoder self-attention and
+decoder cross-attention alike — absence, not a small number.
+
+**And the model still trained itself out of using the token.** Memory is 603
+slots, so uniform attention is 1/603 = 1.658e-03:
+
+| steps | decoder attention on the slot | versus uniform |
+|---|---:|---:|
+| 0-500 | 3.687e-03 | **2.22x** |
+| 500-1000 | 2.045e-03 | 1.23x |
+| 1000-1500 | 1.883e-03 | 1.14x |
+| 1500-2000 | 1.492e-03 | **0.90x** |
+
+It starts *above* uniform and decays to *below* it, a 59.5% fall, while action
+loss drops 0.863 to 0.142. The token was available, was initially attended, and
+was then actively abandoned.
+
+That is the predicted outcome rather than a surprise: when every visible token
+is POSITIVE and all examples share the same expert target, ignoring the token is
+loss-minimising. The value is in ruling out the alternative explanation. The
+token is not inert because it was introduced late — it is inert because
+all-positive SFT gives it nothing to encode. Any conditioning signal has to come
+from labels that vary with behaviour.
+
 ---
 
 ## 6. Transferable lessons
@@ -565,11 +610,12 @@ Raw scan JSON lives in the session state directory
   at the planned positions for a paired comparison. **This blocks the writeup.**
 - AWR-style advantage weighting is the one mechanism §5.9 does not rule out.
 - The cause of the real-label token being inert is still unidentified. §5.10
-  rules out "the trainer cannot learn a token"; it does not tell us which of the
-  remaining hypotheses is right.
-- Masked all-positive SFT (`models/recap/train_masked_sft.py`) is implemented but
-  not yet run: 30% true token omission rather than a learned UNCONDITIONED
-  value.
+  rules out "the trainer cannot learn a token" and §5.13 rules out "the token was
+  introduced too late"; neither says which of the remaining hypotheses is right.
+- Masked all-positive SFT has now been run from scratch (§5.13). Masking and
+  omission are verified working, and the model still abandons the token, so the
+  remaining question is whether *varying* labels change that. The natural next
+  run is masked training on real critic labels rather than all-POSITIVE.
 - Custom-vs-stock closed-loop smoothness difference remains unexplained.
 - The RECAP-vs-DAgger comparison holds data budget equal (18 episodes each) but
   RECAP receives fewer expert corrections (7 vs 18) and 11 autonomous episodes
