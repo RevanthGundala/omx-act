@@ -14,9 +14,10 @@ The difference is how "no advantage" is represented:
   self-attention and decoder cross-attention.
 
 Pass ``MASKED_ADVANTAGE`` for a single sample or ``advantage=None`` for a whole
-batch. The parameter layout therefore differs from the baseline on purpose;
-``convert_legacy_state_dict`` ports a baseline checkpoint and reproduces its
-outputs exactly wherever the token is visible.
+batch. The parameter layout therefore differs from the baseline on purpose, so a
+baseline checkpoint does not load directly. Porting one is a concern of the tool
+that reads old checkpoints, not of this model: see ``convert_legacy_state_dict``
+in ``inspect_advantage_attention.py``.
 """
 
 from enum import IntEnum
@@ -406,34 +407,3 @@ class Decoder(nn.Module):
         if not images.is_floating_point():
             images = images.float() / 255.0
         return images
-
-
-def convert_legacy_state_dict(state_dict: dict) -> dict:
-    """Port an ``act_recap.py`` checkpoint onto this model.
-
-    The baseline advantage token is ``nn.Linear(3, d_model)`` applied to a
-    one-hot row, and ``nn.Linear`` computes ``x @ W.T + b``. A one-hot for class
-    ``c`` therefore selects column ``c``: the token is ``W[:, c] + b``. Each
-    embedding row is set to exactly that, so a converted checkpoint reproduces
-    the baseline's outputs wherever the token is visible.
-
-    The baseline's UNCONDITIONED column is dropped -- this model omits the token
-    instead of embedding a third class. ``adv_pos_emb`` is untouched.
-    """
-    converted = dict(state_dict)
-    weight = converted.pop("decoder.adv_proj.weight", None)
-    bias = converted.pop("decoder.adv_proj.bias", None)
-    if weight is None or bias is None:
-        raise KeyError(
-            "state dict has no decoder.adv_proj.{weight,bias}; it does not look "
-            "like an act_recap.py checkpoint"
-        )
-    embedded = len(AdvantageCondition)
-    if weight.shape[1] < embedded:
-        raise ValueError(
-            f"checkpoint adv_proj has {weight.shape[1]} input classes, need at least {embedded}"
-        )
-    converted["decoder.advantage_embedding.weight"] = (
-        weight[:, :embedded].transpose(0, 1) + bias.unsqueeze(0)
-    )
-    return converted

@@ -15,8 +15,8 @@ from models.recap.act_recap_masked import (
     ACTPolicy as MaskedRecapACTPolicy,
     AdvantageCondition as MaskedAdvantageCondition,
     MASKED_ADVANTAGE,
-    convert_legacy_state_dict,
 )
+from models.recap.inspect_advantage_attention import convert_legacy_state_dict
 from models.recap.attention import Attention as RecapAttention
 
 

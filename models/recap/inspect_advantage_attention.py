@@ -21,9 +21,47 @@ import torch
 
 from models.recap.act_recap import AdvantageCondition
 from models.recap.act_recap import ACTPolicy as LegacyACTPolicy
-from models.recap.act_recap_masked import ACTPolicy, convert_legacy_state_dict
+from models.recap.act_recap_masked import (
+    ACTPolicy,
+    AdvantageCondition as MaskedAdvantageCondition,
+)
 from models.recap.check_token_sensitivity import observation_scale
 from models.recap.train_policy import config_from_checkpoint
+
+
+def convert_legacy_state_dict(state_dict: dict) -> dict:
+    """Port an ``act_recap.py`` checkpoint onto the maskable model.
+
+    This lives here rather than in act_recap_masked.py because it is a property
+    of reading *old* checkpoints, not of the model: nothing that trains or runs
+    the masked model needs it.
+
+    The baseline advantage token is ``nn.Linear(3, d_model)`` applied to a
+    one-hot row, and ``nn.Linear`` computes ``x @ W.T + b``. A one-hot for class
+    ``c`` therefore selects column ``c``: the token is ``W[:, c] + b``. Each
+    embedding row is set to exactly that, so a converted checkpoint reproduces
+    the baseline's outputs wherever the token is visible.
+
+    The baseline's UNCONDITIONED column is dropped -- this model omits the token
+    instead of embedding a third class. ``adv_pos_emb`` is untouched.
+    """
+    converted = dict(state_dict)
+    weight = converted.pop("decoder.adv_proj.weight", None)
+    bias = converted.pop("decoder.adv_proj.bias", None)
+    if weight is None or bias is None:
+        raise KeyError(
+            "state dict has no decoder.adv_proj.{weight,bias}; it does not look "
+            "like an act_recap.py checkpoint"
+        )
+    embedded = len(MaskedAdvantageCondition)
+    if weight.shape[1] < embedded:
+        raise ValueError(
+            f"checkpoint adv_proj has {weight.shape[1]} input classes, need at least {embedded}"
+        )
+    converted["decoder.advantage_embedding.weight"] = (
+        weight[:, :embedded].transpose(0, 1) + bias.unsqueeze(0)
+    )
+    return converted
 
 
 def load_policy(checkpoint_path: Path, device: torch.device):
