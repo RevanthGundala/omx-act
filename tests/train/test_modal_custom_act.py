@@ -1,3 +1,5 @@
+import ast
+
 import pytest
 
 from train.modal.common import (
@@ -155,3 +157,34 @@ def test_masked_sft_refuses_labels_and_synthetic_shift(repo_root):
     # improvement loop or the planted-token capability test.
     assert "masked_sft is all-positive SFT" in source
     assert "synthetic_shift replaces critic labels" in source
+
+
+@pytest.mark.parametrize(
+    "launcher",
+    ["train/modal/custom_act.py", "train/modal/recap_critic.py"],
+)
+def test_every_mounted_path_exists(repo_root, launcher):
+    """Regression: the image mounted ``data/`` after that directory was renamed.
+
+    Modal resolves mounts locally before provisioning, so this failed the launch
+    outright -- caught only by actually launching, which is the one way of
+    finding it that costs money. A stale mount is invisible to import-time
+    checks because nothing in the repo references the path.
+    """
+    source = (repo_root / launcher).read_text()
+    tree = ast.parse(source)
+
+    mounted = [
+        node.args[0].value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in {"add_local_dir", "add_local_file"}
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+        and isinstance(node.args[0].value, str)
+    ]
+    assert mounted, f"no mounts found in {launcher}; the parser is wrong"
+
+    missing = [path for path in mounted if not (repo_root / path).exists()]
+    assert missing == [], f"{launcher} mounts paths that do not exist: {missing}"

@@ -69,7 +69,6 @@ image = (
     .add_local_dir("models", remote_path=str(REMOTE_WORKSPACE / "models"))
     .add_local_dir("configs", remote_path=str(REMOTE_WORKSPACE / "configs"))
     .add_local_dir("utils", remote_path=str(REMOTE_WORKSPACE / "utils"))
-    .add_local_dir("data", remote_path=str(REMOTE_WORKSPACE / "data"))
     .add_local_file("train/modal/common.py", remote_path="/root/modal_common.py")
 )
 app = modal.App("omx-custom-act-training", image=image)
