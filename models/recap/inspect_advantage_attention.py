@@ -28,6 +28,13 @@ from models.recap.act_recap_masked import (
 from models.recap.check_token_sensitivity import observation_scale
 from models.recap.train_policy import config_from_checkpoint
 
+# Decoder memory layout, from act_recap_masked.Decoder.forward: the advantage
+# token is prepended to [z, joints, image patches]. Asserted in the tests, since
+# a reordering here would silently mislabel every slot in the report.
+ADVANTAGE_SLOT = 0
+LATENT_SLOT = 1
+JOINTS_SLOT = 2
+
 
 def convert_legacy_state_dict(state_dict: dict) -> dict:
     """Port an ``act_recap.py`` checkpoint onto the maskable model.
@@ -65,24 +72,32 @@ def convert_legacy_state_dict(state_dict: dict) -> dict:
 
 
 def load_policy(checkpoint_path: Path, device: torch.device):
-    """Load a legacy RECAP checkpoint into the maskable architecture.
+    """Load either a native masked checkpoint or a legacy RECAP one.
 
-    The two architectures store the advantage token differently, so the state
-    dict is converted rather than loaded directly. The conversion is only
-    meaningful if it is exact, so the caller should run
-    ``assert_conversion_is_faithful`` before reading anything into the masked
-    outputs.
+    A checkpoint trained by train_masked_sft.py is already this architecture and
+    loads directly. A legacy act_recap.py checkpoint stores the advantage token
+    as a Linear over one-hots, so its state dict is converted; that conversion is
+    only meaningful if it is exact, so a legacy model is returned alongside for
+    ``assert_conversion_is_faithful`` to check against. Native checkpoints have
+    nothing to convert and return ``None`` there.
     """
     cfg = config_from_checkpoint(checkpoint_path)
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
-    legacy_state = checkpoint["model_state_dict"]
+    state = checkpoint["model_state_dict"]
 
     model = ACTPolicy(cfg, pretrained_backbone=False).to(device)
-    model.load_state_dict(convert_legacy_state_dict(legacy_state), strict=True)
+    is_legacy = "decoder.adv_proj.weight" in state
+    model.load_state_dict(
+        convert_legacy_state_dict(state) if is_legacy else state,
+        strict=True,
+    )
     model.eval()
 
+    if not is_legacy:
+        return model, None, cfg
+
     legacy = LegacyACTPolicy(cfg, pretrained_backbone=False).to(device)
-    legacy.load_state_dict(legacy_state, strict=True)
+    legacy.load_state_dict(state, strict=True)
     legacy.eval()
     return model, legacy, cfg
 
@@ -130,6 +145,18 @@ def attention_snapshot(model: ACTPolicy) -> tuple[list[torch.Tensor], list[torch
     return encoder, decoder
 
 
+def memory_slot_ranking(model: ACTPolicy) -> torch.Tensor:
+    """Attention received by every memory slot in the last decoder layer.
+
+    Attention on the advantage slot only means something relative to the other
+    slots. Slot 2 (joints) is the useful contrast: if the model concentrates
+    heavily there, then "the architecture cannot single out one slot" is not
+    available as an explanation for a low advantage number.
+    """
+    weights = model.decoder.transformer_decoder[-1].cross_attn.last_attn_weights
+    return weights.mean(dim=(0, 1, 2)).cpu()
+
+
 def masked_attention_max(model: ACTPolicy) -> float:
     values = []
     for block in model.decoder.transformer_encoder:
@@ -153,6 +180,7 @@ def inspect(
     encoder_batches: list[list[torch.Tensor]] = []
     decoder_batches: list[list[torch.Tensor]] = []
     masked_max = 0.0
+    slot_batches: list[torch.Tensor] = []
     samples = 0
 
     for batch_index, batch in enumerate(loader):
@@ -178,6 +206,7 @@ def inspect(
         encoder, decoder = attention_snapshot(model)
         encoder_batches.append(encoder)
         decoder_batches.append(decoder)
+        slot_batches.append(memory_slot_ranking(model))
 
         masked_actions, _, _ = model(
             images,
@@ -211,6 +240,10 @@ def inspect(
     output_effect = float(np.mean(output_effects))
     observation_effect = float(np.mean(observation_effects))
     memory_tokens = model.decoder.transformer_encoder[0].self_attn.last_attn_weights.shape[-1]
+
+    slots = torch.stack(slot_batches).mean(dim=0)
+    order = torch.argsort(slots, descending=True)
+    rank_of = lambda slot: int((order == slot).nonzero()[0].item()) + 1
     return {
         "samples": samples,
         "batches": len(output_effects),
@@ -222,6 +255,15 @@ def inspect(
         "legacy_conversion_max_error": conversion_error,
         "encoder_attention_to_advantage": [layer.tolist() for layer in encoder_layers],
         "decoder_attention_to_advantage": [layer.tolist() for layer in decoder_layers],
+        "memory_slots": int(slots.shape[0]),
+        "advantage_slot_rank": rank_of(ADVANTAGE_SLOT),
+        "advantage_slot_attention": float(slots[ADVANTAGE_SLOT]),
+        "joints_slot_rank": rank_of(JOINTS_SLOT),
+        "joints_slot_attention": float(slots[JOINTS_SLOT]),
+        "latent_slot_rank": rank_of(LATENT_SLOT),
+        "latent_slot_attention": float(slots[LATENT_SLOT]),
+        "median_slot_attention": float(slots[order[slots.shape[0] // 2]]),
+        "top_slot_attention": float(slots[order[0]]),
     }
 
 
@@ -296,11 +338,14 @@ def main(argv=None) -> int:
     uniform = report["uniform_attention_baseline"]
     print(f"checkpoint: {args.checkpoint}")
     print(f"samples: {report['samples']}")
-    print(
-        "legacy conversion max error: "
-        f"{report['legacy_conversion_max_error']:.2e} (0 means the converted "
-        "model reproduces the checkpoint exactly)"
-    )
+    if report["legacy_conversion_max_error"] is not None:
+        print(
+            "legacy conversion max error: "
+            f"{report['legacy_conversion_max_error']:.2e} (0 means the converted "
+            "model reproduces the checkpoint exactly)"
+        )
+    else:
+        print("checkpoint is natively maskable; no conversion needed")
     print(
         "visible vs masked output effect: "
         f"{report['output_effect_sd']:.6f} "
@@ -311,7 +356,26 @@ def main(argv=None) -> int:
         "masked attention max (must be 0): "
         f"{report['masked_advantage_attention_max']:.3e}"
     )
-    print(f"report: {report_path}")
+
+    slots = report["memory_slots"]
+    print(f"\nattention received, last decoder layer ({slots} memory slots):")
+    print(f"  {'slot':<22} {'attention':>11} {'vs uniform':>11} {'rank':>12}")
+    for label, key in (
+        ("2 joints", "joints"),
+        ("1 z (CVAE)", "latent"),
+        ("0 advantage", "advantage"),
+    ):
+        value = report[f"{key}_slot_attention"]
+        print(
+            f"  {label:<22} {value:11.3e} {value / uniform:10.2f}x "
+            f"{report[f'{key}_slot_rank']:6d}/{slots}"
+        )
+    print(f"  {'median slot':<22} {report['median_slot_attention']:11.3e}")
+    print(
+        "\n  a low advantage rank next to a high joints rank means the model can "
+        "\n  concentrate on one slot and chose not to concentrate on this one."
+    )
+    print(f"\nreport: {report_path}")
     print(f"plot:   {plot_path}")
     return 0
 

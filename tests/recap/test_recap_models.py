@@ -1894,3 +1894,47 @@ def test_advantage_slot_gets_exactly_zero_attention_when_omitted():
     assert (decoder[1::2] == 0).all()
     assert encoder[0::2].max() > 0
     assert decoder[0::2].max() > 0
+
+
+def test_inspector_slot_constants_match_the_decoder_memory_layout():
+    """The report labels slots by index, so a reordering would mislabel them all.
+
+    Identifies each slot by construction: give the decoder a distinctive input
+    and check which memory position carries it.
+    """
+    from models.recap import inspect_advantage_attention as inspector
+
+    cfg = _config()
+    model = MaskedRecapACTPolicy(cfg, pretrained_backbone=False).eval()
+    decoder = model.decoder
+
+    captured = {}
+    original = decoder.transformer_encoder[0].self_attn.forward
+
+    def capture(x, **kwargs):
+        captured.setdefault("memory", x.detach().clone())
+        return original(x, **kwargs)
+
+    decoder.transformer_encoder[0].self_attn.forward = capture
+    joints = torch.randn(2, cfg.joint_dim)
+    z = torch.randn(2, cfg.d_z)
+    with torch.no_grad():
+        decoder(
+            torch.randn(2, len(cfg.camera_names), 3, 480, 640),
+            joints,
+            z,
+            torch.full((2,), int(MaskedAdvantageCondition.POSITIVE)),
+        )
+    decoder.transformer_encoder[0].self_attn.forward = original
+
+    memory = captured["memory"]
+    with torch.no_grad():
+        expected_advantage = decoder.advantage_embedding(
+            torch.full((2,), int(MaskedAdvantageCondition.POSITIVE))
+        )
+        expected_latent = decoder.z_proj(z)
+        expected_joints = decoder.joint_proj(joints)
+
+    assert torch.allclose(memory[:, inspector.ADVANTAGE_SLOT], expected_advantage)
+    assert torch.allclose(memory[:, inspector.LATENT_SLOT], expected_latent)
+    assert torch.allclose(memory[:, inspector.JOINTS_SLOT], expected_joints)
