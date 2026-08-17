@@ -544,6 +544,86 @@ conditions on labels that vary and every visible label here was POSITIVE. A
 near-zero effect is what an all-positive run predicts, not a finding about the
 method.
 
+### 5.14 The advantage is the critic's residual, and the critic is too coarse
+
+Two independent model reviews (GPT-5.6 Sol, Grok 4.6) converged on a hypothesis
+this log had under-weighted: the labels may be critic noise rather than weak
+signal. Every specific claim either review made about this repo was checked and
+held.
+
+**The identity.** By definition of the return, `R_t = sum(r[t:t+N]) + R_{t+N}`.
+Substituting into the advantage gives
+
+```
+A_t = sum(r[t:t+N]) + V(o_{t+N}) - V(o_t)
+    = [V(o_{t+N}) - R_{t+N}] - [V(o_t) - R_t]
+    = residual_{t+N} - residual_t
+```
+
+The advantage is **exactly** the difference of the critic's residuals, for any
+critic. A critic that predicted returns perfectly would make every advantage
+identically zero — the same collapse as the CVAE-latent proof in section 5.2.
+Asserted numerically in `tests/recap/test_recap_models.py`.
+
+This is not a defect. Part of the residual is real signal, because the future is
+stochastic and `V(o)` predicts its expectation. But it makes the critic's
+accuracy the thing that decides whether the binary label carries information.
+
+**The bound.** The labels every policy run has used came from
+`outputs/recap_critic_20k/best_critic.pt`, trained on `034-recap-balanced` —
+which contains **60 successes and 6 failures**. Its val return MAE is 86.6,
+implying a residual std of ~108.5 return units, against a resolved threshold of
+eps_l = **6.49**. The threshold is 17x smaller than the critic's own error.
+
+Residual correlation across the lookahead is what could rescue this: errors that
+persist from `t` to `t+50` cancel in the subtraction. Running
+`models/recap/advantage_noise_bound.py`:
+
+| residual correlation across N=50 | advantage noise std | vs threshold |
+|---|---:|---:|
+| 0.0 | 153.5 | 23.7x |
+| 0.9 | 48.5 | 7.5x |
+| 0.99 | 15.4 | 2.4x |
+| 0.999 | 4.9 | 0.7x |
+
+For the noise to fit inside the threshold, the critic's residuals would have to
+be correlated at **rho > 0.998** across 50 steps — 1.7 seconds at 30 Hz.
+
+**Status: bound, not measurement.** The actual correlation has not been measured,
+and it is the cheapest way to settle this. If it is below ~0.998, the binary
+labels are substantially coin flips, and every "the token is inert" result is
+reinterpreted: the token would be routing noise, not failing to route signal.
+That is a different finding from "these labels have no action-conditional
+content," and this log should not assert the latter until the former is excluded.
+
+**A protocol error found in the same pass.** Appendix A specifies two separate
+calibrations: ~30% positive on *demonstration* data for pre-training, ~40% on
+*evaluation rollouts* for fine-tuning. `label_advantage.py` resolves a single
+threshold at the 40% target over `mask=~intervention`, which pools demos and
+rollouts. Demonstrations are ~80% of that pool, so the threshold is set largely
+by the demonstration distribution and then applied to rollouts, which received
+34.7% positive against the paper's 40%. The module docstring states the correct
+rule; the implementation does not follow it.
+
+**Two claims in this log are withdrawn as overstated:**
+
+- Section 5.10 does not show "the trainer can learn a token." It planted 0.5
+  z-units on every joint, a 1387% relative effect, against a real signal of
+  1-3%. It rules out an inability to learn a *large* token. A dose-response at
+  0.03 and 0.05 would say whether a realistically small one is learnable at all.
+- The attention decay in section 5.13 is not evidence about RECAP. Every visible
+  label in that run was POSITIVE, and a constant carries no information, so
+  abandoning it is correct behaviour rather than a finding.
+
+**AWR is withdrawn as the promising remaining option.** Both reviews derived the
+same result independently: L1 advantage-weighted regression at a fixed
+observation is the *weighted median* of `a | o`. If the label does not change the
+action distribution given the observation, the weighted median equals the
+unweighted one and AWR reduces to behaviour cloning. What it can still change is
+the distribution *over* observations, which on this data upweights easy sponge
+placements — the same confound that invalidates the 82%. It is a control, not a
+fix.
+
 ---
 
 ## 6. Transferable lessons

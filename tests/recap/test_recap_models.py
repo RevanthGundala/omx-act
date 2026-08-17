@@ -1938,3 +1938,39 @@ def test_inspector_slot_constants_match_the_decoder_memory_layout():
     assert torch.allclose(memory[:, inspector.ADVANTAGE_SLOT], expected_advantage)
     assert torch.allclose(memory[:, inspector.LATENT_SLOT], expected_latent)
     assert torch.allclose(memory[:, inspector.JOINTS_SLOT], expected_joints)
+
+
+def test_advantage_equals_the_difference_of_critic_residuals():
+    """A_t = residual_{t+N} - residual_t, exactly, for any critic.
+
+    Verified numerically on a random episode rather than trusted as algebra,
+    because it is the basis for reading the advantage as critic error.
+    """
+    from models.recap.advantage_noise_bound import advantage_noise_std
+
+    rng = torch.Generator().manual_seed(0)
+    steps, lookahead, c_fail = 200, 50, 704.0
+
+    rewards = torch.full((steps,), -1.0)
+    rewards[-1] = -c_fail
+    # Return-to-go: R_t = sum of rewards from t onward, no discount.
+    returns = torch.flip(torch.cumsum(torch.flip(rewards, [0]), 0), [0])
+
+    values = returns + torch.randn(steps, generator=rng) * 50.0
+    residuals = values - returns
+
+    t = torch.arange(steps - lookahead)
+    reward_sum = torch.stack([rewards[i : i + lookahead].sum() for i in t])
+    advantage = reward_sum + values[t + lookahead] - values[t]
+
+    assert torch.allclose(advantage, residuals[t + lookahead] - residuals[t], atol=1e-3)
+
+    # A critic with no error makes every advantage exactly zero.
+    perfect = torch.stack(
+        [rewards[i : i + lookahead].sum() + returns[i + lookahead] - returns[i] for i in t]
+    )
+    assert perfect.abs().max() < 1e-3
+
+    # Uncorrelated residuals give sqrt(2) times the value-error std.
+    assert advantage_noise_std(1.0, 0.0) == pytest.approx(2**0.5)
+    assert advantage_noise_std(1.0, 1.0) == pytest.approx(0.0)
