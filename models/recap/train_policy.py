@@ -62,15 +62,49 @@ def synthetic_conditions(frame_ids: torch.Tensor, seed: int = 0) -> torch.Tensor
 
 
 def shift_actions_for_synthetic_token(
-    actions: torch.Tensor, conditions: torch.Tensor, shift: float
+    actions: torch.Tensor,
+    conditions: torch.Tensor,
+    shift: float,
+    first_action_only: bool = False,
 ) -> torch.Tensor:
-    """Add ``shift`` (in z-units) to every joint when the token is POSITIVE."""
+    """Add ``shift`` (in z-units) to every joint when the token is POSITIVE.
+
+    ``first_action_only`` restricts the shift to chunk offset 0. One token has to
+    move all 30 predicted timesteps, so a signal that is real at the first action
+    is diluted across the chunk; comparing the two says whether that dilution is
+    what hides a small effect.
+    """
     if shift <= 0:
         raise ValueError(f"synthetic shift must be positive, got {shift}")
     positive = conditions == int(AdvantageCondition.POSITIVE)
     while positive.ndim < actions.ndim:
         positive = positive.unsqueeze(-1)
-    return actions + shift * positive.to(dtype=actions.dtype)
+    delta = shift * positive.to(dtype=actions.dtype).expand_as(actions).clone()
+    if first_action_only and actions.ndim >= 2:
+        # Chunk axis is second from last: (..., chunk, joints).
+        delta[..., 1:, :] = 0.0
+    return actions + delta
+
+
+def shuffle_labels_within_episode(
+    conditions: torch.Tensor, episode_ids: torch.Tensor, seed: int = 0
+) -> torch.Tensor:
+    """Circularly shift each episode's labels, destroying only their alignment.
+
+    The positive rate and the run structure are preserved exactly, so a policy
+    trained on these cannot beat one trained on the real labels unless the real
+    labels are aligned with something. This is the null the real-label run has
+    never been compared against.
+    """
+    generator = torch.Generator().manual_seed(seed)
+    shuffled = conditions.clone()
+    for episode in torch.unique(episode_ids):
+        index = torch.nonzero(episode_ids == episode, as_tuple=True)[0]
+        if len(index) < 2:
+            continue
+        offset = int(torch.randint(1, len(index), (1,), generator=generator))
+        shuffled[index] = conditions[index].roll(offset)
+    return shuffled
 
 
 class AdvantageDataset(Dataset):
@@ -94,10 +128,12 @@ class AdvantageDataset(Dataset):
         total_frames: int | None = None,
         synthetic_shift: float | None = None,
         synthetic_seed: int = 0,
+        synthetic_first_action_only: bool = False,
     ):
         self.dataset = dataset
         self.synthetic_shift = synthetic_shift
         self.synthetic_seed = synthetic_seed
+        self.synthetic_first_action_only = synthetic_first_action_only
         if synthetic_shift is not None and synthetic_shift <= 0:
             raise ValueError(f"synthetic shift must be positive, got {synthetic_shift}")
         if synthetic_shift is not None and conditions is not None:
@@ -148,7 +184,10 @@ class AdvantageDataset(Dataset):
         condition = self._condition_for(idx)
         if self.synthetic_shift is not None:
             item["actions"] = shift_actions_for_synthetic_token(
-                item["actions"], condition, self.synthetic_shift
+                item["actions"],
+                condition,
+                self.synthetic_shift,
+                self.synthetic_first_action_only,
             )
         item["advantage_condition"] = condition
         return item
@@ -168,18 +207,35 @@ def apply_conditioning_dropout(conditions: torch.Tensor, dropout: float, generat
     )
 
 
-def compute_loss(model, batch, device, kl_weight):
-    """L1 + KL, matching models/act/train.py, with the advantage token added."""
+def compute_loss(model, batch, device, kl_weight, zero_latent: bool = False):
+    """L1 + KL, matching models/act/train.py, with the advantage token added.
+
+    ``zero_latent`` withholds the target chunk from the CVAE encoder, so z is the
+    zero vector it already is at inference. During normal training z is inferred
+    from the very actions being predicted, which gives the decoder a channel that
+    carries the answer -- and a token competing with that channel can be ignored
+    for reasons that have nothing to do with the token. Running with it off is
+    how to tell those two explanations apart.
+    """
     images = batch["images"].to(device)
     qpos = batch["qpos"].to(device)
     actions = batch["actions"].to(device)
     action_mask = batch["action_mask"].to(device)
     advantage = batch["advantage_condition"].to(device)
-    act_pred, mu, log_var = model(images, qpos, actions, action_mask, advantage=advantage)
+    act_pred, mu, log_var = model(
+        images,
+        qpos,
+        None if zero_latent else actions,
+        action_mask,
+        advantage=advantage,
+    )
     action_error = F.l1_loss(act_pred, actions, reduction="none")
     valid_values = (action_mask.sum() * actions.shape[-1]).clamp_min(1.0)
     action_loss = (action_error * action_mask.unsqueeze(-1)).sum() / valid_values
-    kl_loss = (-0.5 * (1 + log_var - mu.pow(2) - log_var.exp())).sum(dim=1).mean()
+    if mu is None or log_var is None:
+        kl_loss = torch.zeros((), device=action_loss.device, dtype=action_loss.dtype)
+    else:
+        kl_loss = (-0.5 * (1 + log_var - mu.pow(2) - log_var.exp())).sum(dim=1).mean()
     return action_loss + kl_weight * kl_loss, action_loss, kl_loss
 
 
@@ -296,6 +352,9 @@ def config_from_env() -> ACTConfig:
         num_train_steps=int(os.environ.get("RECAP_POLICY_STEPS", base_cfg.num_train_steps)),
         save_freq=int(os.environ.get("RECAP_POLICY_SAVE_FREQ", base_cfg.save_freq)),
         log_freq=int(os.environ.get("RECAP_POLICY_LOG_FREQ", base_cfg.log_freq)),
+        train_split=float(
+            os.environ.get("RECAP_POLICY_TRAIN_SPLIT", base_cfg.train_split)
+        ),
     )
 
 
@@ -329,6 +388,9 @@ def main():
 
     labels_path = os.environ.get("RECAP_POLICY_LABELS")
     conditions = load_conditions(labels_path) if labels_path else None
+    zero_latent = os.environ.get("RECAP_POLICY_ZERO_LATENT") == "1"
+    shuffle_labels = os.environ.get("RECAP_POLICY_SHUFFLE_LABELS") == "1"
+    first_action_only = os.environ.get("RECAP_POLICY_SYNTHETIC_FIRST_ACTION") == "1"
     synthetic_raw = os.environ.get("RECAP_POLICY_SYNTHETIC_SHIFT")
     if synthetic_raw and labels_path:
         raise ValueError(
@@ -347,7 +409,23 @@ def main():
     dropout = float(os.environ.get("RECAP_POLICY_DROPOUT", default_dropout))
 
     episodes = parse_episode_subset(os.environ.get("RECAP_POLICY_EPISODES"))
-    train_loader, _ = make_dataloaders(cfg, episodes=episodes)
+    train_loader, val_loader = make_dataloaders(cfg, episodes=episodes)
+
+    if shuffle_labels:
+        if conditions is None:
+            raise ValueError("RECAP_POLICY_SHUFFLE_LABELS needs real labels to shuffle")
+        episode_ids = torch.as_tensor(
+            train_loader.dataset.dataset.hf_dataset["episode_index"]
+        )
+        frame_ids = torch.as_tensor(train_loader.dataset.dataset.hf_dataset["index"])
+        conditions = conditions.clone()
+        conditions[frame_ids] = shuffle_labels_within_episode(
+            conditions[frame_ids], episode_ids, cfg.seed
+        )
+        print(
+            "SHUFFLED labels: rate and run structure preserved, alignment destroyed",
+            flush=True,
+        )
     # The label file is per dataset, so compare against the full dataset rather
     # than this split: make_dataloaders holds episodes out and may be restricted
     # to a subset, and a smaller training set is not evidence that the labels
@@ -365,6 +443,7 @@ def main():
             total_frames=total_frames,
             synthetic_shift=synthetic_shift,
             synthetic_seed=cfg.seed,
+            synthetic_first_action_only=first_action_only,
         ),
         batch_size=cfg.batch_size,
         shuffle=True,
@@ -418,7 +497,9 @@ def main():
                 batch["advantage_condition"], dropout, dropout_generator
             )
             optim.zero_grad(set_to_none=True)
-            loss, action_loss, kl_loss = compute_loss(model, batch, device, cfg.kl_weight)
+            loss, action_loss, kl_loss = compute_loss(
+                model, batch, device, cfg.kl_weight, zero_latent=zero_latent
+            )
             loss.backward()
             grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip)
             optim.step()

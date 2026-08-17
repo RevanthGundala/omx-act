@@ -1974,3 +1974,69 @@ def test_advantage_equals_the_difference_of_critic_residuals():
     # Uncorrelated residuals give sqrt(2) times the value-error std.
     assert advantage_noise_std(1.0, 0.0) == pytest.approx(2**0.5)
     assert advantage_noise_std(1.0, 1.0) == pytest.approx(0.0)
+
+
+def test_shuffled_labels_keep_rate_and_runs_but_lose_alignment():
+    """The null must differ from the real labels only in alignment.
+
+    If it also changed the positive rate, a difference between the two runs
+    would be explained by the rate rather than by the labels carrying signal.
+    """
+    conditions = torch.tensor([1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 1, 0])
+    episodes = torch.tensor([0] * 6 + [1] * 6)
+    shuffled = train_policy.shuffle_labels_within_episode(conditions, episodes, seed=3)
+
+    assert shuffled.shape == conditions.shape
+    for episode in (0, 1):
+        mask = episodes == episode
+        assert shuffled[mask].sum() == conditions[mask].sum(), "positive rate changed"
+        assert sorted(shuffled[mask].tolist()) == sorted(conditions[mask].tolist())
+    assert not torch.equal(shuffled, conditions), "alignment was not destroyed"
+    # Labels must not migrate across episode boundaries.
+    assert torch.equal(
+        torch.sort(shuffled[:6]).values, torch.sort(conditions[:6]).values
+    )
+
+
+def test_first_action_only_shift_touches_only_chunk_offset_zero():
+    actions = torch.zeros(2, 5, 3)
+    positive = torch.tensor([1, 1])
+
+    full = train_policy.shift_actions_for_synthetic_token(actions, positive, 0.1)
+    assert torch.allclose(full, torch.full_like(actions, 0.1))
+
+    first = train_policy.shift_actions_for_synthetic_token(
+        actions, positive, 0.1, first_action_only=True
+    )
+    assert torch.allclose(first[:, 0], torch.full_like(first[:, 0], 0.1))
+    assert torch.allclose(first[:, 1:], torch.zeros_like(first[:, 1:]))
+
+    negative = train_policy.shift_actions_for_synthetic_token(
+        actions, torch.tensor([0, 0]), 0.1
+    )
+    assert torch.allclose(negative, actions)
+
+
+def test_zero_latent_removes_the_cvae_answer_channel():
+    """With zero_latent the encoder never sees the target chunk.
+
+    Normal training infers z from the very actions being predicted, so the
+    decoder has a channel carrying the answer. KL must then be exactly zero,
+    since there is no posterior to penalise.
+    """
+    cfg = _config()
+    model = RecapACTPolicy(cfg, pretrained_backbone=False)
+    model.train()
+    batch = {
+        "images": torch.randn(2, len(cfg.camera_names), 3, 480, 640),
+        "qpos": torch.randn(2, cfg.joint_dim),
+        "actions": torch.randn(2, cfg.chunk_size, cfg.joint_dim),
+        "action_mask": torch.ones(2, cfg.chunk_size),
+        "advantage_condition": torch.tensor([1, 0]),
+    }
+    _, _, kl_normal = train_policy.compute_loss(model, batch, torch.device("cpu"), 10.0)
+    _, _, kl_zeroed = train_policy.compute_loss(
+        model, batch, torch.device("cpu"), 10.0, zero_latent=True
+    )
+    assert kl_normal.item() > 0.0
+    assert kl_zeroed.item() == 0.0

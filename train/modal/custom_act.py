@@ -298,6 +298,9 @@ def train_recap_policy_remote(
     chunk_size: int | None = None,
     train_split: float | None = None,
     log_freq: int | None = None,
+    zero_latent: bool = False,
+    shuffle_labels: bool = False,
+    synthetic_first_action: bool = False,
 ) -> str:
     """Train the advantage-conditioned RECAP policy.
 
@@ -376,6 +379,12 @@ def train_recap_policy_remote(
         environment["RECAP_POLICY_LOG_FREQ"] = str(log_freq)
     if train_split is not None:
         environment["RECAP_POLICY_TRAIN_SPLIT"] = str(train_split)
+    if zero_latent:
+        environment["RECAP_POLICY_ZERO_LATENT"] = "1"
+    if shuffle_labels:
+        environment["RECAP_POLICY_SHUFFLE_LABELS"] = "1"
+    if synthetic_first_action:
+        environment["RECAP_POLICY_SYNTHETIC_FIRST_ACTION"] = "1"
     if synthetic_shift:
         environment["RECAP_POLICY_SYNTHETIC_SHIFT"] = str(synthetic_shift)
     os.environ.update(environment)
@@ -557,8 +566,20 @@ def recap_policy(
     dropout: str | None = None,
     episodes: str | None = None,
     synthetic_shift: str | None = None,
+    train_split: float | None = None,
+    zero_latent: bool = False,
+    shuffle_labels: bool = False,
+    synthetic_first_action: bool = False,
 ):
     """Launch advantage-conditioned RECAP policy training.
+
+    Ablation flags, all defaulting off so the ordinary path is unchanged:
+    ``zero_latent`` withholds the target chunk from the CVAE encoder, so the
+    decoder cannot read the answer out of z. ``shuffle_labels`` circularly
+    shifts each episode's labels, preserving rate and run structure while
+    destroying alignment, which is the null a real-label run has to beat.
+    ``synthetic_first_action`` restricts a synthetic shift to chunk offset 0,
+    separating a diluted signal from an undetectable one.
 
     ``labels_path`` selects the stage: omitted runs SFT with the indicator
     pinned to POSITIVE, supplied runs the improvement loop. It is refused
@@ -569,7 +590,17 @@ def recap_policy(
     training volume rather than from the image.
     """
     stage = "improvement loop" if labels_path else "SFT (indicator pinned POSITIVE)"
+    ablations = [
+        name
+        for name, on in (
+            ("zero_latent", zero_latent),
+            ("shuffle_labels", shuffle_labels),
+            ("synthetic_first_action", synthetic_first_action),
+        )
+        if on
+    ]
     print("=== RECAP POLICY LAUNCH ===")
+    print(f"ablations={','.join(ablations) or '(none)'} train_split={train_split}")
     print(f"stage={stage}")
     print(f"dataset={dataset_repo_id}")
     print(f"warm_start={pretrained_checkpoint}")
@@ -590,6 +621,10 @@ def recap_policy(
         dataset_repo_id=dataset_repo_id,
         episodes=episodes,
         synthetic_shift=synthetic_shift,
+        train_split=train_split,
+        zero_latent=zero_latent,
+        shuffle_labels=shuffle_labels,
+        synthetic_first_action=synthetic_first_action,
     )
     print(result)
     print("Outputs volume: omx-custom-act-training-logs")
