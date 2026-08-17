@@ -476,32 +476,47 @@ five decimals — both were reading the start of episode 48. At 150 batches the
 baseline moved 1.52% → 0.93%. **The earlier 0.75% figure should not be quoted;
 use 0.93%.**
 
-### 5.13 Training from scratch: the model learns to ignore the token
+### 5.13 Mechanism check: masking and dropout work, and the token still decays
 
-Every earlier RECAP run warm-started from a policy that had already converged
-without a token, which left one objection open: perhaps the token was inert
-because it arrived too late to matter, not because it was unusable.
+**Scope.** This is a mechanism check, not a training result, and it should not be
+quoted as one. Three limits, all of which were chosen for speed and none of which
+were noticed before the run:
 
-`recap_masked_scratch_2k` closes that. Random init, no warm start, token present
-from step 0, 2,000 steps on `031-recap-gen1`, 30% omission, chunk 30 and
-train_split 1.0 to match the baseline recipe. A10G, 7m33s, ~$0.14. The trainer
+- It trained on `031-recap-gen1`, which is the **critic** set (8 successes, 10
+  failures), not the 48 demonstrations. Forcing every label POSITIVE there labels
+  ten failed episodes as good, so this is not a coherent SFT stage. The earlier
+  `recap_sft_positive_10k` of section 5.11 used the demonstrations, so the two
+  are **not** a matched pair and their numbers should not be read as replicates.
+- `train_split=1.0`, so no validation set exists and every number below was
+  measured on data the model trained on. On training data the observation alone
+  largely determines the action, which is the regime most favourable to finding a
+  conditioning token redundant. The bias runs toward the conclusion drawn.
+- 2,000 steps against the 20,000 the baseline recipe uses.
+
+What survives all three is the part that does not depend on the data: a constant
+label carries zero mutual information with anything, so "the token is ignored
+because every visible label is identical" holds whatever it was trained on.
+
+**Setup.** `recap_masked_scratch_2k`. Random init, no warm start, token present
+from step 0, 30% omission, chunk 30, lr 1e-5. A10G, 7m33s, ~$0.14. The trainer
 logs attention on the advantage slot from the weights the forward pass already
 cached, so these are the training steps themselves rather than a later probe.
 
-The architecture question first: the masked model differs from the base custom
-ACT by exactly two tensors, `decoder.advantage_embedding.weight` (2x512) and
-`decoder.adv_pos_emb.weight` (1x512) — 1,536 of 52,350,854 parameters, or
-0.0029%. Every one of the base's 239 tensors has an identically-shaped
-counterpart. Warm start is therefore a scientific choice, not a compatibility
-one.
+**The architecture is all but shared with the baseline.** The masked model
+differs from the base custom ACT by exactly two tensors,
+`decoder.advantage_embedding.weight` (2x512) and `decoder.adv_pos_emb.weight`
+(1x512) — 1,536 of 52,350,854 parameters, or 0.0029%. Every one of the base's 239
+tensors has an identically-shaped counterpart, so warm start is a scientific
+choice rather than a compatibility one.
 
-**Both mechanisms work.** Omission was 32.5% over 640 sampled examples
-(z = +1.38 against the 30% target). Attention on an omitted slot was
-**exactly 0.000e+00** at all 79 logged steps, in encoder self-attention and
-decoder cross-attention alike — absence, not a small number.
+**Both mechanisms work.** Omission was 32.5% over 640 sampled examples (z = +1.38
+against the 30% target). Attention on an omitted slot was **exactly 0.000e+00**
+at all 79 logged steps, in encoder self-attention and decoder cross-attention
+alike — absence, not a small number. That is the claim this run does establish,
+and it is a claim about the implementation rather than about RECAP.
 
-**And the model still trained itself out of using the token.** Memory is 603
-slots, so uniform attention is 1/603 = 1.658e-03:
+**The token decayed during training.** Memory is 603 slots, so uniform attention
+is 1/603 = 1.658e-03:
 
 | steps | decoder attention on the slot | versus uniform |
 |---|---:|---:|
@@ -512,14 +527,22 @@ slots, so uniform attention is 1/603 = 1.658e-03:
 
 It starts *above* uniform and decays to *below* it, a 59.5% fall, while action
 loss drops 0.863 to 0.142. The token was available, was initially attended, and
-was then actively abandoned.
+was then abandoned.
 
-That is the predicted outcome rather than a surprise: when every visible token
-is POSITIVE and all examples share the same expert target, ignoring the token is
-loss-minimising. The value is in ruling out the alternative explanation. The
-token is not inert because it was introduced late — it is inert because
-all-positive SFT gives it nothing to encode. Any conditioning signal has to come
-from labels that vary with behaviour.
+On the final checkpoint, evaluated on the training data with the caveat above,
+the advantage slot ranked **309 of 603** by attention received (1.100e-03 against
+a median slot's 1.112e-03) while the joints slot ranked **1** at 143.50x uniform.
+So the architecture concentrates hard on a slot that carries something, which
+removes "a transformer cannot single out one token" as an explanation. Masking
+the token moved the actions by 0.11% of observation-driven variation.
+
+**What this does and does not show.** It shows the masking and dropout
+implementation is correct, and it removes one competing explanation for the
+inert token: the token was present from step 0 here, so "it was introduced too
+late to matter" is not why. It does not show anything about RECAP, because RECAP
+conditions on labels that vary and every visible label here was POSITIVE. A
+near-zero effect is what an all-positive run predicts, not a finding about the
+method.
 
 ---
 
@@ -612,10 +635,17 @@ Raw scan JSON lives in the session state directory
 - The cause of the real-label token being inert is still unidentified. §5.10
   rules out "the trainer cannot learn a token" and §5.13 rules out "the token was
   introduced too late"; neither says which of the remaining hypotheses is right.
-- Masked all-positive SFT has now been run from scratch (§5.13). Masking and
-  omission are verified working, and the model still abandons the token, so the
-  remaining question is whether *varying* labels change that. The natural next
-  run is masked training on real critic labels rather than all-POSITIVE.
+- Masking and conditioning dropout are verified correct (§5.13), so implementation
+  bugs are ruled out as the reason the token is inert. The untested question is
+  whether *varying* labels change anything; every masked run so far has been
+  all-POSITIVE, where a null result is the prediction rather than a finding.
+- **Every token-effect number so far was measured on training data.**
+  `inspect_advantage_attention.py` takes the train loader, and the runs it has
+  been pointed at used `train_split=1.0`, so no held-out set existed. On training
+  data the observation alone largely determines the action, which is exactly the
+  regime that makes a conditioning token look most redundant — so the bias runs
+  toward the conclusion drawn. Re-measuring on held-out episodes is cheap and
+  should happen before any of these numbers go in a writeup.
 - Custom-vs-stock closed-loop smoothness difference remains unexplained.
 - The RECAP-vs-DAgger comparison holds data budget equal (18 episodes each) but
   RECAP receives fewer expert corrections (7 vs 18) and 11 autonomous episodes

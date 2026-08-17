@@ -305,6 +305,11 @@ def parse_args(argv=None):
     parser.add_argument("--batches", type=int, default=16)
     parser.add_argument("--device", default=None)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument(
+        "--on-train",
+        action="store_true",
+        help="Measure on the training split even when a holdout exists.",
+    )
     return parser.parse_args(argv)
 
 
@@ -325,7 +330,25 @@ def main(argv=None) -> int:
     model, legacy, cfg = load_policy(args.checkpoint, device)
     if args.dataset_repo_id:
         cfg = replace(cfg, dataset_repo_id=args.dataset_repo_id)
-    loader, _ = make_dataloaders(cfg)
+    train_loader, val_loader = make_dataloaders(cfg)
+    loader = val_loader if (val_loader is not None and not args.on_train) else train_loader
+    if loader is train_loader:
+        # Worth shouting about: on data the model trained on, the observation
+        # alone largely determines the action, which is the regime most likely to
+        # make a conditioning token look redundant. The bias runs toward finding
+        # the token inert, so a number measured here overstates the case.
+        print(
+            "WARNING: measuring on TRAINING data"
+            + (
+                " (--on-train)"
+                if args.on_train
+                else f" (train_split={cfg.train_split} leaves no holdout)"
+            )
+            + "; the token will look more redundant here than on held-out episodes",
+            flush=True,
+        )
+    else:
+        print(f"measuring on {len(loader.dataset)} held-out frames", flush=True)
 
     report = inspect(model, loader, device, args.batches, legacy=legacy)
     args.output_dir.mkdir(parents=True, exist_ok=True)
