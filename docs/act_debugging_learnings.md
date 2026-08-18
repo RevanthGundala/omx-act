@@ -1206,3 +1206,55 @@ adaln vs exztra token
 / middle-bottom
 | middle rightß
 \ bottom right
+## The CVAE latent is not competing with the advantage token (2026-08-17)
+
+**Hypothesis killed.** Two independent model reviews and this log all raised the
+same worry about the RECAP advantage token: during training the CVAE encoder
+infers `z` from *the very action chunk being predicted*, so the decoder gets the
+answer through a side channel and has no reason to use the token. At inference
+`z = 0`, so the model is never forced to find another route. If true, every
+"the token is inert" result would be diagnosing the CVAE rather than RECAP.
+
+It is false here, and the measurement is free: the KL term already reports how
+much the latent carries.
+
+**Argument 1 — the latent has collapsed.** The KL divergence upper-bounds the
+information `z` carries about the action chunk. With `kl_weight = 10`, recovering
+it from the training logs as `(loss - action_loss) / 10`:
+
+| run | labels | KL at start | KL at end | bits at end |
+|---|---|---:|---:|---:|
+| `armA` (rollouts+corrections 10k) | real | 0.0002 | 0.0001 | **0.0001** |
+| `armB` (rollouts only 10k) | real | 0.0002 | 0.0001 | **0.0001** |
+| `recap_masked_scratch_2k` | all-POSITIVE | 8.2746 | 0.0735 | 0.106 |
+
+The advantage token is **exactly 1 bit**. On the two runs where the token was
+measured inert, `z` carries **0.0001 bits** — four orders of magnitude less than
+the token it is supposed to be out-competing. This is ordinary posterior collapse
+driven by a high KL weight, and it means the latent is not a channel at all by
+the time any token measurement is taken.
+
+The from-scratch run shows the collapse happening: 8.27 nats at initialisation,
+0.07 by step 2000. Warm-started runs begin already collapsed, because they
+inherit an encoder that collapsed during the original 20k-step ACT training.
+
+**Argument 2 — the token already beat the latent head to head.** Test A planted a
+synthetic bit worth 0.50 z-units on the action target and measured 0.519 in the
+trained policy. That run had the CVAE **fully active** — `zero_latent` did not
+exist until commit `c3a134a`, well after. A constant offset on the target chunk
+is exactly the kind of structure a latent could absorb cheaply, and the latent
+did not absorb it: the token captured essentially all of the planted effect. A
+channel that loses a 0.50-unit signal it is well-suited to carry is not the
+reason a smaller signal goes missing.
+
+**Consequence.** The `zero_latent` ablation added in `c3a134a` is no longer worth
+GPU time as a diagnostic; it is retained as a control for completeness. More
+usefully, this removes an architectural explanation and pushes the remaining
+candidates toward the data: whether the advantage label carries information about
+the action *given the observation* at all.
+
+**Method note worth keeping.** The KL term is a free, continuously logged upper
+bound on latent information. Any question of the form "is the CVAE secretly
+carrying X" can be answered from the training log before running an experiment.
+We were about to spend GPU time on an ablation that the logs had already
+answered — twice, on runs completed weeks earlier.

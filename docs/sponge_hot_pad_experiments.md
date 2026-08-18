@@ -719,6 +719,12 @@ Raw scan JSON lives in the session state directory
   bugs are ruled out as the reason the token is inert. The untested question is
   whether *varying* labels change anything; every masked run so far has been
   all-POSITIVE, where a null result is the prediction rather than a finding.
+- **The CVAE-latent hypothesis is dead** (`docs/act_debugging_learnings.md`,
+  2026-08-17). The KL term upper-bounds what the latent carries, and on the
+  real-label runs it is 0.0001 bits against the token's 1 bit — the latent has
+  collapsed under `kl_weight=10` and is not a competing channel. Test A also
+  learned a planted 0.50 signal with the CVAE fully active. `zero_latent` is
+  retained as a control, not a diagnostic.
 - **Every token-effect number so far was measured on training data.**
   `inspect_advantage_attention.py` takes the train loader, and the runs it has
   been pointed at used `train_split=1.0`, so no held-out set existed. On training
