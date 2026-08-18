@@ -45,14 +45,20 @@ class ACTCritic(nn.Module):
             if parameter.dim() > 1:
                 nn.init.xavier_uniform_(parameter)
 
-    def forward(self, images, qpos):
-        z = torch.zeros(
+    def _zero_latent(self, qpos):
+        return torch.zeros(
             qpos.shape[0],
             self.d_z,
             dtype=qpos.dtype,
             device=qpos.device,
         )
-        return self.decoder(images, qpos, z)
+
+    def encode(self, images, qpos):
+        """Pooled observation embedding used by the value head. No advantage token."""
+        return self.decoder.features(images, qpos, self._zero_latent(qpos))
+
+    def forward(self, images, qpos):
+        return self.decoder(images, qpos, self._zero_latent(qpos))
 
 
 class Decoder(nn.Module):
@@ -112,7 +118,8 @@ class Decoder(nn.Module):
         self.final_norm = nn.LayerNorm(d_model)
         self.value_head = nn.Linear(d_model, num_bins)
 
-    def forward(self, images, joints, z):
+    def features(self, images, joints, z):
+        """Pooled ACT observation tokens; the value head is not applied."""
         images = self._prepare_images(images)
         batch_size, num_cameras = images.shape[:2]
         if num_cameras != self.num_cameras:
@@ -158,8 +165,10 @@ class Decoder(nn.Module):
                 pos=pos,
                 query_pos=query_pos,
             )
-        out = self.final_norm(out)
-        logits = self.value_head(out.mean(dim=1))
+        return self.final_norm(out).mean(dim=1)
+
+    def forward(self, images, joints, z):
+        logits = self.value_head(self.features(images, joints, z))
         return torch.distributions.Categorical(logits=logits)
 
     @staticmethod

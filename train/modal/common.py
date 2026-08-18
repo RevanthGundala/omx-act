@@ -43,6 +43,41 @@ def validate_pretrained_checkpoint_path(value: str | None) -> str | None:
     return str(path)
 
 
+def validate_probe_run(
+    *,
+    dataset_repo_id: str,
+    steps: int,
+    val_episodes: int,
+    job_name: str,
+    labels_path: str | None = None,
+    critic_checkpoint: str | None = None,
+    backend: str = "auto",
+) -> None:
+    """Refuse a probe that cannot answer the redundancy question.
+
+    A full-dataset fit (val_episodes=0 / train_split=1.0) would leak I through
+    near-duplicate neighbouring frames and make a high AUC meaningless.
+    """
+    if backend not in ("auto", "critic", "tiny"):
+        raise ValueError(f"backend must be one of auto/critic/tiny, got {backend!r}")
+    if not dataset_repo_id or "/" not in dataset_repo_id:
+        raise ValueError("dataset_repo_id must be a Hugging Face owner/name identifier.")
+    if steps <= 0:
+        raise ValueError("steps must be positive.")
+    if val_episodes <= 0:
+        raise ValueError(
+            "Held-out episodes are required; never train_split=1.0 for this probe."
+        )
+    if not job_name:
+        raise ValueError("job_name must be non-empty.")
+    if backend == "critic" and not critic_checkpoint:
+        raise ValueError("backend='critic' requires critic_checkpoint.")
+    if labels_path is not None:
+        validate_volume_relative_path(labels_path)
+    if critic_checkpoint is not None:
+        validate_volume_relative_path(critic_checkpoint)
+
+
 def validate_volume_relative_path(
     value: str,
     *,
