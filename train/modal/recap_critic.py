@@ -165,7 +165,7 @@ def train_critic_remote(
                 f"init_from not found on volume or image: {relative}"
             )
 
-    from train.recap.train_critic import main as train_main
+    from train.recap.critic import main as train_main
 
     print("=== STARTING RECAP CRITIC TRAINING ===")
     print(f"dataset={dataset_repo_id} steps={steps} val_episodes={val_episodes}")

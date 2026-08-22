@@ -101,11 +101,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--train-split", type=float, default=1.0,
         help="Fraction of episodes to train on; the remainder is held out (never trained on) via "
-        "--dataset.episodes, matching models/act/train.py's cfg.train_split. Default 1.0 preserves "
+        "--dataset.episodes, matching train/act/custom.py's cfg.train_split. Default 1.0 preserves "
         "the original behavior (train on all episodes, no holdout). Use e.g. 0.95 to hold out ~5%% "
         "of episodes for a fair comparison against the custom trainer's 95/5 split. NOTE: this is "
         "an EPISODE-level holdout (whole episodes excluded), not a frame-level random_split like "
-        "models/act/train.py currently uses -- episode-level avoids any risk of validation-frame "
+        "train/act/custom.py currently uses -- episode-level avoids any risk of validation-frame "
         "leakage from the same episode appearing in training.",
     )
     parser.add_argument(

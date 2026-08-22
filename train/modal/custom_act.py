@@ -256,7 +256,7 @@ def train_dataset_remote(
     monitor_thread = threading.Thread(target=sample_gpu, name="gpu-telemetry", daemon=True)
     monitor_thread.start()
     try:
-        from train.act.train import main as train_main
+        from train.act.custom import main as train_main
 
         train_main()
     finally:
@@ -307,7 +307,7 @@ def train_recap_policy_remote(
     """Train the advantage-conditioned RECAP policy.
 
     Architecture and optimization hyperparameters are inherited from
-    ``pretrained_checkpoint`` by train.recap.train_policy, so this entrypoint
+    ``pretrained_checkpoint`` by train.recap.policy, so this entrypoint
     only carries run identity and budget. Omitting ``labels_path`` runs the SFT
     stage with the indicator fixed to POSITIVE.
 
@@ -462,9 +462,9 @@ def train_recap_policy_remote(
     monitor_thread.start()
     try:
         if masked_sft:
-            from train.recap.train_masked_sft import main as train_main
+            from train.recap.masked_sft import main as train_main
         else:
-            from train.recap.train_policy import main as train_main
+            from train.recap.policy import main as train_main
 
         train_main()
     finally:
@@ -752,7 +752,7 @@ def check_token_loss_remote(
         flush=True,
     )
 
-    from models.recap.analysis.check_token_loss import format_report, run_ablation
+    from models.recap.analysis.token_loss import format_report, run_ablation
 
     report = run_ablation(
         checkpoint_path,

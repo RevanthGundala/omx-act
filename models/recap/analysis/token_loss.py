@@ -20,7 +20,7 @@ inference. Reported loss is ``action_loss`` from ``compute_loss`` (masked L1).
 
 Example (full 034 image eval belongs on Modal):
 
-    PYTHONPATH=. .venv/bin/python -m models.recap.analysis.check_token_loss \\
+    PYTHONPATH=. .venv/bin/python -m models.recap.analysis.token_loss \\
       --checkpoint /path/to/step_020000.pt \\
       --dataset-repo-id RevanthGundala/034-recap-balanced \\
       --labels /path/to/034-recap-balanced.json \\
@@ -28,7 +28,7 @@ Example (full 034 image eval belongs on Modal):
 
 CPU plumbing smoke (no checkpoint, no images):
 
-    PYTHONPATH=. .venv/bin/python -m models.recap.analysis.check_token_loss --smoke
+    PYTHONPATH=. .venv/bin/python -m models.recap.analysis.token_loss --smoke
 """
 
 from __future__ import annotations
@@ -42,8 +42,8 @@ import torch
 
 from configs.act.base import ACTConfig
 from models.act.episode_split import resolve_train_holdout_episodes
-from models.recap.act_recap import ACTPolicy, AdvantageCondition
-from train.recap.train_policy import (
+from models.recap.policy import ACTPolicy, AdvantageCondition
+from train.recap.policy import (
     AdvantageDataset,
     compute_loss,
     config_from_checkpoint,

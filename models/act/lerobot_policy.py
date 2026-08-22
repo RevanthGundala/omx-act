@@ -33,7 +33,7 @@ from torch import Tensor
 
 from configs.act.base import ACTConfig
 from models.act.act import ACTPolicy as BaseACTPolicy
-from models.recap.act_recap import (
+from models.recap.policy import (
     ACTPolicy as RecapACTPolicy,
     AdvantageCondition,
 )
@@ -360,7 +360,7 @@ def main() -> None:
     parser.add_argument(
         "--recap",
         action="store_true",
-        help="Export a models.recap.act_recap checkpoint.",
+        help="Export a models.recap.policy checkpoint.",
     )
     args = parser.parse_args()
     output = export_checkpoint(

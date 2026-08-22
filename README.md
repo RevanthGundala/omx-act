@@ -100,14 +100,14 @@ below. Never raise motor current or PID gains. Use
 uv run pytest -q
 
 # does this checkpoint actually use its advantage token?
-uv run python -m models.recap.analysis.check_token_sensitivity \
+uv run python -m models.recap.analysis.token_sensitivity \
   --checkpoint /path/to/step_020000.pt \
   --dataset-repo-id RevanthGundala/034-recap-balanced \
   --labels /path/to/advantage_labels.json \
   --batches 150
 
 # held-out L1 when the token is flipped / dropped
-uv run python -m models.recap.analysis.check_token_loss \
+uv run python -m models.recap.analysis.token_loss \
   --checkpoint /path/to/step_020000.pt \
   --dataset-repo-id RevanthGundala/034-recap-balanced \
   --labels /path/to/advantage_labels.json \
@@ -147,7 +147,7 @@ Local dataset that is not on Hugging Face:
 
 ```bash
 RECAP_POLICY_DATASET_ROOT=/path/to/036-recap-corr7 \
-  uv run python -m train.recap.train_policy
+  uv run python -m train.recap.policy
 ```
 
 Architecture and optimizer come from the warm-start checkpoint.

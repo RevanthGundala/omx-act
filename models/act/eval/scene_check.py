@@ -28,7 +28,7 @@ from models.act.eval.terminal_colors import colorize_status
 
 # Walk up to the marker rather than counting parents: a file that moves
 # depth silently puts the wrong directory on sys.path, and models/act on
-# sys.path makes models/act/train.py shadow the top-level train package.
+# sys.path makes train/act/custom.py shadow the top-level train package.
 REPO_ROOT = next(p for p in Path(__file__).resolve().parents if (p / "pyproject.toml").is_file())
 COVERAGE_JSON = REPO_ROOT / "outputs/dataset_audits/011_position_detections.json"
 

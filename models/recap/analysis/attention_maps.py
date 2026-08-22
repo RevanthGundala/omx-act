@@ -19,14 +19,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from models.recap.act_recap import AdvantageCondition
-from models.recap.act_recap import ACTPolicy as LegacyACTPolicy
-from models.recap.act_recap_masked import (
+from models.recap.policy import AdvantageCondition
+from models.recap.policy import ACTPolicy as LegacyACTPolicy
+from models.recap.masked import (
     ACTPolicy,
     AdvantageCondition as MaskedAdvantageCondition,
 )
-from models.recap.analysis.check_token_sensitivity import observation_scale
-from train.recap.train_policy import config_from_checkpoint
+from models.recap.analysis.token_sensitivity import observation_scale
+from train.recap.policy import config_from_checkpoint
 
 # Decoder memory layout, from act_recap_masked.Decoder.forward: the advantage
 # token is prepended to [z, joints, image patches]. Asserted in the tests, since

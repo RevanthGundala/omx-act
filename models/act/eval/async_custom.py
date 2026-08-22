@@ -40,8 +40,8 @@ from lerobot.datasets import LeRobotDatasetMetadata
 
 from configs.act.base import ACTConfig
 from models.act.act import ACTPolicy
-from models.recap.act_recap import ACTPolicy as RecapPolicy
-from models.recap.act_recap import AdvantageCondition
+from models.recap.policy import ACTPolicy as RecapPolicy
+from models.recap.policy import AdvantageCondition
 from models.act.eval.local import (
     create_follower,
     parse_camera_list,

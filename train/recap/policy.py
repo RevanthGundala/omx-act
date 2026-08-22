@@ -16,7 +16,7 @@ misalign a label with its transition.
 
 Example:
     RECAP_POLICY_PRETRAINED_CHECKPOINT=outputs/act_experiments/<run>/checkpoints/last.pt \
-      uv run python -m train.recap.train_policy
+      uv run python -m train.recap.policy
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset
 
 from configs.act.base import ACTConfig
-from models.recap.act_recap import ACTPolicy, AdvantageCondition
+from models.recap.policy import ACTPolicy, AdvantageCondition
 
 # The advantage token is the only thing a base ACT checkpoint cannot supply.
 ADVANTAGE_PARAMETERS = ("decoder.adv_proj.weight", "decoder.adv_proj.bias", "decoder.adv_pos_emb.weight")
@@ -208,7 +208,7 @@ def apply_conditioning_dropout(conditions: torch.Tensor, dropout: float, generat
 
 
 def compute_loss(model, batch, device, kl_weight, zero_latent: bool = False):
-    """L1 + KL, matching models/act/train.py, with the advantage token added.
+    """L1 + KL, matching train/act/custom.py, with the advantage token added.
 
     ``zero_latent`` withholds the target chunk from the CVAE encoder, so z is the
     zero vector it already is at inference. During normal training z is inferred

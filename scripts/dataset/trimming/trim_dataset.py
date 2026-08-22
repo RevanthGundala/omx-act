@@ -1,5 +1,5 @@
 """Produce a no-op-trimmed copy of a LeRobot v3.0 dataset, keeping the SAME v3.0 format (no
-FastWAM-style format conversion) so both models/act/train.py and stock lerobot-train can consume
+FastWAM-style format conversion) so both train/act/custom.py and stock lerobot-train can consume
 the result directly by repo_id, exactly like the source dataset.
 
 Trims only the leading/trailing near-static "settle" segment of each episode (see

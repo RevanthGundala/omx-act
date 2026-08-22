@@ -35,7 +35,7 @@ class ACTConfig:
     num_train_steps: int = 100_000
     learning_rate: float = 1e-5
     weight_decay: float = 1e-4
-    warmup_steps: int = 1000  # NOTE: not currently wired into a scheduler in models/act/train.py;
+    warmup_steps: int = 1000  # NOTE: not currently wired into a scheduler in train/act/custom.py;
     # LR stays constant at `learning_rate` throughout training, matching LeRobot's own ACT policy
     # (get_scheduler_preset() -> None, no scheduler either). Kept as a documented no-op rather
     # than silently removed, in case a scheduler is added later.

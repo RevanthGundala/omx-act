@@ -20,13 +20,13 @@ Interpretation:
                  a deeper function of o could still predict I.
 
 Example (local smoke, no dataset):
-    PYTHONPATH=. .venv/bin/python -m models.recap.analysis.probe_advantage_from_obs --smoke
+    PYTHONPATH=. .venv/bin/python -m models.recap.analysis.probe_advantage --smoke
 
 Example (full run; prefer Modal):
     RECAP_PROBE_DATASET_REPO_ID=RevanthGundala/034-recap-balanced \\
       RECAP_PROBE_LABELS=.../034-recap-balanced.json \\
       RECAP_PROBE_CRITIC_CHECKPOINT=.../best_critic.pt \\
-      PYTHONPATH=. python -m models.recap.analysis.probe_advantage_from_obs
+      PYTHONPATH=. python -m models.recap.analysis.probe_advantage
 """
 
 from __future__ import annotations
@@ -44,10 +44,10 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset, TensorDataset
 
 from configs.act.base import ACTConfig
-from models.recap.act_critic import ACTCritic
-from models.recap.act_recap import AdvantageCondition
-from train.recap.train_critic import expected_return, load_episode_outcomes, split_episodes
-from train.recap.train_policy import load_conditions
+from models.recap.critic import ACTCritic
+from models.recap.policy import AdvantageCondition
+from train.recap.critic import expected_return, load_episode_outcomes, split_episodes
+from train.recap.policy import load_conditions
 
 
 POSITIVE = int(AdvantageCondition.POSITIVE)
@@ -604,7 +604,7 @@ def config_from_env() -> ACTConfig:
 
 
 def main() -> dict:
-    from train.recap.train_critic import CriticDataset
+    from train.recap.critic import CriticDataset
 
     cfg = config_from_env()
     labels_path = os.environ.get("RECAP_PROBE_LABELS")

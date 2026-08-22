@@ -22,7 +22,7 @@ from torch.utils.data import DataLoader, Dataset
 from configs.act.base import ACTConfig
 from lerobot.datasets import LeRobotDataset, LeRobotDatasetMetadata
 from lerobot.transforms.transforms import ImageTransforms, ImageTransformsConfig
-from models.recap.act_critic import ACTCritic
+from models.recap.critic import ACTCritic
 
 # Sec. IV-A: the empirical return is discretized into B = 201 bins.
 NUM_BINS = 201

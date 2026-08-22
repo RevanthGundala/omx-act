@@ -2,8 +2,8 @@
 
 import torch
 
-from models.recap.act_recap import AdvantageCondition
-from models.recap.analysis.check_token_sensitivity import (
+from models.recap.policy import AdvantageCondition
+from models.recap.analysis.token_sensitivity import (
     observation_scale,
     summarize,
     verdict,

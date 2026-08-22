@@ -11,7 +11,7 @@ from models.act.lerobot_policy import (
     CustomACTPolicy,
     _adapter_config,
 )
-from models.recap.act_recap import (
+from models.recap.policy import (
     ACTPolicy as RecapACTPolicy,
     AdvantageCondition,
 )

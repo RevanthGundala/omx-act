@@ -29,7 +29,7 @@ from lerobot.policies.factory import get_policy_class, make_pre_post_processors
 
 # Walk up to the marker rather than counting parents: a file that moves
 # depth silently puts the wrong directory on sys.path, and models/act on
-# sys.path makes models/act/train.py shadow the top-level train package.
+# sys.path makes train/act/custom.py shadow the top-level train package.
 sys.path.insert(0, str(next(p for p in Path(__file__).resolve().parents if (p / "pyproject.toml").is_file())))
 
 import models.act.lerobot_policy  # noqa: F401 -- register custom_act

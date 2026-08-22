@@ -420,8 +420,8 @@ def remote_training_command(args: argparse.Namespace) -> str:
 
     hf_token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_HUB_TOKEN") or get_token() or ""
     module = {
-        "custom": "train.act.train",
-        "lerobot": "train.act.train_lerobot",
+        "custom": "train.act.custom",
+        "lerobot": "train.act.lerobot",
     }[args.runner]
     job_name = args.job_name or f"act_{args.runner}_train_chunk{args.chunk_size}_steps{args.steps}"
     return f"""bash -lc 'set -euo pipefail

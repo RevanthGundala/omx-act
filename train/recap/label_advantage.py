@@ -1,6 +1,6 @@
 """Label RECAP transitions with an advantage-conditioning token (arXiv:2511.14759).
 
-The critic from train/recap/train_critic.py is observation-only, so the
+The critic from train/recap/critic.py is observation-only, so the
 advantage of an executed action is recovered from the reward sequence that
 followed it rather than from a Q(o, a). Sec. III gives the n-step form
 
@@ -65,9 +65,9 @@ from torch.utils.data import DataLoader
 
 from configs.act.base import ACTConfig
 from lerobot.datasets import LeRobotDataset
-from models.recap.act_critic import ACTCritic
-from models.recap.act_recap import AdvantageCondition
-from train.recap.train_critic import CriticDataset, expected_return
+from models.recap.critic import ACTCritic
+from models.recap.policy import AdvantageCondition
+from train.recap.critic import CriticDataset, expected_return
 
 def task_percentile_thresholds(
     advantages: torch.Tensor,
@@ -401,7 +401,7 @@ def main():
     cfg = config_from_env()
     checkpoint_path = os.environ.get("RECAP_CRITIC_CHECKPOINT")
     if not checkpoint_path:
-        raise ValueError("Set RECAP_CRITIC_CHECKPOINT to a checkpoint from train/recap/train_critic.py")
+        raise ValueError("Set RECAP_CRITIC_CHECKPOINT to a checkpoint from train/recap/critic.py")
     n_step = int(os.environ.get("RECAP_ADVANTAGE_N_STEP", cfg.recap_n_step))
     positive_fraction = float(
         os.environ.get("RECAP_ADVANTAGE_POSITIVE_FRACTION", cfg.recap_positive_fraction)

@@ -32,7 +32,7 @@ import numpy as np
 
 # Walk up to the marker rather than counting parents: a file that moves
 # depth silently puts the wrong directory on sys.path, and models/act on
-# sys.path makes models/act/train.py shadow the top-level train package.
+# sys.path makes train/act/custom.py shadow the top-level train package.
 REPO_ROOT = next(p for p in Path(__file__).resolve().parents if (p / "pyproject.toml").is_file())
 sys.path.insert(0, str(REPO_ROOT))
 

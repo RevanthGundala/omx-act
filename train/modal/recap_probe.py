@@ -182,7 +182,7 @@ def probe_remote(
     commit_thread = threading.Thread(target=commit_loop, daemon=True)
     commit_thread.start()
     try:
-        from models.recap.analysis.probe_advantage_from_obs import main as probe_main
+        from models.recap.analysis.probe_advantage import main as probe_main
 
         result = probe_main()
     finally:
@@ -299,7 +299,7 @@ def action_mi_remote(
     os.environ["RECAP_DEVICE"] = "cuda"
     from datetime import datetime, timezone
 
-    from models.recap.analysis.check_action_label_mi import format_report, run_check
+    from models.recap.analysis.action_label_mi import format_report, run_check
 
     print(
         "action_mi_config "

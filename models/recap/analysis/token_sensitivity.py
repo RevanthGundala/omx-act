@@ -23,7 +23,7 @@ Actions are z-normalized by the dataset's own statistics, so every number here
 is in standard deviations of that joint's action distribution.
 
 Example:
-    uv run python -m models.recap.analysis.check_token_sensitivity \
+    uv run python -m models.recap.analysis.token_sensitivity \
       --checkpoint outputs/act_experiments/recap_policy/<run>/checkpoints/last.pt \
       --dataset-repo-id RevanthGundala/034-recap-balanced \
       --labels outputs/datasets/034-recap-balanced/advantage_labels.json
@@ -40,8 +40,8 @@ from pathlib import Path
 import torch
 
 from configs.act.base import ACTConfig
-from models.recap.act_recap import ACTPolicy, AdvantageCondition
-from train.recap.train_policy import (
+from models.recap.policy import ACTPolicy, AdvantageCondition
+from train.recap.policy import (
     AdvantageDataset,
     config_from_checkpoint,
     load_conditions,

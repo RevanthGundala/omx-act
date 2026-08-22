@@ -22,7 +22,7 @@ import time
 
 import torch
 
-from models.recap.act_recap_masked import (
+from models.recap.masked import (
     ACTPolicy,
     MASKED_ADVANTAGE,
     AdvantageCondition,
@@ -33,7 +33,7 @@ ADVANTAGE_PARAMETERS = (
     "decoder.advantage_embedding.weight",
     "decoder.adv_pos_emb.weight",
 )
-from train.recap.train_policy import (
+from train.recap.policy import (
     AdvantageDataset,
     compute_loss,
     config_from_env,

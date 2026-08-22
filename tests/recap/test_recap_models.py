@@ -10,15 +10,17 @@ import torch
 from configs.act.base import ACTConfig
 from models.act.act import ACTPolicy as BaseACTPolicy
 from models.act.attention import Attention as BaseAttention
-import train.recap.train_critic as train_critic
-from models.recap.act_critic import ACTCritic
-from models.recap.act_recap import ACTPolicy as RecapACTPolicy, AdvantageCondition
-from models.recap.act_recap_masked import (
+import train.recap.critic as train_critic
+import train.recap.policy as train_policy
+import train.recap.masked_sft as train_masked_sft
+from models.recap.critic import ACTCritic
+from models.recap.policy import ACTPolicy as RecapACTPolicy, AdvantageCondition
+from models.recap.masked import (
     ACTPolicy as MaskedRecapACTPolicy,
     AdvantageCondition as MaskedAdvantageCondition,
     MASKED_ADVANTAGE,
 )
-from models.recap.analysis.inspect_advantage_attention import convert_legacy_state_dict
+from models.recap.analysis.attention_maps import convert_legacy_state_dict
 from models.recap.attention import Attention as RecapAttention
 
 
@@ -26,12 +28,7 @@ NUM_BINS_FOR_TEST = 11
 from dataclasses import asdict, replace
 from lerobot.datasets import LeRobotDataset
 import numpy as np
-from train.recap import (
-    label_advantage,
-    train_critic,
-    train_masked_sft,
-    train_policy,
-)
+from train.recap import label_advantage
 from scripts.recap.build_dataset import build_features, recap_rewards
 
 def _config() -> ACTConfig:
@@ -1329,7 +1326,7 @@ def test_corrections_are_forced_positive_regardless_of_advantage():
     score it below eps_l. Conditioning on that would teach the policy to
     imitate expert recoveries under the negative token.
     """
-    from models.recap.act_recap import AdvantageCondition
+    from models.recap.policy import AdvantageCondition
     from train.recap.label_advantage import force_corrections_positive
 
     conditions = torch.tensor(
@@ -1353,7 +1350,7 @@ def test_corrections_are_forced_positive_regardless_of_advantage():
 
 
 def test_forcing_never_downgrades_an_autonomous_positive():
-    from models.recap.act_recap import AdvantageCondition
+    from models.recap.policy import AdvantageCondition
     from train.recap.label_advantage import force_corrections_positive
 
     conditions = torch.full((5,), int(AdvantageCondition.POSITIVE))
@@ -1426,7 +1423,7 @@ def test_labels_from_a_different_dataset_are_rejected():
     inheriting it while using labels built for the larger RECAP set leaves every
     id in range and pairs transitions with other transitions' tokens.
     """
-    from train.recap.train_policy import AdvantageDataset
+    from train.recap.policy import AdvantageDataset
 
     dataset = _FrameIdACTDataset(range(48))
     conditions = torch.zeros(96, dtype=torch.long)
@@ -1436,7 +1433,7 @@ def test_labels_from_a_different_dataset_are_rejected():
 
 
 def test_matching_label_and_dataset_lengths_are_accepted():
-    from train.recap.train_policy import AdvantageDataset
+    from train.recap.policy import AdvantageDataset
 
     dataset = _FrameIdACTDataset(range(48))
     wrapped = AdvantageDataset(dataset, torch.zeros(48, dtype=torch.long), total_frames=48)
@@ -1445,7 +1442,7 @@ def test_matching_label_and_dataset_lengths_are_accepted():
 
 def test_a_held_out_split_does_not_trip_the_binding_check():
     """make_dataloaders holds episodes out, so the split is smaller than the set."""
-    from train.recap.train_policy import AdvantageDataset
+    from train.recap.policy import AdvantageDataset
 
     # 30 training frames drawn from a 48-frame dataset, labels cover all 48.
     dataset = _FrameIdACTDataset(range(30))
@@ -1456,7 +1453,7 @@ def test_a_held_out_split_does_not_trip_the_binding_check():
 
 
 def test_out_of_range_frame_ids_are_still_caught():
-    from train.recap.train_policy import AdvantageDataset
+    from train.recap.policy import AdvantageDataset
 
     dataset = _FrameIdACTDataset(range(60))
     with pytest.raises(ValueError, match="relabel"):
@@ -1902,7 +1899,7 @@ def test_inspector_slot_constants_match_the_decoder_memory_layout():
     Identifies each slot by construction: give the decoder a distinctive input
     and check which memory position carries it.
     """
-    from models.recap import inspect_advantage_attention as inspector
+    from models.recap.analysis import attention_maps as inspector
 
     cfg = _config()
     model = MaskedRecapACTPolicy(cfg, pretrained_backbone=False).eval()
