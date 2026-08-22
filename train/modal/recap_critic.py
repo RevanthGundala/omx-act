@@ -54,6 +54,7 @@ image = (
     .add_local_dir("models", remote_path=str(REMOTE_WORKSPACE / "models"))
     .add_local_dir("configs", remote_path=str(REMOTE_WORKSPACE / "configs"))
     .add_local_dir("utils", remote_path=str(REMOTE_WORKSPACE / "utils"))
+    .add_local_dir("train", remote_path=str(REMOTE_WORKSPACE / "train"))
     .add_local_file("train/modal/common.py", remote_path="/root/modal_common.py")
 )
 
@@ -164,7 +165,7 @@ def train_critic_remote(
                 f"init_from not found on volume or image: {relative}"
             )
 
-    from models.recap.train_critic import main as train_main
+    from train.recap.train_critic import main as train_main
 
     print("=== STARTING RECAP CRITIC TRAINING ===")
     print(f"dataset={dataset_repo_id} steps={steps} val_episodes={val_episodes}")
@@ -239,7 +240,7 @@ def label_remote(
         f"critic={ckpt_path} out={out_path}",
         flush=True,
     )
-    from models.recap.label_advantage import main as label_main
+    from train.recap.label_advantage import main as label_main
 
     label_main()
     vol.commit()

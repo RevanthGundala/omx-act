@@ -9,7 +9,7 @@ Episodes are decoded one at a time. Loading every episode first would cost tens
 of gigabytes at this size, which is the failure the rollout builder already hit.
 
 Example:
-    uv run python -m models.recap.build_gen_dataset \
+    uv run python -m scripts.recap.build_gen_dataset \
       --demo-dataset ~/.cache/huggingface/lerobot/026-place-sponge-on-hot-pad-clean \
       --rollout-root outputs/eval_rollouts_recap_positive/act_eval_async_20260813-104729 \
       --correction-dataset ~/.cache/huggingface/lerobot/rollout_032-recap-gen2-dagger \
@@ -25,7 +25,7 @@ import json
 from pathlib import Path
 import shutil
 
-from models.recap.build_dataset import (
+from scripts.recap.build_dataset import (
     _lerobot_specs,
     _trial_spec,
     build_mixed_dataset,

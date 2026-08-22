@@ -43,7 +43,7 @@ import torch
 from configs.act.base import ACTConfig
 from models.act.episode_split import resolve_train_holdout_episodes
 from models.recap.act_recap import ACTPolicy, AdvantageCondition
-from models.recap.train_policy import (
+from train.recap.train_policy import (
     AdvantageDataset,
     compute_loss,
     config_from_checkpoint,

@@ -5,9 +5,9 @@ import numpy as np
 import pytest
 import torch
 
-import models.act.train as train_module
+import train.act.train as train_module
 from configs.act.base import ACTConfig
-from models.act.train import config_from_env
+from train.act.train import config_from_env
 
 
 def test_config_from_env_can_train_on_all_episodes(monkeypatch):

@@ -7,8 +7,8 @@ import numpy as np
 import pytest
 
 from models.act.eval.rollout_capture import RolloutVideoRecorder
-import models.recap.build_dataset as build_dataset_module
-from models.recap.build_dataset import (
+import scripts.recap.build_dataset as build_dataset_module
+from scripts.recap.build_dataset import (
     build_dataset,
     discover_trial_dirs,
     load_trial,
@@ -258,7 +258,7 @@ def test_build_decodes_one_trial_at_a_time(tmp_path, monkeypatch):
 def test_image_to_hwc_uint8_matches_video_decoder_layout():
     import torch
 
-    from models.recap.build_dataset import _image_to_hwc_uint8
+    from scripts.recap.build_dataset import _image_to_hwc_uint8
 
     chw_float = torch.zeros(3, 4, 5)
     chw_float[0] = 1.0

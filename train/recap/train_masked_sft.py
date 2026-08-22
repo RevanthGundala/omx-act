@@ -33,7 +33,7 @@ ADVANTAGE_PARAMETERS = (
     "decoder.advantage_embedding.weight",
     "decoder.adv_pos_emb.weight",
 )
-from models.recap.train_policy import (
+from train.recap.train_policy import (
     AdvantageDataset,
     compute_loss,
     config_from_env,

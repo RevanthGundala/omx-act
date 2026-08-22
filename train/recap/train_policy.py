@@ -16,7 +16,7 @@ misalign a label with its transition.
 
 Example:
     RECAP_POLICY_PRETRAINED_CHECKPOINT=outputs/act_experiments/<run>/checkpoints/last.pt \
-      uv run python -m models.recap.train_policy
+      uv run python -m train.recap.train_policy
 """
 
 from __future__ import annotations

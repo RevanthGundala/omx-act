@@ -76,7 +76,7 @@ def load_return_range(dataset_root: Path, dataset=None) -> tuple[float, float]:
         max_episode_steps, failure_penalty, _ = derive_return_metadata(dataset)
     else:
         raise FileNotFoundError(
-            f"Missing {manifest_path}; build the dataset with models/recap/build_dataset.py."
+            f"Missing {manifest_path}; build the dataset with scripts/recap/build_dataset.py."
         )
     return -(max_episode_steps - 1) - failure_penalty, 0.0
 

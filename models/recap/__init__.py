@@ -7,6 +7,6 @@ Architectural variants live in their own folders:
 * ``critic/``   — observation-only ``V(o)``. No CVAE, no action input.
 * ``analysis/`` — token-sensitivity, held-out L1, I(a;I|o), attention.
 
-Old module paths (``act_recap``, ``check_token_sensitivity``, …) re-export
-from those folders.
+Training loops live in ``train/recap/``. Dataset builders live in
+``scripts/recap/``. Old ``act_recap`` / ``check_*`` paths still re-export.
 """

@@ -31,7 +31,7 @@ dependencies = [
 environments = ["sys_platform == 'darwin'", "sys_platform == 'linux'"]
 
 [tool.setuptools.packages.find]
-include = ["configs*", "models*", "utils*"]
+include = ["configs*", "models*", "train*", "scripts*", "utils*"]
 
 [dependency-groups]
 dev = [

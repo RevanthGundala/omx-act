@@ -30,6 +30,8 @@ WORKDIR /tmp/act-sim-deps
 COPY pyproject.toml README.md ./
 COPY configs ./configs
 COPY models ./models
+COPY train ./train
+COPY scripts ./scripts
 COPY utils ./utils
 RUN python -m pip install --no-cache-dir -e .
 

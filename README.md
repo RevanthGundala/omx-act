@@ -136,7 +136,7 @@ uv run modal run --detach train/modal/custom_act.py \
 
 # RECAP: critic → labels → policy
 uv run modal run --detach train/modal/recap_critic.py
-uv run python -m models.recap.label_advantage --help
+uv run python -m train.recap.label_advantage --help
 uv run modal run --detach train/modal/custom_act.py::recap_policy \
   --pretrained-checkpoint act_experiments/<run>/checkpoints/last.pt \
   --dataset-repo-id RevanthGundala/034-recap-balanced \
@@ -147,7 +147,7 @@ Local dataset that is not on Hugging Face:
 
 ```bash
 RECAP_POLICY_DATASET_ROOT=/path/to/036-recap-corr7 \
-  uv run python -m models.recap.train_policy
+  uv run python -m train.recap.train_policy
 ```
 
 Architecture and optimizer come from the warm-start checkpoint.
@@ -163,8 +163,10 @@ models/recap/
   masked/            token can be omitted
   critic/            V(o) only — no CVAE
   analysis/          token checks (sensitivity, L1, I(a;I|o), attention)
-  train_*.py         critic / policy / masked-SFT trainers
 scripts/dataset/     dataset surgery, DAgger aggregate
+scripts/recap/       build RECAP mixes from demos / rollouts / corrections
+train/act/           ACT training loops
+train/recap/         critic, labeling, RECAP policy training
 train/modal/         Modal launchers + watchdog
 train/vastai/        vast.ai launchers
 configs/act/base.py  hyperparameters

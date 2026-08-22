@@ -26,7 +26,7 @@ from models.recap.act_recap_masked import (
     AdvantageCondition as MaskedAdvantageCondition,
 )
 from models.recap.analysis.check_token_sensitivity import observation_scale
-from models.recap.train_policy import config_from_checkpoint
+from train.recap.train_policy import config_from_checkpoint
 
 # Decoder memory layout, from act_recap_masked.Decoder.forward: the advantage
 # token is prepended to [z, joints, image patches]. Asserted in the tests, since

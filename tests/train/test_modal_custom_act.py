@@ -173,7 +173,7 @@ def test_masked_sft_uses_a_separate_trainer_path(repo_root):
     # The masked experiment must not quietly run through the legacy trainer;
     # they differ in architecture, not just hyperparameters.
     assert "masked_sft: bool = False" in source
-    assert "from models.recap.train_masked_sft import main as train_main" in source
+    assert "from train.recap.train_masked_sft import main as train_main" in source
     assert 'stage = "masked_sft_positive"' in source
 
 

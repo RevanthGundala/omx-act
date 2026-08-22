@@ -41,7 +41,7 @@ import torch
 
 from configs.act.base import ACTConfig
 from models.recap.act_recap import ACTPolicy, AdvantageCondition
-from models.recap.train_policy import (
+from train.recap.train_policy import (
     AdvantageDataset,
     config_from_checkpoint,
     load_conditions,

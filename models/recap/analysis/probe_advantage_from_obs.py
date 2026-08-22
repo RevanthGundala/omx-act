@@ -46,8 +46,8 @@ from torch.utils.data import DataLoader, Dataset, TensorDataset
 from configs.act.base import ACTConfig
 from models.recap.act_critic import ACTCritic
 from models.recap.act_recap import AdvantageCondition
-from models.recap.train_critic import expected_return, load_episode_outcomes, split_episodes
-from models.recap.train_policy import load_conditions
+from train.recap.train_critic import expected_return, load_episode_outcomes, split_episodes
+from train.recap.train_policy import load_conditions
 
 
 POSITIVE = int(AdvantageCondition.POSITIVE)
@@ -604,7 +604,7 @@ def config_from_env() -> ACTConfig:
 
 
 def main() -> dict:
-    from models.recap.train_critic import CriticDataset
+    from train.recap.train_critic import CriticDataset
 
     cfg = config_from_env()
     labels_path = os.environ.get("RECAP_PROBE_LABELS")

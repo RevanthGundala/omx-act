@@ -10,7 +10,7 @@ import torch
 from configs.act.base import ACTConfig
 from models.act.act import ACTPolicy as BaseACTPolicy
 from models.act.attention import Attention as BaseAttention
-from models.recap import train_critic
+import train.recap.train_critic as train_critic
 from models.recap.act_critic import ACTCritic
 from models.recap.act_recap import ACTPolicy as RecapACTPolicy, AdvantageCondition
 from models.recap.act_recap_masked import (
@@ -26,13 +26,13 @@ NUM_BINS_FOR_TEST = 11
 from dataclasses import asdict, replace
 from lerobot.datasets import LeRobotDataset
 import numpy as np
-from models.recap import (
+from train.recap import (
     label_advantage,
     train_critic,
     train_masked_sft,
     train_policy,
 )
-from models.recap.build_dataset import build_features, recap_rewards
+from scripts.recap.build_dataset import build_features, recap_rewards
 
 def _config() -> ACTConfig:
     return ACTConfig(
@@ -1330,7 +1330,7 @@ def test_corrections_are_forced_positive_regardless_of_advantage():
     imitate expert recoveries under the negative token.
     """
     from models.recap.act_recap import AdvantageCondition
-    from models.recap.label_advantage import force_corrections_positive
+    from train.recap.label_advantage import force_corrections_positive
 
     conditions = torch.tensor(
         [
@@ -1354,7 +1354,7 @@ def test_corrections_are_forced_positive_regardless_of_advantage():
 
 def test_forcing_never_downgrades_an_autonomous_positive():
     from models.recap.act_recap import AdvantageCondition
-    from models.recap.label_advantage import force_corrections_positive
+    from train.recap.label_advantage import force_corrections_positive
 
     conditions = torch.full((5,), int(AdvantageCondition.POSITIVE))
     forced = force_corrections_positive(conditions, torch.zeros(5, dtype=torch.bool))
@@ -1362,7 +1362,7 @@ def test_forcing_never_downgrades_an_autonomous_positive():
 
 
 def test_forcing_rejects_a_misaligned_intervention_vector():
-    from models.recap.label_advantage import force_corrections_positive
+    from train.recap.label_advantage import force_corrections_positive
 
     with pytest.raises(ValueError, match="does not match"):
         force_corrections_positive(torch.zeros(4, dtype=torch.long), torch.zeros(3, dtype=torch.bool))
@@ -1370,7 +1370,7 @@ def test_forcing_rejects_a_misaligned_intervention_vector():
 
 def test_the_threshold_can_ignore_frames_that_are_forced_positive():
     """Corrections would otherwise move eps_l for data whose label is decided."""
-    from models.recap.label_advantage import task_percentile_thresholds
+    from train.recap.label_advantage import task_percentile_thresholds
 
     # Corrections carry extreme advantages; excluding them must change eps_l.
     advantages = torch.tensor([0.0, 1.0, 2.0, 3.0, 100.0, 200.0])
@@ -1385,7 +1385,7 @@ def test_the_threshold_can_ignore_frames_that_are_forced_positive():
 
 
 def test_a_mask_that_excludes_everything_is_rejected():
-    from models.recap.label_advantage import task_percentile_thresholds
+    from train.recap.label_advantage import task_percentile_thresholds
 
     with pytest.raises(ValueError, match="excludes every frame"):
         task_percentile_thresholds(
@@ -1394,7 +1394,7 @@ def test_a_mask_that_excludes_everything_is_rejected():
 
 
 def test_the_masked_threshold_hits_the_requested_fraction_on_unmasked_data():
-    from models.recap.label_advantage import task_percentile_thresholds
+    from train.recap.label_advantage import task_percentile_thresholds
 
     advantages = torch.arange(100.0)
     mask = torch.ones(100, dtype=torch.bool)
@@ -1426,7 +1426,7 @@ def test_labels_from_a_different_dataset_are_rejected():
     inheriting it while using labels built for the larger RECAP set leaves every
     id in range and pairs transitions with other transitions' tokens.
     """
-    from models.recap.train_policy import AdvantageDataset
+    from train.recap.train_policy import AdvantageDataset
 
     dataset = _FrameIdACTDataset(range(48))
     conditions = torch.zeros(96, dtype=torch.long)
@@ -1436,7 +1436,7 @@ def test_labels_from_a_different_dataset_are_rejected():
 
 
 def test_matching_label_and_dataset_lengths_are_accepted():
-    from models.recap.train_policy import AdvantageDataset
+    from train.recap.train_policy import AdvantageDataset
 
     dataset = _FrameIdACTDataset(range(48))
     wrapped = AdvantageDataset(dataset, torch.zeros(48, dtype=torch.long), total_frames=48)
@@ -1445,7 +1445,7 @@ def test_matching_label_and_dataset_lengths_are_accepted():
 
 def test_a_held_out_split_does_not_trip_the_binding_check():
     """make_dataloaders holds episodes out, so the split is smaller than the set."""
-    from models.recap.train_policy import AdvantageDataset
+    from train.recap.train_policy import AdvantageDataset
 
     # 30 training frames drawn from a 48-frame dataset, labels cover all 48.
     dataset = _FrameIdACTDataset(range(30))
@@ -1456,7 +1456,7 @@ def test_a_held_out_split_does_not_trip_the_binding_check():
 
 
 def test_out_of_range_frame_ids_are_still_caught():
-    from models.recap.train_policy import AdvantageDataset
+    from train.recap.train_policy import AdvantageDataset
 
     dataset = _FrameIdACTDataset(range(60))
     with pytest.raises(ValueError, match="relabel"):

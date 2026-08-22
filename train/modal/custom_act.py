@@ -69,6 +69,7 @@ image = (
     .add_local_dir("models", remote_path=str(REMOTE_WORKSPACE / "models"))
     .add_local_dir("configs", remote_path=str(REMOTE_WORKSPACE / "configs"))
     .add_local_dir("utils", remote_path=str(REMOTE_WORKSPACE / "utils"))
+    .add_local_dir("train", remote_path=str(REMOTE_WORKSPACE / "train"))
     .add_local_file("train/modal/common.py", remote_path="/root/modal_common.py")
 )
 app = modal.App("omx-custom-act-training", image=image)
@@ -255,7 +256,7 @@ def train_dataset_remote(
     monitor_thread = threading.Thread(target=sample_gpu, name="gpu-telemetry", daemon=True)
     monitor_thread.start()
     try:
-        from models.act.train import main as train_main
+        from train.act.train import main as train_main
 
         train_main()
     finally:
@@ -306,7 +307,7 @@ def train_recap_policy_remote(
     """Train the advantage-conditioned RECAP policy.
 
     Architecture and optimization hyperparameters are inherited from
-    ``pretrained_checkpoint`` by models.recap.train_policy, so this entrypoint
+    ``pretrained_checkpoint`` by train.recap.train_policy, so this entrypoint
     only carries run identity and budget. Omitting ``labels_path`` runs the SFT
     stage with the indicator fixed to POSITIVE.
 
@@ -461,9 +462,9 @@ def train_recap_policy_remote(
     monitor_thread.start()
     try:
         if masked_sft:
-            from models.recap.train_masked_sft import main as train_main
+            from train.recap.train_masked_sft import main as train_main
         else:
-            from models.recap.train_policy import main as train_main
+            from train.recap.train_policy import main as train_main
 
         train_main()
     finally:

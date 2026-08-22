@@ -35,8 +35,8 @@ import torch
 
 from configs.act.base import ACTConfig
 from models.recap.act_recap import AdvantageCondition
-from models.recap.label_advantage import episode_layout, n_step_advantages
-from models.recap.train_policy import load_conditions
+from train.recap.label_advantage import episode_layout, n_step_advantages
+from train.recap.train_policy import load_conditions
 
 
 POSITIVE = int(AdvantageCondition.POSITIVE)
@@ -189,7 +189,7 @@ def encode_critic_features(
     """Pooled encoder features and scalar V(o) for every dataset frame."""
     from torch.utils.data import DataLoader
 
-    from models.recap.train_critic import expected_return
+    from train.recap.train_critic import expected_return
 
     model.eval()
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
@@ -280,7 +280,7 @@ def run_check(
     seed: int = 0,
 ) -> dict:
     from models.recap.analysis.probe_advantage_from_obs import load_frozen_critic
-    from models.recap.train_critic import CriticDataset
+    from train.recap.train_critic import CriticDataset
 
     cfg = ACTConfig(dataset_repo_id=dataset_repo_id)
     dataset = CriticDataset(cfg)

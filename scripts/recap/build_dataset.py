@@ -11,7 +11,7 @@ is greater than the longest rollout, ensuring every failed return is lower than
 every successful return while keeping critic targets finite.
 
 Example:
-    uv run python -m models.recap.build_dataset \
+    uv run python -m scripts.recap.build_dataset \
       --rollout-root outputs/eval_rollouts \
       --target-repo RevanthGundala/rollout_sponge_recap \
       --output-root outputs/datasets/rollout_sponge_recap

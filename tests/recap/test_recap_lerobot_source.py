@@ -106,7 +106,7 @@ def test_autonomous_rollout_frames_are_not_interventions():
     """A rollout trial is entirely policy action."""
     import numpy as np
 
-    from models.recap import build_dataset
+    from scripts.recap import build_dataset
 
     frame = build_dataset._recap_frame(
         qpos=np.zeros(2, dtype=np.float32),
@@ -128,7 +128,7 @@ def test_autonomous_rollout_frames_are_not_interventions():
 
 
 def test_the_builder_stores_an_intervention_column():
-    from models.recap.build_dataset import build_features
+    from scripts.recap.build_dataset import build_features
 
     features = build_features(
         camera_names=("top",),
