@@ -18,7 +18,7 @@ from models.recap.act_recap_masked import (
     AdvantageCondition as MaskedAdvantageCondition,
     MASKED_ADVANTAGE,
 )
-from models.recap.inspect_advantage_attention import convert_legacy_state_dict
+from models.recap.analysis.inspect_advantage_attention import convert_legacy_state_dict
 from models.recap.attention import Attention as RecapAttention
 
 
@@ -1946,7 +1946,7 @@ def test_advantage_equals_the_difference_of_critic_residuals():
     Verified numerically on a random episode rather than trusted as algebra,
     because it is the basis for reading the advantage as critic error.
     """
-    from models.recap.advantage_noise_bound import advantage_noise_std
+    from models.recap.analysis.advantage_noise_bound import advantage_noise_std
 
     rng = torch.Generator().manual_seed(0)
     steps, lookahead, c_fail = 200, 50, 704.0

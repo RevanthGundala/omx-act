@@ -751,7 +751,7 @@ def check_token_loss_remote(
         flush=True,
     )
 
-    from models.recap.check_token_loss import format_report, run_ablation
+    from models.recap.analysis.check_token_loss import format_report, run_ablation
 
     report = run_ablation(
         checkpoint_path,

@@ -6,7 +6,7 @@ import pytest
 import torch
 
 from models.recap.act_recap import AdvantageCondition
-from models.recap.check_token_loss import (
+from models.recap.analysis.check_token_loss import (
     accumulate_action_l1,
     flip_conditions,
     format_report,

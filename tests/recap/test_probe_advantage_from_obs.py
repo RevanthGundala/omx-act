@@ -8,7 +8,7 @@ import torch
 from configs.act.base import ACTConfig
 from models.recap.act_critic import ACTCritic
 from models.recap.act_recap import AdvantageCondition
-from models.recap.probe_advantage_from_obs import (
+from models.recap.analysis.probe_advantage_from_obs import (
     POSITIVE,
     TinyVisionQposProbe,
     binary_auc,
@@ -158,7 +158,7 @@ def test_cpu_smoke_on_fake_batches():
 
 
 def test_config_from_critic_checkpoint_ignores_unknown_keys(tmp_path):
-    from models.recap.probe_advantage_from_obs import config_from_critic_checkpoint
+    from models.recap.analysis.probe_advantage_from_obs import config_from_critic_checkpoint
 
     cfg = replace(_tiny_critic_config(), dataset_repo_id="RevanthGundala/034-recap-balanced")
     model = ACTCritic(cfg, pretrained_backbone=False, num_bins=11)

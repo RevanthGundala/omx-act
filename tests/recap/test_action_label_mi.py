@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from models.recap.act_recap import AdvantageCondition
-from models.recap.check_action_label_mi import (
+from models.recap.analysis.check_action_label_mi import (
     POSITIVE,
     circular_shift_labels,
     neighbor_indices,

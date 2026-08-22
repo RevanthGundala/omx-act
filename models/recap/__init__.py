@@ -2,10 +2,11 @@
 
 Architectural variants live in their own folders:
 
-* ``policy/``  — 3-state token + CVAE. This is what we trained and eval'd live.
-* ``masked/``  — token can be omitted. Mechanism / SFT checks only.
-* ``critic/``  — observation-only ``V(o)``. No CVAE, no action input.
+* ``policy/``   — 3-state token + CVAE. What we trained and eval'd live.
+* ``masked/``   — token can be omitted. Mechanism / SFT checks only.
+* ``critic/``   — observation-only ``V(o)``. No CVAE, no action input.
+* ``analysis/`` — token-sensitivity, held-out L1, I(a;I|o), attention.
 
-The old module paths (``act_recap``, ``act_recap_masked``, ``act_critic``)
-re-export from those folders.
+Old module paths (``act_recap``, ``check_token_sensitivity``, …) re-export
+from those folders.
 """
