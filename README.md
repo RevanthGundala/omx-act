@@ -40,9 +40,10 @@ models/act/          the custom ACT policy
   tools/             compare_policies: policy-vs-policy end-effector diagnostics
 
 models/recap/        RECAP (arXiv:2511.14759) on top of that policy
-  act_recap.py       ACT plus a three-state advantage-conditioning token
-  act_recap_masked.py  variant that can omit the token entirely
-  act_critic.py      observation-only distributional value model, 201 bins
+  policy/            live architecture: 3-state token + CVAE
+  masked/            token can be omitted (mechanism / SFT checks)
+  critic/            observation-only V(o); no CVAE
+  act_recap*.py      shims that re-export the folders above
   train_critic.py    critic training
   label_advantage.py N-step advantage labelling and thresholding
   train_policy.py    advantage-conditioned policy training

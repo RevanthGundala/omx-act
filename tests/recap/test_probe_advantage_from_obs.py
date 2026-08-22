@@ -57,7 +57,7 @@ def test_critic_encode_is_the_value_head_input():
 
 
 def test_encode_does_not_use_an_advantage_token(repo_root):
-    source = (repo_root / "models" / "recap" / "act_critic.py").read_text()
+    source = (repo_root / "models" / "recap" / "critic" / "model.py").read_text()
     assert "adv_proj" not in source
     assert "AdvantageCondition" not in source
     model = ACTCritic(_tiny_critic_config(), pretrained_backbone=False, num_bins=11)
