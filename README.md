@@ -23,8 +23,7 @@ is flipped. Every "RECAP" live number is behaviour cloning with a sticker.
 DAgger 9/15 and RECAP 8/15 are **not** a method comparison (different sponge
 placements, 18 vs 7 corrections). Do not quote the withdrawn 82% SFT number.
 
-**Read `docs/sponge_hot_pad_experiments.md` first** — it is the log of record.
-The narrative write-up is `docs/blog.md`.
+Experiment notes and the write-up live locally in `docs/` (gitignored).
 
 ## Layout
 
@@ -69,7 +68,7 @@ train/               launchers for paid compute, plus their watchdogs
   modal/             Modal: custom ACT, RECAP critic, RECAP policy
   vastai/            vast.ai: launcher, resume, instance watchdog, image
 tests/               pytest suite
-docs/                experiment logs and write-ups
+docs/                local notes only (gitignored)
 ```
 
 ## Training
@@ -137,9 +136,9 @@ python -m models.recap.check_token_sensitivity \
 
 It exits non-zero if the token does not move the actions. It fails on every
 *real-label* policy we have trained. That is not "ACT cannot condition": a
-planted +0.5 action shift is recovered at 0.519 (§5.10). The real labels do
-not change the optimal action given the observation (`I(a ; I | o)` ≈ 2%,
-held-out L1 flip ≤ 0.07%). See §5.9 and §5.15.
+planted +0.5 action shift is recovered at 0.519. The real labels do not
+change the optimal action given the observation (`I(a ; I | o)` ≈ 2%,
+held-out L1 flip ≤ 0.07%).
 
 For a local LeRobot dataset that is not on Hugging Face:
 
@@ -188,9 +187,5 @@ Use the `repo_root` fixture rather than counting parent directories from
 
 ## Docs
 
-| file | contents |
-|---|---|
-| `docs/sponge_hot_pad_experiments.md` | log of record — every measured number |
-| `docs/blog.md` | narrative: the advantage token never fired |
-| `docs/act_debugging_learnings.md` | ACT debugging notebook, then the RECAP mechanism kills |
-| `docs/recap_research_question.md` | why RECAP was chosen; current status at the top |
+`docs/` is local-only (gitignored): experiment log, blog draft, and
+debugging notes. Not published with the code.

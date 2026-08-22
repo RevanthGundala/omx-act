@@ -9,6 +9,9 @@ __pycache__/
 # uv
 uv.lock
 
+# Local notes / writeups (kept on disk, not in git)
+docs/
+
 # Outputs / artifacts / data
 # NOTE: data/ is for downloaded benchmark datasets only. Dataset-building
 # *source* lives in dataset_tools/ and is tracked -- it used to sit in data/,
