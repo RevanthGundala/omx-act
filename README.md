@@ -100,14 +100,14 @@ below. Never raise motor current or PID gains. Use
 uv run pytest -q
 
 # does this checkpoint actually use its advantage token?
-uv run python -m models.recap.analysis.token_sensitivity \
+uv run python -m utils.analysis.token_sensitivity \
   --checkpoint /path/to/step_020000.pt \
   --dataset-repo-id RevanthGundala/034-recap-balanced \
   --labels /path/to/advantage_labels.json \
   --batches 150
 
 # held-out L1 when the token is flipped / dropped
-uv run python -m models.recap.analysis.token_loss \
+uv run python -m utils.analysis.token_loss \
   --checkpoint /path/to/step_020000.pt \
   --dataset-repo-id RevanthGundala/034-recap-balanced \
   --labels /path/to/advantage_labels.json \
@@ -162,13 +162,14 @@ models/recap/
   policy/            live architecture: 3-state token + CVAE
   masked/            token can be omitted
   critic/            V(o) only — no CVAE
-  analysis/          token checks (sensitivity, L1, I(a;I|o), attention)
 scripts/dataset/     dataset surgery, DAgger aggregate
 scripts/recap/       build RECAP mixes from demos / rollouts / corrections
 train/act/           ACT training loops
 train/recap/         critic, labeling, RECAP policy training
 train/modal/         Modal launchers + watchdog
 train/vastai/        vast.ai launchers
+utils/config.py      OMX ports / cameras
+utils/analysis/      token checks (sensitivity, L1, I(a;I|o))
 configs/act/base.py  hyperparameters
 tests/               pytest, grouped like the code
 ```

@@ -3,7 +3,7 @@
 import torch
 
 from models.recap.policy import AdvantageCondition
-from models.recap.analysis.token_sensitivity import (
+from utils.analysis.token_sensitivity import (
     observation_scale,
     summarize,
     verdict,

@@ -25,7 +25,7 @@ from models.recap.masked import (
     ACTPolicy,
     AdvantageCondition as MaskedAdvantageCondition,
 )
-from models.recap.analysis.token_sensitivity import observation_scale
+from utils.analysis.token_sensitivity import observation_scale
 from train.recap.policy import config_from_checkpoint
 
 # Decoder memory layout, from act_recap_masked.Decoder.forward: the advantage

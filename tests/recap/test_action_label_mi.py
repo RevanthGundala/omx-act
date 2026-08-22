@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from models.recap.policy import AdvantageCondition
-from models.recap.analysis.action_label_mi import (
+from utils.analysis.action_label_mi import (
     POSITIVE,
     circular_shift_labels,
     neighbor_indices,

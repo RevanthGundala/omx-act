@@ -16,7 +16,7 @@ Intervention frames are excluded by default: their POSITIVE label was forced.
 
 Example (full 034 image encode belongs on Modal):
 
-    PYTHONPATH=. python -m models.recap.analysis.action_label_mi \\
+    PYTHONPATH=. python -m utils.analysis.action_label_mi \\
       --dataset-repo-id RevanthGundala/034-recap-balanced \\
       --labels .../034-recap-balanced.json \\
       --critic-checkpoint .../best_critic.pt
@@ -279,7 +279,7 @@ def run_check(
     batch_size: int = 8,
     seed: int = 0,
 ) -> dict:
-    from models.recap.analysis.probe_advantage import load_frozen_critic
+    from utils.analysis.probe_advantage import load_frozen_critic
     from train.recap.critic import CriticDataset
 
     cfg = ACTConfig(dataset_repo_id=dataset_repo_id)

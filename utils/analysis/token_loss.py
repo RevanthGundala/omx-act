@@ -20,7 +20,7 @@ inference. Reported loss is ``action_loss`` from ``compute_loss`` (masked L1).
 
 Example (full 034 image eval belongs on Modal):
 
-    PYTHONPATH=. .venv/bin/python -m models.recap.analysis.token_loss \\
+    PYTHONPATH=. .venv/bin/python -m utils.analysis.token_loss \\
       --checkpoint /path/to/step_020000.pt \\
       --dataset-repo-id RevanthGundala/034-recap-balanced \\
       --labels /path/to/034-recap-balanced.json \\
@@ -28,7 +28,7 @@ Example (full 034 image eval belongs on Modal):
 
 CPU plumbing smoke (no checkpoint, no images):
 
-    PYTHONPATH=. .venv/bin/python -m models.recap.analysis.token_loss --smoke
+    PYTHONPATH=. .venv/bin/python -m utils.analysis.token_loss --smoke
 """
 
 from __future__ import annotations

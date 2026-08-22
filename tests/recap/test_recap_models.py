@@ -20,7 +20,7 @@ from models.recap.masked import (
     AdvantageCondition as MaskedAdvantageCondition,
     MASKED_ADVANTAGE,
 )
-from models.recap.analysis.attention_maps import convert_legacy_state_dict
+from utils.analysis.attention_maps import convert_legacy_state_dict
 from models.recap.attention import Attention as RecapAttention
 
 
@@ -1899,7 +1899,7 @@ def test_inspector_slot_constants_match_the_decoder_memory_layout():
     Identifies each slot by construction: give the decoder a distinctive input
     and check which memory position carries it.
     """
-    from models.recap.analysis import attention_maps as inspector
+    from utils.analysis import attention_maps as inspector
 
     cfg = _config()
     model = MaskedRecapACTPolicy(cfg, pretrained_backbone=False).eval()
@@ -1943,7 +1943,7 @@ def test_advantage_equals_the_difference_of_critic_residuals():
     Verified numerically on a random episode rather than trusted as algebra,
     because it is the basis for reading the advantage as critic error.
     """
-    from models.recap.analysis.advantage_noise_bound import advantage_noise_std
+    from utils.analysis.advantage_noise_bound import advantage_noise_std
 
     rng = torch.Generator().manual_seed(0)
     steps, lookahead, c_fail = 200, 50, 704.0

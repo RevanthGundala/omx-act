@@ -20,13 +20,13 @@ Interpretation:
                  a deeper function of o could still predict I.
 
 Example (local smoke, no dataset):
-    PYTHONPATH=. .venv/bin/python -m models.recap.analysis.probe_advantage --smoke
+    PYTHONPATH=. .venv/bin/python -m utils.analysis.probe_advantage --smoke
 
 Example (full run; prefer Modal):
     RECAP_PROBE_DATASET_REPO_ID=RevanthGundala/034-recap-balanced \\
       RECAP_PROBE_LABELS=.../034-recap-balanced.json \\
       RECAP_PROBE_CRITIC_CHECKPOINT=.../best_critic.pt \\
-      PYTHONPATH=. python -m models.recap.analysis.probe_advantage
+      PYTHONPATH=. python -m utils.analysis.probe_advantage
 """
 
 from __future__ import annotations
