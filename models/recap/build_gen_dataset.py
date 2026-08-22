@@ -20,6 +20,8 @@ Example:
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
+import json
 from pathlib import Path
 import shutil
 
@@ -31,11 +33,57 @@ from models.recap.build_dataset import (
 )
 
 
+def parse_episode_list(spec: str | None) -> set[int] | None:
+    """Parse ``0,3,6`` into a set of episode indices."""
+    if spec is None or spec.strip() == "":
+        return None
+    values = set()
+    for part in spec.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        values.add(int(part))
+    if not values:
+        raise ValueError(f"empty episode list: {spec!r}")
+    return values
+
+
+def recap_dataset_specs(root: Path) -> list:
+    """Load an existing RECAP mix, keeping source_kind and success from the manifest.
+
+    Passing 034 as ``--demo-dataset`` would mark every episode a demonstration
+    success, including the 6 failures. The manifest is the source of truth.
+    """
+    root = Path(root).expanduser().resolve()
+    manifest_path = root / "recap_manifest.json"
+    if not manifest_path.is_file():
+        raise FileNotFoundError(
+            f"{root} has no recap_manifest.json; pass a RECAP mix, not a raw LeRobot set"
+        )
+    manifest = json.loads(manifest_path.read_text())
+    by_episode = {int(episode["episode_index"]): episode for episode in manifest["episodes"]}
+    specs = _lerobot_specs(root, kind="recap", default_success=True)
+    out = []
+    for spec in specs:
+        episode_index = int(spec.source_id.rsplit("episode-", 1)[1])
+        if episode_index not in by_episode:
+            raise ValueError(
+                f"{spec.source_id} is not in {manifest_path}"
+            )
+        info = by_episode[episode_index]
+        kind = info["source_kind"]
+        success = info["outcome_label"] == "success"
+        out.append(replace(spec, source_kind=kind, success=success))
+    return out
+
+
 def collect_specs(args: argparse.Namespace) -> list:
     excluded = {
         Path(path).expanduser().resolve() for path in (args.exclude_trial or [])
     }
     specs = []
+    for root in args.recap_dataset or []:
+        specs.extend(recap_dataset_specs(root))
     for root in args.demo_dataset or []:
         # Demonstrations carry no outcome sidecar: they are expert successes by
         # construction, which is what RECAP pre-trains the value function on.
@@ -52,12 +100,26 @@ def collect_specs(args: argparse.Namespace) -> list:
         if not (trial_dir / "metadata.json").is_file():
             raise FileNotFoundError(f"Not a recorded trial directory: {trial_dir}")
         specs.append(_trial_spec(trial_dir))
+    allowed = parse_episode_list(getattr(args, "correction_episodes", None))
     for root in args.correction_dataset or []:
         # A correction episode is labeled by the operator, so a missing sidecar
         # is an error rather than an assumed success.
-        specs.extend(
-            _lerobot_specs(root, kind="correction", default_success=None)
-        )
+        group = _lerobot_specs(root, kind="correction", default_success=None)
+        if allowed is not None:
+            keep = []
+            for spec in group:
+                episode_index = int(spec.source_id.rsplit("episode-", 1)[1])
+                if episode_index in allowed:
+                    keep.append(spec)
+            missing = allowed - {
+                int(spec.source_id.rsplit("episode-", 1)[1]) for spec in keep
+            }
+            if missing:
+                raise ValueError(
+                    f"{root} is missing correction episodes {sorted(missing)}"
+                )
+            group = keep
+        specs.extend(group)
     if not specs:
         raise ValueError("No episodes were found in any source")
     seen = set()
@@ -102,6 +164,15 @@ def parse_args(argv=None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--recap-dataset",
+        type=Path,
+        action="append",
+        help=(
+            "Existing RECAP mix (has recap_manifest.json). Preserves source_kind "
+            "and success; do not pass 034 as --demo-dataset."
+        ),
+    )
+    parser.add_argument(
         "--correction-dataset",
         type=Path,
         action="append",
@@ -109,6 +180,11 @@ def parse_args(argv=None) -> argparse.Namespace:
             "LeRobot dataset of DAgger rollouts with outcome sidecars and "
             "per-frame intervention flags."
         ),
+    )
+    parser.add_argument(
+        "--correction-episodes",
+        default=None,
+        help="Comma-separated episode indices to keep from --correction-dataset (e.g. 0,3,6).",
     )
     parser.add_argument("--target-repo", required=True)
     parser.add_argument("--output-root", type=Path, required=True)

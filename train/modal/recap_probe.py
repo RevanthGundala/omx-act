@@ -250,3 +250,120 @@ def main(
     print(f"MODAL_RUN_TOKEN={run_token}")
     print(f"MODAL_JOB_NAME={job_name}")
     print("MODAL_OUTPUT_PATH=act_experiments/" + job_name)
+
+
+@app.function(
+    gpu=MODAL_GPU,
+    timeout=MODAL_MAX_RUNTIME_SECONDS,
+    memory=32_768,
+    volumes={REMOTE_OUTPUTS: train_vol, REMOTE_CRITIC: critic_vol},
+    secrets=[hf_secret],
+)
+def action_mi_remote(
+    dataset_repo_id: str,
+    labels_path: str,
+    critic_checkpoint: str,
+    job_name: str,
+    k: int = 40,
+    n_perm: int = 200,
+) -> str:
+    """Encode o with the frozen critic and test I(a ; I | o). Does not train."""
+    import json
+    import os
+    import sys
+
+    os.environ["PYTHONUNBUFFERED"] = "1"
+    os.environ["HUGGINGFACE_HUB_TOKEN"] = os.environ.get("HF_TOKEN", "")
+    sys.path.insert(0, str(REMOTE_WORKSPACE))
+    os.chdir(REMOTE_WORKSPACE)
+
+    import torch
+
+    print("=== CUDA PREFLIGHT ===", flush=True)
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA is not available; refusing CPU fallback on a paid GPU job.")
+    print(f"gpu={torch.cuda.get_device_name(0)}", flush=True)
+    print(
+        f"vram_gb={torch.cuda.get_device_properties(0).total_memory / 1e9:.1f}",
+        flush=True,
+    )
+
+    train_vol.reload()
+    critic_vol.reload()
+    labels_full = resolve_existing_file(REMOTE_OUTPUTS / validate_volume_relative_path(labels_path))
+    critic_full = resolve_existing_file(
+        REMOTE_CRITIC / validate_volume_relative_path(critic_checkpoint),
+        REMOTE_OUTPUTS / validate_volume_relative_path(critic_checkpoint),
+    )
+    os.environ["RECAP_DEVICE"] = "cuda"
+    from datetime import datetime, timezone
+
+    from models.recap.check_action_label_mi import format_report, run_check
+
+    print(
+        "action_mi_config "
+        f"dataset={dataset_repo_id} labels={labels_full} critic={critic_full} "
+        f"k={k} n_perm={n_perm}",
+        flush=True,
+    )
+    report = run_check(
+        dataset_repo_id=dataset_repo_id,
+        labels_path=labels_full,
+        critic_checkpoint=critic_full,
+        device=torch.device("cuda"),
+        k=k,
+        n_perm=n_perm,
+    )
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    out_dir = REMOTE_OUTPUTS / "act_experiments" / job_name / stamp
+    out_dir.mkdir(parents=True, exist_ok=True)
+    report_path = out_dir / "report.json"
+    report_path.write_text(json.dumps(report, indent=2) + "\n")
+    print(format_report(report), flush=True)
+    print(f"wrote {report_path}", flush=True)
+    train_vol.commit()
+    critic_row = report.get("all_non_intervention", {}).get("critic", {})
+    return json.dumps(
+        {
+            "status": "complete",
+            "report_path": str(report_path),
+            "critic_lift": critic_row.get("observed_lift"),
+            "critic_p": critic_row.get("p"),
+            "critic_z": critic_row.get("z"),
+        },
+        sort_keys=True,
+    )
+
+
+@app.local_entrypoint()
+def action_mi(
+    dataset_repo_id: str = "RevanthGundala/034-recap-balanced",
+    labels_path: str = "act_experiments/recap_labels/034-recap-balanced.json",
+    critic_checkpoint: str = "recap_critic_balanced66_20k/20260814-011745/checkpoints/step_020000.pt",
+    job_name: str = "recap_action_label_mi",
+    k: int = 40,
+    n_perm: int = 200,
+) -> None:
+    """Launch the I(a ; I | o) matched-neighbour check. Does not train."""
+    validate_volume_relative_path(labels_path)
+    validate_volume_relative_path(critic_checkpoint)
+    if not dataset_repo_id or "/" not in dataset_repo_id:
+        raise ValueError("dataset_repo_id must be a Hugging Face owner/name identifier.")
+    print("=== RECAP ACTION-LABEL MI ===")
+    print(f"dataset={dataset_repo_id}")
+    print(f"labels={labels_path}")
+    print(f"critic={critic_checkpoint}")
+    print(f"k={k} n_perm={n_perm} job_name={job_name}")
+    print(f"MODAL_GPU={MODAL_GPU}")
+    print(f"MODAL_HARD_TIMEOUT_SECONDS={MODAL_MAX_RUNTIME_SECONDS}")
+    function_call = action_mi_remote.spawn(
+        dataset_repo_id=dataset_repo_id,
+        labels_path=labels_path,
+        critic_checkpoint=critic_checkpoint,
+        job_name=job_name,
+        k=k,
+        n_perm=n_perm,
+    )
+    print(f"MODAL_FUNCTION_CALL_ID={function_call.object_id}")
+    print("MODAL_OUTPUT_PATH=act_experiments/" + job_name)
+

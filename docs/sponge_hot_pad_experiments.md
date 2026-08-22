@@ -3,9 +3,12 @@
 Everything we ran on the "Place the sponge on the hot pad" task, in order, with
 the numbers we actually measured. Anything not measured is marked as such.
 
-The through-line: a behaviour-cloned ACT policy failed, we found *why*, fixed
-the data rather than the model, and then compared DAgger against RECAP under a
-matched data budget.
+The through-line: a behaviour-cloned ACT policy failed, we found *why*, and
+fixed the **data** rather than the model. DAgger then helped. RECAP's
+advantage token never fired on this task (`I(a ; I | o)` ≈ 0), so every
+"RECAP" live number is behaviour cloning with a sticker. DAgger and RECAP
+were **not** evaluated on a matched sponge grid — that comparison is still
+open.
 
 ---
 
@@ -624,6 +627,211 @@ the distribution *over* observations, which on this data upweights easy sponge
 placements — the same confound that invalidates the 82%. It is a control, not a
 fix.
 
+### 5.15 The critic is coarse, but that is not why the token is inert (2026-08-18)
+
+Four checks asked whether a bad critic is a sufficient explanation. They were
+run on `034-recap-balanced` (19,437 frames, 66 episodes) and the labels already
+used for every policy run (`eps_ℓ = 6.49`, interventions forced POSITIVE).
+Continuous `A` was never saved in `advantage_labels.json`; the critic-feature
+job below recomputed it.
+
+**The algebraic form.** Every non-terminal reward is exactly −1
+(`recap_rewards`). On any frame with a full lookahead, `R_t − R_{t+50}` is
+therefore identically −50 — that difference is the 50-step reward *sum*, not a
+baseline. Substituting into `n_step_advantages` gives
+
+```
+A_t = −50 + V(o_{t+50}) − V(o_t)
+```
+
+on bootstrapped frames (~83%). The executed action does not appear. A perfect
+critic makes `A ≡ 0` (the collapse already proven for a future-conditioned
+critic in §5.2). A noisy critic makes `A` a noisy function of two observations.
+There is no critic accuracy at which this estimator becomes action-conditional.
+
+On the last 50 frames the bootstrap is dropped and `A_t = R_t − V(o_t)`, so
+the terminal 0 / −476 can enter. That is the only slice where episode outcome
+is in the label by construction.
+
+**1. The binary labels are not collapsed.** 8,586 POS / 10,851 NEG = **44.2%**
+POS. Non-intervention frames are exactly 40.0% by construction; all 1,352
+intervention frames are POS by rule. Failures 29.4% POS vs successes 46.0%.
+Median POS run length is 2 frames, but 69% of POS frames sit in runs ≥ 10.
+Last-50 / MC-tail frames are 77.3% POS (success 78%, failure 69%); first-50 of
+failures are 14% POS vs 52% for successes. The bit flickers and leans POS at
+the end of almost every episode. It is not a single class.
+
+**2. `I` is partly already in the observation.** Frozen critic encoder, tiny
+head, interventions excluded, 8 held-out episodes / 2,176 frames
+(`recap_probe_i_from_o`, A10, `ap-GyPIZgN8qFA1U8rnawA6HX`):
+
+| probe | held-out AUC | acc (majority 0.58) |
+|---|---:|---:|
+| vision + qpos MLP | **0.780** | 0.727 |
+| vision + qpos linear | 0.739 | 0.688 |
+| qpos MLP | 0.655 | 0.658 |
+| qpos linear | 0.576 | 0.585 |
+| critic scalar `V(o)` | **0.523** | 0.600 |
+
+The cameras predict the bit. The critic's own number does not. That is what
+`A = −50 + ΔV` says: `V(o_t)` is the wrong object; progress over 1.7 s is
+partly visible in the picture. AUC 0.78 is not chance and not a deterministic
+function of `o`.
+
+**3. High-A episodes succeed more and are not faster.** Non-forced POS tertiles
+(22 / 22 / 22): top **22/22** success, bottom **17/22**. Success vs fail
+non-forced POS 0.423 vs 0.299 (pooled AUC 0.817, MW p=0.004). Autonomous-only
+(5 vs 6) AUC 0.767, p=0.089. **N_fail = 6**, all rollouts — directional only.
+Among 60 successes, Spearman(POS, steps) = +0.18 (p=0.18): higher POS is not
+quicker. Forced corrections inflate episode POS from 0.57 to 0.80.
+
+**4. Held-out L1 does not move when the token is ablated.**
+`recap_policy_balanced66_20k` step 20k, 13 held-out episodes / 3,455 frames,
+`train_split=0.8` (`ap-5aKgs4L5ms4d4sPOOhmRpe`). Five tokens on identical
+batches; CVAE `z = 0` because `model.eval()`:
+
+| token | L1 | Δ% vs true |
+|---|---:|---:|
+| true label | 0.051330 | — |
+| flipped | 0.051331 | **+0.00%** |
+| all POS | 0.051366 | +0.07% |
+| all NEG | 0.051296 | −0.07% |
+| unconditioned | 0.051357 | +0.05% |
+
+Largest |Δ%| = **0.07%**. The earlier 0.93% action-sensitivity was on training
+data; this is the same conclusion on a holdout, in the actual training loss.
+Open item "re-measure token effect on held-out episodes" is closed.
+
+**5. `I(a ; I | o)` at similar scenes is barely above the null.** Cross-episode
+k=40 neighbours, circular-within-episode label shift (200 perms), interventions
+excluded. Joints-only is the known-bad control (sponge pose lives in the
+images). Critic-encoder cosine space is the real matcher
+(`recap_action_label_mi`, `ap-gvf2y0IwmhxkjuL3BunbRz`; first launch
+`ap-ldCrHFm0ynvkNmwLPhHFt9` died on `ACTConfig(**ckpt["config"])` rejecting
+`dataset_format` — use the probe's field-filtering loader):
+
+| matcher | lift | rel | z | p |
+|---|---:|---:|---:|---:|
+| qpos (control) | +0.0027 | +1.07% | 1.08 | **0.30** |
+| critic features | +0.0103 | +2.06% | 2.26 | **0.035** |
+
+Opposite-label neighbours are 2% farther in action space than same-label ones.
+That is statistically non-null and practically empty — the same scale as the
+old joints+chunk test's ~3%, now with cameras, and far too small to move L1.
+
+The same job recomputed continuous `A`: mean 0.57, **std 48.3**, median 1.53,
+10–90% = [−33, +34]. Threshold ε=6.49 sits inside one blob, not between two
+modes. Std 48.3 matches the §5.14 noise-bound row for residual correlation
+ρ≈0.9 (48.5). The labels are noisy *and* mostly a function of `o`.
+
+**Verdict.** "The critic isn't good enough" is partly true and not the cause of
+the inert token. The bit is balanced, weakly ranks success, and is already in
+the cameras. Flipping it does not change this policy's loss. A better critic
+under the same reward still produces an observation-only label. What remains
+is whether a multimodal policy could use a 2% residual, and the matched robot
+eval that still blocks the writeup.
+
+Scripts: `models/recap/probe_advantage_from_obs.py`,
+`models/recap/check_token_loss.py`, `models/recap/check_action_label_mi.py`.
+
+### 5.16 Live eval of RECAP-ACT as implemented (2026-08-20)
+
+Rolled out `recap_policy_balanced66_20k` (exported `--recap`, inference token
+POSITIVE) with the same async stack as the DAgger eval: `eval.async_lerobot`,
+`--policy-type custom_act`, `--max-joint-delta 40`, `--actions-per-chunk 30`.
+`--start-state-wrist-flex-offset 0` because 034's start wrist-flex support is
+`[46.28, 48.38]` and the default +2 offset is out of range.
+
+Session `outputs/eval_rollouts_recap_balanced66/act_eval_async_20260820-111513`,
+15 operator-ended trials, all labeled:
+
+| trial | outcome | duration (s) |
+|---|---|---:|
+| 1–3 | fail | 14.6 / 13.2 / 13.6 |
+| 4–8 | success | 12.5 / 13.4 / 12.9 / 8.8 / 8.9 |
+| 9 | success | 43.1 |
+| 10–12 | fail | 11.5 / 8.0 / 8.3 |
+| 13 | success | 13.3 |
+| 14 | fail | 23.4 |
+| 15 | success | 25.5 |
+
+**8/15 = 53%.** Pattern FFF SSSSS FFF S F S.
+
+Five sponge sites × three tries (top-camera `sponge_xy_norm` from scene check):
+
+| site | trials | xy (approx) | success |
+|---|---|---|---|
+| right-near | 1–3 | (0.83, 0.32) | **0/3** |
+| right-mid | 4–6 | (0.78, 0.36) | **3/3** |
+| center-near | 7–9 | (0.54, 0.28) | **3/3** |
+| left-near A | 10–12 | (0.27, 0.30) | **0/3** |
+| left-near B | 13–15 | (0.22–0.27, 0.15–0.23) | **2/3** |
+
+Macro over sites: (0+1+1+0+2/3)/5 = **53%**, same as micro. Two sites are never solved.
+
+This is RECAP-ACT *as implemented*: warm start from the custom ACT base, 20k
+steps on 034 (48 demos + 11 autonomous + 7 RECAP corrections), mixed labels,
+30% dropout. It is not all-positive SFT, and it is not DAgger-18 (18 expert
+corrections, no token). Because the token is inert (§5.15), the live policy is
+behaviour cloning on 034 with an unused POSITIVE sticker.
+
+Do not read 8/15 vs DAgger 9/15 as a method comparison. Placements were not
+matched (same confound that invalidates the withdrawn 82%). The two recipes
+also do not share a correction budget (7 vs 18). Fisher on 8/15 vs 9/15 is
+p ≈ 1; vs base 4/22 is p ≈ 0.035 — same qualitative pattern as DAgger vs
+base, with the same unmatched-grid asterisk.
+
+### 5.17 Mix ablation live: 7 SPACE vs 4 auto + 3 SPACE (2026-08-21)
+
+Same RECAP-ACT init (`balanced66_20k`), same extra **episode** count (7),
+same 5×3 tape grid as §5.16. Critics FT 4k freeze-encoder, labels from
+**step_001000** (A val MAE 68, B 51). Policies 10k from `balanced66`
+(A checkpoint is **8k**: no `step_010000` was written).
+
+**A** `036-recap-corr7` (7 SPACE only). Session
+`outputs/eval_rollouts_036_corr7/act_eval_async_20260821-102055`:
+
+| trials | outcomes |
+|---|---|
+| 1–2 | F F |
+| 3–7 | S S S S S |
+| 8 | F |
+| 9–15 | S S S S S S S |
+
+**12/15 = 80%** after operator correction: trials 3–5 were successes
+mislabeled F at the prompt (same class of error as §5.16 auto t3). Pattern
+FF SSSSS F SSSSSSS. Scene-check buckets were not written (`sponge_bucket`
+null). Same five tape marks as §5.16.
+
+**B** `037-recap-mix7` (4 autos + 035 ep0/3/6). Session
+`outputs/eval_rollouts_037_mix7/act_eval_async_20260821-112425`:
+
+FFFFFFS FFFFFF SS → **3/15 = 20%** (success on 7, 14, 15). Same 5×3 as A.
+
+| | extra | live | token |
+|---|---|---|---|
+| parent `balanced66` | — | 8/15 = 53% | inert (§5.15) |
+| **A** 7 SPACE | 7 corr | **12/15 = 80%** | not re-measured |
+| **B** 4 auto + 3 SPACE | mix | **3/15 = 20%** | still inert |
+
+On this **matched 5×3**, extra **corrections** beat extra **on-policy fails + fewer corrections**. B is worse than the parent.
+
+**Not a token result.** B `step_010000`, 128 train frames, mask-vs-visible output effect **0.03%** of observation effect; advantage slot rank **591 / 603** (0.29× uniform); joints slot rank **1 / 603** (74×). Same diagnosis as the parent: the transformer can concentrate on a slot; it does not on this one.
+
+**Train loss does not explain 12/15 vs 3/15.** Logged every 100 steps; A never wrote `step_010000` (last 8k). At 1k-step marks:
+
+| step | A loss | B loss |
+|---:|---:|---:|
+| 0 | 0.072 | 0.056 |
+| 2000 | 0.051 | 0.044 |
+| 6000 | 0.043 | **0.059** |
+| 8000 | **0.040** (eval ckpt) | 0.045 |
+| last | 0.049 @ 9.5k | **0.054** @ 9.9k |
+
+A actually fitted (0.072 → 0.040). B ended where it started. Last-1k means are similar (~0.047 vs ~0.045). The live gap is the mix: A cloned seven successful takeovers; B cloned three of those plus four on-policy rollouts, three of which are failures at the hard sites.
+
+Do not put A 12/15 in a RECAP-vs-DAgger table. The token did not wake up. This is DAgger-shaped data inside a RECAP-shaped trainer.
+
 ---
 
 ## 6. Transferable lessons
@@ -666,6 +874,21 @@ fix.
     value.** A learned UNCONDITIONED embedding is still a token the encoder
     attends to. Testing real absence needed a separate architecture that masks
     the slot.
+14. **An n-step advantage with step reward −1 is −N plus a value difference.**
+    `R_t − R_{t+N}` is the window sum, not a baseline. On this reward it is a
+    constant, so `A` has no action term on bootstrapped frames. Improving `V`
+    cannot invent `I(a ; I | o) > 0`.
+15. **Match neighbours in the observation the policy sees.** Joint-angle kNN
+    ignores sponge pose. A 6-joint "matched" test is not `I(a ; I | o)`.
+16. **Flip the real token and measure held-out L1**, not only action
+    displacement on the train set. Displacement can look non-zero while the
+    loss does not care; the reverse bias also exists. We needed both, on a
+    holdout.
+17. **Cloning extra on-policy failures can tank live success while train loss
+    looks fine.** Same init, same extra episode count, same 5×3: 7 SPACE
+    takeovers → 12/15; 4 autos (3 fail) + 3 SPACE → 3/15, worse than the
+    parent. The token stayed unused, so this is a data-mix result, not
+    advantage conditioning.
 
 ---
 
@@ -681,6 +904,9 @@ Datasets:
 | `rollout_030-recap-corrections7` | 7 RECAP corrections, 1,854 frames |
 | `031-recap-gen1` | RECAP critic set, 18 eps, 6,354 frames, C_fail 704 |
 | `034-recap-balanced` | RECAP policy set, 66 eps, 19,437 frames, C_fail 476 |
+| `rollout_035-recap-balanced-dagger` | 7 SPACE takeovers on parent, all success |
+| `036-recap-corr7` | 034 + 7 SPACE, 73 eps, 22,195 fr, 67/6 (local, not on HF) |
+| `037-recap-mix7` | 034 + 4 autos + 3 SPACE, 73 eps, 22,018 fr, 64/9 (local) |
 
 Models:
 
@@ -690,10 +916,15 @@ Models:
 | `outputs/modal_custom_act_dagger18_ft10k/` | DAgger fine-tune, 9/15 live |
 | `outputs/recap_critic/best_critic.pt` | RECAP critic (gen1), val MAE 182.8 |
 | `outputs/recap_critic_20k/best_critic.pt` | RECAP critic (034), val MAE 86.6 |
-| `recap_policy_balanced66_20k` | RECAP policy, token sensitivity 0.93% (fails) |
+| `recap_policy_balanced66_20k` | RECAP-ACT as implemented, token inert; live **8/15 = 53%** |
+| `recap_policy_036_corr7_ft10k` | mix A, last=8k; live **12/15 = 80%** (token not re-measured) |
+| `recap_policy_037_mix7_ft10k` | mix B, 10k; live **3/15 = 20%**; token 0.03% causal |
 | `recap_policy_rollcorr_10k` | arm A, rollouts + corrections, 0.98% |
 | `recap_policy_rollonly_10k` | arm B, rollouts only, 0.96% |
 | `recap_policy_synth_shift05_10k` | Test A, planted +0.5 shift, token effect 0.519 **PASS** |
+| `recap_probe_i_from_o` | I-from-o probe, vision+qpos MLP AUC 0.780 |
+| `recap_token_loss/20260818-042125` | held-out token L1, max \|Δ\| 0.07% |
+| `recap_action_label_mi/20260819-010846` | critic-space I(a;I\|o), lift +2.06%, p=0.035 |
 
 Raw scan JSON lives in the session state directory
 (`base_checkpoint_bias_scan.json`, `clean48_checkpoint_scan.json`,
@@ -704,34 +935,29 @@ Raw scan JSON lives in the session state directory
 
 ## 8. Open items
 
-- **The RECAP-vs-DAgger success comparison is not yet valid.** The RECAP SFT
-  eval ran at sponge y ≈ 0.247 and the DAgger eval at y ≈ 0.348 — distributions
-  that barely overlap. The camera is stable (the fixed hot pad reads y =
-  0.468–0.469 across all sessions), so this is genuine placement variation, not
-  setup drift. Within existing data sponge y only weakly predicts success
-  (Mann-Whitney p = 0.121), but the fix is to re-evaluate the DAgger checkpoint
-  at the planned positions for a paired comparison. **This blocks the writeup.**
-- AWR-style advantage weighting is the one mechanism §5.9 does not rule out.
-- The cause of the real-label token being inert is still unidentified. §5.10
-  rules out "the trainer cannot learn a token" and §5.13 rules out "the token was
-  introduced too late"; neither says which of the remaining hypotheses is right.
-- Masking and conditioning dropout are verified correct (§5.13), so implementation
-  bugs are ruled out as the reason the token is inert. The untested question is
-  whether *varying* labels change anything; every masked run so far has been
-  all-POSITIVE, where a null result is the prediction rather than a finding.
+- **RECAP-vs-DAgger is still unmatched.** Live numbers: base 4/22, DAgger-18
+  9/15, parent RECAP-ACT 8/15 (§5.16), mix A 12/15 / mix B 3/15 on the
+  **same 5×3 as the parent** (§5.17). The old SFT 82% stays withdrawn. DAgger
+  was not run on that grid (82% eval y ≈ 0.247, DAgger y ≈ 0.348). **That
+  still blocks a method table.** Re-eval DAgger-18 on the same cells. Do not
+  collect another RECAP iteration hoping the token starts working.
+- AWR-style advantage weighting is withdrawn (§5.14): L1-AWR at fixed `o` is
+  the weighted median, which equals BC when `I` does not move `a | o`.
+- **The inert token is no longer "unidentified."** §5.15: labels are balanced
+  and weakly rank success; `I` is readable from the cameras (AUC 0.78) not from
+  `V(o)` (0.52); flipping the token moves held-out L1 by ≤0.07%; critic-space
+  neighbours show only a +2% action lift (p=0.035). The bit is mostly a
+  function of `o`. Remaining live questions are L1 unimodality / paired
+  actions at the same visual state, a 0.03 dose-response (failure branch
+  only), and missing CFG (cannot be the cause of a 0.07% effect).
+- Masking and conditioning dropout are verified correct (§5.13). The
+  all-POSITIVE masked runs are not evidence about varying labels; §5.15's
+  flip/all-POS/all-NEG L1 table is.
 - **The CVAE-latent hypothesis is dead** (`docs/act_debugging_learnings.md`,
-  2026-08-17). The KL term upper-bounds what the latent carries, and on the
-  real-label runs it is 0.0001 bits against the token's 1 bit — the latent has
-  collapsed under `kl_weight=10` and is not a competing channel. Test A also
-  learned a planted 0.50 signal with the CVAE fully active. `zero_latent` is
-  retained as a control, not a diagnostic.
-- **Every token-effect number so far was measured on training data.**
-  `inspect_advantage_attention.py` takes the train loader, and the runs it has
-  been pointed at used `train_split=1.0`, so no held-out set existed. On training
-  data the observation alone largely determines the action, which is exactly the
-  regime that makes a conditioning token look most redundant — so the bias runs
-  toward the conclusion drawn. Re-measuring on held-out episodes is cheap and
-  should happen before any of these numbers go in a writeup.
+  2026-08-17). `zero_latent` is a control, not a diagnostic.
+- **Held-out token L1 is measured** (§5.15): 13 episodes, 3,455 frames, max
+  |Δ| 0.07%. The older 0.93% figure was train-set action displacement and
+  should not be quoted alone.
 - Custom-vs-stock closed-loop smoothness difference remains unexplained.
 - The RECAP-vs-DAgger comparison holds data budget equal (18 episodes each) but
   RECAP receives fewer expert corrections (7 vs 18) and 11 autonomous episodes

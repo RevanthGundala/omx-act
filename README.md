@@ -8,18 +8,23 @@ itself — teleop, cameras, data collection — lives in the companion repo
 `omx-training`, which loads this one at runtime via `--policy-code-root`.
 
 The research question is how best to improve a behaviour-cloned policy from its
-own failures. Three methods are compared under a matched data budget:
+own failures. Short version of what we actually measured:
 
-| method | what it adds | live success |
-|---|---|---|
-| custom ACT | 48 demonstrations | 4/22 = 18% |
-| + DAgger | 18 human correction episodes | 9/15 = 60% |
-| + RECAP | advantage-conditioned training on rollouts + corrections | see caveat below |
+| method | what it adds | live success | grid |
+|---|---|---|---|
+| custom ACT | 48 demonstrations | 4/22 = 18% | unmatched |
+| + DAgger | 18 human correction episodes | 9/15 = 60% | unmatched |
+| RECAP-ACT parent | mixed labels on 66 eps, token unused | 8/15 = 53% | 5×3 tape |
+| + 7 SPACE takeovers | extra corrections, still unused token | 12/15 = 80% | same 5×3 |
+| + 4 autos + 3 SPACE | cloned on-policy fails | 3/15 = 20% | same 5×3 |
 
-**Read `docs/sponge_hot_pad_experiments.md` first** — it is the log of record,
-with every measured number and the caveats attached to each. Most importantly,
-the RECAP and DAgger evaluations used non-overlapping sponge placements and are
-not yet comparable.
+**The advantage token never fired.** Held-out L1 moves ≤ 0.07% when the bit
+is flipped. Every "RECAP" live number is behaviour cloning with a sticker.
+DAgger 9/15 and RECAP 8/15 are **not** a method comparison (different sponge
+placements, 18 vs 7 corrections). Do not quote the withdrawn 82% SFT number.
+
+**Read `docs/sponge_hot_pad_experiments.md` first** — it is the log of record.
+The narrative write-up is `docs/blog.md`.
 
 ## Layout
 
@@ -37,12 +42,17 @@ models/act/          the custom ACT policy
 
 models/recap/        RECAP (arXiv:2511.14759) on top of that policy
   act_recap.py       ACT plus a three-state advantage-conditioning token
+  act_recap_masked.py  variant that can omit the token entirely
   act_critic.py      observation-only distributional value model, 201 bins
   train_critic.py    critic training
   label_advantage.py N-step advantage labelling and thresholding
   train_policy.py    advantage-conditioned policy training
-  check_token_sensitivity.py  asserts a trained policy uses its token
   build_dataset.py   composes demos + rollouts + corrections into a dataset
+  build_gen_dataset.py  mix A/B builders (corrections vs rollouts+corrections)
+  check_token_sensitivity.py  action displacement when the token flips
+  check_token_loss.py  held-out L1 when the token is ablated
+  check_action_label_mi.py  I(a ; I | o) via critic-space neighbours
+  probe_advantage_from_obs.py  can I be read from o alone?
 
 scripts/             command-line tools, none imported by the library code
   dataset/           dataset surgery
@@ -125,9 +135,18 @@ python -m models.recap.check_token_sensitivity \
   --labels <labels>.json --episodes 48-65 --batches 150
 ```
 
-It exits non-zero if the token does not move the actions. It currently fails on
-every policy we have trained; `docs/sponge_hot_pad_experiments.md` §5.9 explains
-why, and why we believe that is a property of ACT rather than a bug.
+It exits non-zero if the token does not move the actions. It fails on every
+*real-label* policy we have trained. That is not "ACT cannot condition": a
+planted +0.5 action shift is recovered at 0.519 (§5.10). The real labels do
+not change the optimal action given the observation (`I(a ; I | o)` ≈ 2%,
+held-out L1 flip ≤ 0.07%). See §5.9 and §5.15.
+
+For a local LeRobot dataset that is not on Hugging Face:
+
+```bash
+RECAP_POLICY_DATASET_ROOT=/path/to/036-recap-corr7 \
+  python -m models.recap.train_policy
+```
 
 Use at least ~150 batches. The default of 16 reads 128 sequential frames, which
 is one episode and not a representative sample.
@@ -135,8 +154,8 @@ is one episode and not a representative sample.
 ## Tests
 
 ```bash
-pytest              # all 312
-pytest tests/recap  # just the RECAP suite, ~24s
+pytest              # full suite
+pytest tests/recap  # just the RECAP suite
 ```
 
 Tests are grouped by the code they cover:
@@ -171,7 +190,7 @@ Use the `repo_root` fixture rather than counting parent directories from
 
 | file | contents |
 |---|---|
-| `docs/sponge_hot_pad_experiments.md` | the log of record for every experiment |
-| `docs/act_debugging_learnings.md` | why the original ACT failed, and the ALOHA sim comparison that preceded this work |
-| `docs/recap_research_question.md` | why RECAP was chosen for an ACT policy |
-| `docs/blog.md` | narrative write-up in progress |
+| `docs/sponge_hot_pad_experiments.md` | log of record — every measured number |
+| `docs/blog.md` | narrative: the advantage token never fired |
+| `docs/act_debugging_learnings.md` | ACT debugging notebook, then the RECAP mechanism kills |
+| `docs/recap_research_question.md` | why RECAP was chosen; current status at the top |

@@ -40,6 +40,8 @@ from lerobot.datasets import LeRobotDatasetMetadata
 
 from configs.act.base import ACTConfig
 from models.act.act import ACTPolicy
+from models.recap.act_recap import ACTPolicy as RecapPolicy
+from models.recap.act_recap import AdvantageCondition
 from models.act.eval.local import (
     create_follower,
     parse_camera_list,
@@ -232,6 +234,12 @@ def main() -> None:
     parser.add_argument("--zero-cameras", default="")
     parser.add_argument("--freeze-cameras", default="")
     parser.add_argument("--trace-path", default="auto")
+    parser.add_argument(
+        "--recap-advantage",
+        choices=["pos", "neg", "uncond"],
+        default="pos",
+        help="Token for RECAP checkpoints. Ignored for plain ACT. Default pos = paper inference.",
+    )
     args = parser.parse_args()
 
     device = torch.device(
@@ -276,8 +284,22 @@ def main() -> None:
     im_mean = torch.tensor([0.485, 0.456, 0.406], device=device).view(3, 1, 1)
     im_std = torch.tensor([0.229, 0.224, 0.225], device=device).view(3, 1, 1)
 
-    model = ACTPolicy(cfg).to(device)
-    model.load_state_dict(ckpt["model_state_dict"])
+    state = ckpt["model_state_dict"]
+    recap_keys = [key for key in state if "adv_" in key or "advantage" in key]
+    recap_token = None
+    if recap_keys:
+        # Paper's improved policy is π(· | I=POSITIVE). The token on this
+        # family of checkpoints is inert (~0.07% L1); still load the matching
+        # architecture so extra embedding rows do not fail load_state_dict.
+        model = RecapPolicy(cfg, pretrained_backbone=False).to(device)
+        recap_token = AdvantageCondition.POSITIVE
+        if args.recap_advantage == "neg":
+            recap_token = AdvantageCondition.NEGATIVE
+        elif args.recap_advantage == "uncond":
+            recap_token = AdvantageCondition.UNCONDITIONED
+    else:
+        model = ACTPolicy(cfg).to(device)
+    model.load_state_dict(state)
     model.eval()
 
     print(
@@ -286,7 +308,7 @@ def main() -> None:
         f"actions_per_chunk={actions_per_chunk} "
         f"cameras={cfg.camera_names} hz={args.hz:g} threshold={args.chunk_size_threshold} "
         f"aggregate={args.aggregate_fn} action_smoothing={args.action_smoothing} "
-        f"action_space={args.action_space}",
+        f"action_space={args.action_space} recap_advantage={recap_token}",
         flush=True,
     )
     print(f"joint_order={JOINT_NAMES}", flush=True)
@@ -402,7 +424,18 @@ def main() -> None:
                 t0 = time.perf_counter()
                 with torch.inference_mode():
                     qpos_normalized, images = preprocess(obs)
-                    act_pred, _, _ = model.forward(images, qpos_normalized)
+                    if recap_token is None:
+                        act_pred, _, _ = model.forward(images, qpos_normalized)
+                    else:
+                        tokens = torch.full(
+                            (qpos_normalized.shape[0],),
+                            int(recap_token),
+                            dtype=torch.long,
+                            device=device,
+                        )
+                        act_pred, _, _ = model.forward(
+                            images, qpos_normalized, advantage=tokens
+                        )
                 action_normalized = limit_action_chunk(
                     act_pred.squeeze(0).cpu().numpy(),
                     actions_per_chunk,

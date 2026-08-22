@@ -55,7 +55,7 @@ Example:
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import fields, replace
 import json
 import os
 from pathlib import Path
@@ -280,8 +280,13 @@ def force_corrections_positive(
 
 def load_critic(checkpoint_path: str | Path, device: torch.device) -> tuple[ACTCritic, float, float]:
     """Rebuild a trained critic along with the value range it was trained on."""
-    checkpoint = torch.load(Path(checkpoint_path), map_location=device, weights_only=True)
-    cfg = ACTConfig(**checkpoint["config"])
+    checkpoint = torch.load(Path(checkpoint_path), map_location=device, weights_only=False)
+    raw = checkpoint["config"]
+    allowed = {item.name for item in fields(ACTConfig)}
+    source = {key: value for key, value in raw.items() if key in allowed}
+    if "camera_names" in source:
+        source["camera_names"] = tuple(source["camera_names"])
+    cfg = ACTConfig(**source)
     model = ACTCritic(cfg, pretrained_backbone=False, num_bins=checkpoint.get("num_bins", cfg.recap_num_bins))
     model.load_state_dict(checkpoint["model_state_dict"])
     # Decode with the checkpoint's own range so labels match how it was trained.

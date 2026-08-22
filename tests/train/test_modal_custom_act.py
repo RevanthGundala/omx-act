@@ -90,6 +90,33 @@ def _recap_entrypoint_source(repo_root) -> str:
     raise AssertionError("train_recap_policy_remote is missing from the Modal launcher")
 
 
+def test_token_loss_entrypoint_is_bounded_eval_only(repo_root):
+    """CHECK 4 must not be able to bill for a day, and must not train."""
+    import ast
+
+    path = repo_root / "train" / "modal" / "custom_act.py"
+    source = path.read_text()
+    tree = ast.parse(source)
+    node = next(
+        item
+        for item in tree.body
+        if isinstance(item, ast.FunctionDef) and item.name == "check_token_loss_remote"
+    )
+    timeouts = [
+        keyword.value
+        for decorator in node.decorator_list
+        if isinstance(decorator, ast.Call)
+        for keyword in decorator.keywords
+        if keyword.arg == "timeout"
+    ]
+    assert len(timeouts) == 1
+    assert isinstance(timeouts[0], ast.Name)
+    assert timeouts[0].id == "MODAL_MAX_RUNTIME_SECONDS"
+    assert "refusing CPU fallback" in ast.get_source_segment(source, node)
+    assert "run_ablation" in ast.get_source_segment(source, node)
+    assert "train_main" not in ast.get_source_segment(source, node)
+
+
 def test_recap_entrypoint_is_bounded_by_the_hard_runtime(repo_root):
     """An unattended GPU run must not be able to bill for a full day if the
     local client disconnects, so the RECAP function uses the shared hard

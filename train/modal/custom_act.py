@@ -301,6 +301,7 @@ def train_recap_policy_remote(
     zero_latent: bool = False,
     shuffle_labels: bool = False,
     synthetic_first_action: bool = False,
+    dataset_root: str | None = None,
 ) -> str:
     """Train the advantage-conditioned RECAP policy.
 
@@ -322,6 +323,7 @@ def train_recap_policy_remote(
     import sys
     import threading
 
+    vol.reload()
     pretrained_checkpoint = validate_pretrained_checkpoint_path(pretrained_checkpoint)
     if pretrained_checkpoint is None and not masked_sft:
         raise ValueError("pretrained_checkpoint is required for RECAP policy training.")
@@ -369,6 +371,11 @@ def train_recap_policy_remote(
         environment["RECAP_POLICY_LABELS"] = labels_full_path
     if dataset_repo_id:
         environment["RECAP_POLICY_DATASET_REPO_ID"] = dataset_repo_id
+    if dataset_root:
+        data_path = REMOTE_OUTPUTS / validate_volume_relative_path(dataset_root)
+        if not data_path.exists():
+            raise FileNotFoundError(f"dataset_root missing from training volume: {data_path}")
+        environment["RECAP_POLICY_DATASET_ROOT"] = str(data_path)
     if dropout is not None:
         environment["RECAP_POLICY_DROPOUT"] = str(dropout)
     if episodes:
@@ -570,6 +577,7 @@ def recap_policy(
     zero_latent: bool = False,
     shuffle_labels: bool = False,
     synthetic_first_action: bool = False,
+    dataset_root: str | None = None,
 ):
     """Launch advantage-conditioned RECAP policy training.
 
@@ -605,6 +613,7 @@ def recap_policy(
     print(f"dataset={dataset_repo_id}")
     print(f"warm_start={pretrained_checkpoint}")
     print(f"labels={labels_path or '(none)'}")
+    print(f"dataset_root={dataset_root}")
     print(f"steps={steps} save_freq={save_freq} dropout={dropout or '(config default)'}")
     print(f"episodes={episodes or '(all)'}")
     print(f"synthetic_shift={synthetic_shift or '(off)'}")
@@ -625,6 +634,7 @@ def recap_policy(
         zero_latent=zero_latent,
         shuffle_labels=shuffle_labels,
         synthetic_first_action=synthetic_first_action,
+        dataset_root=dataset_root,
     )
     print(result)
     print("Outputs volume: omx-custom-act-training-logs")
@@ -674,6 +684,135 @@ def recap_masked_sft(
         chunk_size=chunk_size,
         train_split=train_split,
         log_freq=log_freq,
+    )
+    print(result)
+    print("Outputs volume: omx-custom-act-training-logs")
+    print(f"  modal volume get omx-custom-act-training-logs act_experiments/{job_name} .")
+
+
+@app.function(
+    gpu=MODAL_GPU,
+    cpu=4.0,
+    timeout=MODAL_MAX_RUNTIME_SECONDS,
+    memory=32_768,
+    volumes={REMOTE_OUTPUTS: vol},
+    secrets=[hf_secret],
+)
+def check_token_loss_remote(
+    checkpoint: str,
+    dataset_repo_id: str,
+    labels_path: str,
+    train_split: float = 0.8,
+    max_frames: int | None = None,
+    batch_size: int | None = None,
+    job_name: str = "recap_token_loss",
+) -> str:
+    """Held-out L1 ablation of the real advantage token. Does not train."""
+    import json
+    import os
+    import sys
+    from datetime import datetime, timezone
+
+    checkpoint = validate_pretrained_checkpoint_path(checkpoint)
+    if checkpoint is None:
+        raise ValueError("checkpoint is required")
+    checkpoint_path = REMOTE_OUTPUTS / checkpoint
+    if not checkpoint_path.is_file():
+        raise FileNotFoundError(f"Checkpoint is missing from Modal volume: {checkpoint_path}")
+    labels_rel = validate_volume_relative_path(labels_path)
+    labels_full = REMOTE_OUTPUTS / labels_rel
+    if not labels_full.is_file():
+        raise FileNotFoundError(f"Advantage labels are missing: {labels_full}")
+    if not dataset_repo_id:
+        raise ValueError("dataset_repo_id is required")
+
+    os.environ["PYTHONUNBUFFERED"] = "1"
+    os.environ["HF_TOKEN"] = os.environ.get("HF_TOKEN", "")
+    os.environ["HUGGINGFACE_HUB_TOKEN"] = os.environ.get("HF_TOKEN", "")
+    os.environ["RECAP_DEVICE"] = "cuda"
+    sys.path.insert(0, str(REMOTE_WORKSPACE))
+    os.chdir(REMOTE_WORKSPACE)
+
+    import torch
+
+    print("=== CUDA PREFLIGHT ===", flush=True)
+    print(f"torch={torch.__version__} cuda_runtime={torch.version.cuda}", flush=True)
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA is not available; refusing CPU fallback on a paid GPU job.")
+    print(
+        f"gpu={torch.cuda.get_device_name(0)} "
+        f"vram_gb={torch.cuda.get_device_properties(0).total_memory / 1e9:.1f}",
+        flush=True,
+    )
+    print(
+        "token_loss_config "
+        f"checkpoint={checkpoint_path} dataset={dataset_repo_id} "
+        f"labels={labels_full} train_split={train_split} max_frames={max_frames}",
+        flush=True,
+    )
+
+    from models.recap.check_token_loss import format_report, run_ablation
+
+    report = run_ablation(
+        checkpoint_path,
+        dataset_repo_id=dataset_repo_id,
+        labels=labels_full,
+        train_split=train_split,
+        device=torch.device("cuda"),
+        max_frames=max_frames,
+        batch_size=batch_size,
+    )
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    out_dir = REMOTE_OUTPUTS / "act_experiments" / job_name / stamp
+    out_dir.mkdir(parents=True, exist_ok=True)
+    report_path = out_dir / "report.json"
+    report_path.write_text(json.dumps(report, indent=2) + "\n")
+    print(format_report(report), flush=True)
+    print(f"wrote {report_path}", flush=True)
+    vol.commit()
+    return json.dumps(
+        {
+            "status": "complete",
+            "report_path": str(report_path),
+            "max_abs_delta_pct": report["max_abs_delta_pct"],
+            "labels_informative": report["labels_informative"],
+            "n_frames": report["n_frames"],
+        },
+        sort_keys=True,
+    )
+
+
+@app.local_entrypoint()
+def check_token_loss(
+    checkpoint: str,
+    dataset_repo_id: str,
+    labels_path: str,
+    train_split: float = 0.8,
+    max_frames: int | None = None,
+    batch_size: int | None = None,
+    job_name: str = "recap_token_loss",
+):
+    """Launch CHECK 4: held-out L1 ablation of the real advantage token.
+
+    Does not train. Reads the checkpoint and labels from the training volume.
+    """
+    print("=== RECAP TOKEN LOSS ABLATION ===")
+    print(f"checkpoint={checkpoint}")
+    print(f"dataset={dataset_repo_id}")
+    print(f"labels={labels_path}")
+    print(f"train_split={train_split} max_frames={max_frames}")
+    print(f"MODAL_GPU={MODAL_GPU}")
+    print(f"MODAL_HARD_TIMEOUT_SECONDS={MODAL_MAX_RUNTIME_SECONDS}")
+    print("MODAL_OUTPUT_VOLUME=omx-custom-act-training-logs")
+
+    result = check_token_loss_remote.remote(
+        checkpoint=checkpoint,
+        dataset_repo_id=dataset_repo_id,
+        labels_path=labels_path,
+        train_split=train_split,
+        max_frames=max_frames,
+        batch_size=batch_size,
+        job_name=job_name,
     )
     print(result)
     print("Outputs volume: omx-custom-act-training-logs")

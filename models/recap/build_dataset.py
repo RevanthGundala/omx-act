@@ -1057,7 +1057,7 @@ def _trial_spec(trial_dir: Path) -> EpisodeSpec:
     outcome = _require_outcome_label(metadata, trial_dir)
 
     def load():
-        trial = load_trial(trial_dir)
+        trial = load_trial(trial_dir, decode_frames=True)
         observations_by_frame = {
             observation["frame_index"]: observation
             for observation in trial.observations

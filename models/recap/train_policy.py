@@ -432,9 +432,12 @@ def main():
     # belong to another dataset. Read the count from metadata, because the
     # loader's hf_dataset only covers the episodes actually being trained on.
     from lerobot.datasets import LeRobotDatasetMetadata
+    from models.act.helper import local_dataset_root
 
     total_frames = LeRobotDatasetMetadata(
-        repo_id=cfg.dataset_repo_id, revision=cfg.dataset_revision
+        repo_id=cfg.dataset_repo_id,
+        revision=cfg.dataset_revision,
+        root=local_dataset_root(),
     ).total_frames
     train_loader = torch.utils.data.DataLoader(
         dataset=AdvantageDataset(

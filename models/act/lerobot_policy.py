@@ -236,7 +236,13 @@ def export_checkpoint(
         action_space,
         recap=recap,
     )
-    metadata = LeRobotDatasetMetadata(source.dataset_repo_id, revision=source.dataset_revision)
+    from models.act.helper import local_dataset_root
+
+    metadata = LeRobotDatasetMetadata(
+        source.dataset_repo_id,
+        revision=source.dataset_revision,
+        root=local_dataset_root(),
+    )
     policy = CustomACTPolicy(config)
     try:
         policy.model.load_state_dict(checkpoint["model_state_dict"])

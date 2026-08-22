@@ -1,25 +1,82 @@
-title: Debugging a custom ACT implementation
+# The advantage token never fired
 
+We implemented RECAP (Physical Intelligence, [arXiv:2511.14759](https://arxiv.org/abs/2511.14759)) on a real OpenMANIPULATOR-X: 6 joints, 30 Hz, top + wrist cameras, task = put a sponge on a **fixed** hot pad. The paper's move is an advantage token — a POS/NEG bit on every transition — so a policy can train on mixed-quality robot data instead of expert corrections only.
 
-I wanted to choose a model that was efficient, and cheap with a lot of documentation to start the implementation. ACT provides a good route as it is supported in LeRobot, it's very ineffici efficient and cheap compared to other VLAs or world models and it has good performance on low number of demonstrations.
+The architecture learned the token when we **planted** a signal it needed. On the real critic labels it ignored the slot completely. Every live "RECAP" number below is therefore behaviour cloning with a sticker, not advantage conditioning.
 
-One error that we continually saw was the low training loss on offline training loss in general, but when we rolled out the robot online, it didn't seem to work at all.
+## First we thought the model was broken
 
-We first started off with a pick and place task to place a piece of pasta inside of a bowl and realized that this was not a good task after many iterations, as we were not able to get a successful ACT working on this task, and we mainly attribute that to the pasta being extremely small and the image in it backbone not being able to actually see the pasta. That's why we moved over to the sponge which had a much brighter contrast with the table and it was also larger so the overhead camera was able to see it.
+Custom ACT vs stock LeRobot looked like a training bug: offline L1 was low, the arm missed the sponge. It was the demonstrations. In 11 of 48 episodes the reach started **after** ACT's chunk of 30, so the policy was trained to hold still from the start state. Wrist-flex start pose was also all over the place.
 
-In our first main debugging implementation, we tried to do a lot of overfitting. So the first thing we tried to do was overfit with just a normal MLP to see if training loss would go down even further compared to what our ACT implementation training loss was, and so we did do that, and it went down extremely low. And then we also tried to overfit on a batch and overfit on an episode. However, we realized that the overfitting on bad single batcher episode was not a very good test because we were able to just actually it was a good test because it showed that the pre-processing pipeline was good or it was did not have any potential errors.
+We fixed collection (canonical reset, motion trigger, coverage, seat wrist-flex from below — never raise current or PID). Clean 48 demos:
 
-We ended up using LibRobot's infrastructure, but with our custom policy. So we used the pre-trained class to substitute our ACT config. This allowed us to match the same Lerobot pre and post processors as well as their eval slash rollout logic.
+| policy | live success | grid |
+|---|---|---|
+| custom ACT | 4/22 = 18% | unmatched |
+| + DAgger-18 expert corrections | 9/15 = 60% | unmatched |
 
-We chose to do a fully closed loop rollout using an async implementation mainly because our hardware was running on 10 hertz and we didn't have access to a larger GPU to run inference on locally, if we chose to do it online, we would have to deal with latency and being able to get the action chunks in time. and so doing a rollout like this allowed us just to execute our action chunk and then use an EMA smoother to blend the action chunks together. So we did not use any temporal ensembling in this implementation.
+DAgger works. Fisher vs base p = 0.0145. That is the only method comparison we will stand behind today, and even that is **not** on the later 5×3 tape grid.
 
-We also realized how important the correct offline setup was, as any changes that were very small and the camera placement overhead had significantly big impacts to the final results i.e. training on one set of camera images compared to another. We tried to add some noise, i.e., some extra stuff in our pre-processor to transform the images by including some light variants and saturation as well as some transforms like translation and rotation. And we saw that the translation and rotation That particular training method performed slightly worse than the normal LiRobot implementation when we evaluated it and we saw the one where we only changed light and saturation, hue, etc. And that performed much worse. And so we chose to evaluate our customer implementation against the standard stock LaRobot implementation.
+## What RECAP was supposed to add
 
-One learning we also saw was collecting high quality data was more important than more data. So many times we tried training on lower amounts of data that were higher quality and it did better than the data set with more training examples.
+DAgger throws away the robot's action and clones the human. RECAP keeps everything — demos, autonomous rollouts, failures, corrections — and tags each frame with whether the n-step advantage was positive. At inference you condition on POSITIVE (and, in the paper, classifier-free guidance, which we never implemented).
 
-We chose to evaluate the episodes on five distinct locations and orientations on our table to see if the pick and place would work. And these were kind of the results here. And we did the same evaluation across both.
+We warm-started from the custom ACT, trained 20k steps on 66 mixed episodes (`034-recap-balanced`), 30% conditioning dropout. Loss 0.070 → 0.046. Training "worked."
 
-One thing to note while doing this was that we initially did not account for sponge orientation. However, as we tried training and we eventually accounted for it, we realized that the orientation did have a tremendous impact on the result as in the initial training run we kept the very Very not or heavily biased orientations, so we had one orientation that would take up most of the data set. And then, when we tried to evaluate online, we realized that the policy didn't generalize at all. And so we went back and changed our data set to include more diverse orientations.
+## The token is a no-op
 
-Our final results were that we reached a 10 out of 30 example eval on our custom, and the robot had an 11 out of 30 success rate, and so this kind of proved that we had an implementation that was at least on par or close to on par with the Labrova implementation for in-distribution performance. In both cases this was not a primary concern to evaluate out of distribution performance.
+Flip POS ↔ NEG on the **same** observation. If the bit matters, actions move.
 
+| check | result |
+|---|---|
+| action sensitivity, train set | **0.93%** of observation effect (pass bar 5%) |
+| held-out L1, 13 episodes | flip / all-POS / all-NEG / drop, max \|Δ\| **0.07%** |
+| encoder slot rank | 309 / 603 (0.66× uniform) |
+| joints slot | **1 / 603** (143× uniform) |
+
+The network *can* concentrate on a memory slot. It chose the joints. The advantage slot is loud at its own encoder position (norm gap 10.3) and ~0 at the output. Training *reduced* token influence vs random init.
+
+This is not "ACT cannot condition." Plant a coin-flip bit and add +0.5 z-units to the action when it is POS. Same trainer, CVAE fully on: measured effect **0.519**. Wiring works. These labels do not create that incentive.
+
+The all-positive SFT (the "82%" checkpoint) is the same story: masking the token moves actions by **0.04%**. Do not put 82% in a comparison table. It was ordinary fine-tune on a non-overlapping sponge slice.
+
+## Why the bit is unused
+
+A conditioning token is learnable **iff** `I(a ; I | o) > 0`: the same observation, two different actions, labelled differently. Three ways that fails — `I` is a function of `o`, `I` is noise, `a` is determined by `o` — look the same in the policy.
+
+On this reward (`−1`/step) the bootstrapped advantage is
+
+```
+A_t = −50 + V(o_{t+50}) − V(o_t)
+```
+
+No action term. `I` is a thresholded value residual. A linear probe reads it from the cameras (AUC **0.78**) and not from scalar `V(o)` (0.52). Neighbours matched in critic-encoder space: opposite-label actions are **2.06%** farther than same-label (p = 0.035). Statistically not zero; far too small to move L1.
+
+Corrections do not supply the missing pairs. The human takes over **after** the state is already bad.
+
+The CVAE latent is not the thief. KL upper-bounds what `z` carries; on the real-label runs that is **0.0001 bits** against the token's 1 bit. Test A learned the planted 0.50 with the CVAE fully active.
+
+## Live, as implemented
+
+Same async stack as DAgger (`eval_async`, chunk 30, EMA, wrist-flex offset 0). Inference token pinned POSITIVE.
+
+Five tape marks × three tries:
+
+| checkpoint | extra data | live | token |
+|---|---|---|---|
+| parent `balanced66` | — | **8/15 = 53%** | inert |
+| mix A, 8k | 7 SPACE takeovers | **12/15 = 80%** | not re-measured |
+| mix B, 10k | 4 on-policy + 3 SPACE | **3/15 = 20%** | **0.03%** causal |
+
+A vs B is the first **matched** grid. Extra expert rescues helped. Extra on-policy failures (3 of 4 autos failed at the hard sites) made the policy worse than the parent. B's train loss never left the start band (0.056 → 0.054). A's did (0.072 → 0.040). The token stayed unused, so this is a **data-mix** result inside a RECAP-shaped trainer.
+
+Do not read 8/15 or 12/15 vs DAgger 9/15 as RECAP vs DAgger. Placements were not matched; correction budgets were not either (7 vs 18).
+
+## What we can actually say
+
+1. **Data quality beat architecture.** Chunk-horizon onset explained the first failure; extra corrections explained the last gain.
+2. **RECAP's token is learnable only when the label tells you about the action given the observation.** Ours does not. A better critic under the same reward cannot invent that mutual information.
+3. **Cloning failures is not free.** Same step budget, same extra episode count: 12/15 vs 3/15.
+4. **A live number with an unused conditioner is BC.** Report it that way.
+
+The writeup still needs DAgger-18 on the same 5×3. Until then there is no method table, only a mechanism result: on this ACT, this reward, and this sponge task, the advantage token never fired.

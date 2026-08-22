@@ -4,6 +4,14 @@ Record of the investigation into why the custom `models/act` ACT policy was
 training poorly, what we changed, and (importantly) what we did and did not
 actually measure.
 
+**Latest (2026-08-21).** The sponge/hot-pad log of record is
+`docs/sponge_hot_pad_experiments.md`. RECAP-ACT as implemented is behaviour
+cloning with an unused advantage token (held-out L1 flip ≤ 0.07%). Live:
+parent 8/15, extra SPACE 12/15, extra on-policy fails 3/15, on one 5×3.
+DAgger-18 is 9/15 on a different grid — not a method table. Narrative:
+`docs/blog.md`. The July "current diagnosis" below is the architecture
+alignment story that preceded RECAP.
+
 > Several one-off probes cited below have since been removed, along with the
 > `evaluation/` directory they lived in: `act_counterfactual_probe.py`,
 > `normalization_roundtrip_check.py`, `offline_lerobot_action_check.py`,
@@ -1191,21 +1199,6 @@ checkpoint in both conditions. The intended robust outcome is one
 lighting-tolerant policy or controlled lighting, not separate morning and
 afternoon models.
 
-
-
-
-# TODO: 
-rl ablations
-
-intiialize weights from the pretrained policy
-do uncond == negative
-adaln vs exztra token
-
-- middle left 
-\ middle left
-/ middle-bottom
-| middle rightß
-\ bottom right
 ## The CVAE latent is not competing with the advantage token (2026-08-17)
 
 **Hypothesis killed.** Two independent model reviews and this log all raised the
@@ -1258,3 +1251,74 @@ bound on latent information. Any question of the form "is the CVAE secretly
 carrying X" can be answered from the training log before running an experiment.
 We were about to spend GPU time on an ablation that the logs had already
 answered — twice, on runs completed weeks earlier.
+
+## The critic is not why the advantage token is inert (2026-08-18)
+
+**Hypothesis tested.** The labels are critic noise (val MAE 86.6 vs threshold
+6.49), so the policy ignores a coin flip. If true, a better critic is the fix.
+
+**It is the wrong diagnosis.** Full writeup: `docs/sponge_hot_pad_experiments.md`
+§5.15. Short version:
+
+The n-step advantage on this reward is `A_t = −50 + V(o_{t+50}) − V(o_t)` on
+every bootstrapped frame. `R_t − R_{t+50}` is the window *sum*, identically
+−50, not a learned baseline. The action never enters. A better `V` makes that
+label cleaner, not action-conditional.
+
+Four measurements, all on `034` / the real labels:
+
+| check | result |
+|---|---|
+| class balance | 44.2% POS, not collapsed; fail 29% vs success 46% |
+| probe `I` from `o` | vision+qpos AUC **0.78**; scalar `V(o)` AUC **0.52** |
+| high-A vs outcome | tertile success 22/22 vs 17/22; not faster; N_fail=6 |
+| held-out token L1 | flip / all-POS / all-NEG / uncond, max \|Δ\| **0.07%** |
+| `I(a ; I \| o)` | critic-space lift **+2.06%**, p=0.035 vs shuffle |
+
+Continuous `A` std is 48.3 (median 1.53) against ε=6.49 — one blob, matching
+the §5.14 bound at residual ρ≈0.9. Noisy *and* mostly a function of `o`.
+
+**What this kills.** "Train a better critic and ACT will use the token."
+Flipping the bit already does not change L1. CFG cannot amplify 0.07%.
+
+**What stays live.** L1 unimodality / no paired actions at the same visual
+state; a 0.03 synthetic dose-response (failure branch only); the matched
+robot eval that still blocks the writeup.
+
+**Method notes.**
+
+- `advantage_labels.json` stores only the bit. Plotting `A` requires a critic
+  forward. Do not quote a missing histogram as a measurement.
+- Match neighbours on encoder features, not 6 joints. The joints-only control
+  was null (p=0.30); cameras made it p=0.035 at the same 2% scale.
+- `ACTConfig(**checkpoint["config"])` dies on extra keys (`dataset_format`).
+  Filter to `fields(ACTConfig)` — the probe loader already does.
+- Held-out L1 flip is the loss-space version of token sensitivity. Measure
+  both; we had only train-set displacement until this pass.
+
+## RECAP-ACT as implemented is 8/15 live (2026-08-20)
+
+Not a missing robot number anymore. `recap_policy_balanced66_20k`, POSITIVE
+token, 15 trials, **8/15 = 53%**. Log: `docs/sponge_hot_pad_experiments.md`
+§5.16.
+
+This is the RECAP-shaped policy we trained (mixed labels on 034). The token
+still does not move L1, so the number is BC on that mix, not evidence that
+advantage conditioning helped. 8/15 vs DAgger 9/15 is not a method comparison
+until placements are matched. Do not iterate RECAP on the same recipe.
+
+## Mix ablation: 12/15 vs 3/15 is a data mix, not a token (2026-08-21)
+
+Same init (`balanced66`), same extra episode count (7), same 5×3 as §5.16.
+Log: `docs/sponge_hot_pad_experiments.md` §5.17.
+
+| | extra | live |
+|---|---|---|
+| parent | — | 8/15 |
+| **A** `036` 7 SPACE | corrections | **12/15 = 80%** (trials 3–5 relabeled S) |
+| **B** `037` 4 auto + 3 SPACE | mix | **3/15 = 20%** |
+
+B token at 10k: mask-vs-visible **0.03%** of observation effect, slot
+**591/603**. A train loss 0.072 → 0.040 at the 8k eval ckpt; B 0.056 → 0.054.
+The token did not wake up. A cloned rescues; B cloned on-policy failures.
+Heading "9/15" was the pre-relabel operator prompt and must not be quoted.

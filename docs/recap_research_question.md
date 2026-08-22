@@ -1,5 +1,13 @@
 # Why Evaluate RECAP with ACT?
 
+**Status (2026-08-21).** The advantage token is inert on this task
+(`I(a ; I | o)` ≈ 2%, held-out L1 flip ≤ 0.07%). Live "RECAP-ACT" is
+behaviour cloning with an unused sticker: parent 8/15, extra SPACE 12/15,
+extra on-policy fails 3/15, all on one 5×3. DAgger-18 is 9/15 on a
+**different** grid — that comparison still does not go in a table. Do not
+quote the withdrawn 82% SFT number. Log of record:
+`docs/sponge_hot_pad_experiments.md` §5.9–5.17.
+
 ## Motivation
 
 RECAP is not being selected because it is universally better than other

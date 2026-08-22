@@ -115,6 +115,7 @@ def train_critic_remote(
     chunk_size: int,
     freeze: str,
     init_from: str | None = None,
+    dataset_root: str | None = None,
 ) -> str:
     import os
     import sys
@@ -144,9 +145,24 @@ def train_critic_remote(
     os.environ["RECAP_CRITIC_CHUNK_SIZE"] = str(chunk_size)
     os.environ["RECAP_CRITIC_FREEZE"] = freeze
     os.environ["RECAP_DEVICE"] = "cuda"
+    vol.reload()
+    if dataset_root:
+        data_path = REMOTE_OUTPUTS / validate_volume_relative_path(dataset_root)
+        if not data_path.exists():
+            raise FileNotFoundError(f"dataset_root missing on critic volume: {data_path}")
+        os.environ["RECAP_CRITIC_DATASET_ROOT"] = str(data_path)
     if init_from:
-        # Warm-start weights ship in the image so no volume upload is needed.
-        os.environ["RECAP_CRITIC_INIT_FROM"] = str(REMOTE_WORKSPACE / init_from)
+        relative = validate_volume_relative_path(init_from)
+        volume_ckpt = REMOTE_OUTPUTS / relative
+        image_ckpt = REMOTE_WORKSPACE / relative
+        if volume_ckpt.is_file():
+            os.environ["RECAP_CRITIC_INIT_FROM"] = str(volume_ckpt)
+        elif image_ckpt.is_file():
+            os.environ["RECAP_CRITIC_INIT_FROM"] = str(image_ckpt)
+        else:
+            raise FileNotFoundError(
+                f"init_from not found on volume or image: {relative}"
+            )
 
     from models.recap.train_critic import main as train_main
 
@@ -171,6 +187,100 @@ def train_critic_remote(
     return f"RECAP critic training complete; outputs in volume omx-recap-critic-logs/{job_name}."
 
 
+@app.function(
+    gpu=MODAL_GPU,
+    timeout=MODAL_MAX_RUNTIME_SECONDS,
+    memory=32_768,
+    volumes={REMOTE_OUTPUTS: vol},
+    secrets=[hf_secret],
+)
+def label_remote(
+    dataset_repo_id: str,
+    dataset_root: str,
+    critic_checkpoint: str,
+    output_path: str,
+) -> str:
+    """Score every frame with a trained critic and write advantage_labels.json."""
+    import json
+    import os
+    import sys
+
+    os.environ["PYTHONUNBUFFERED"] = "1"
+    sys.path.insert(0, str(REMOTE_WORKSPACE))
+    os.chdir(REMOTE_WORKSPACE)
+
+    import torch
+
+    print("=== CUDA PREFLIGHT ===", flush=True)
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA is not available; refusing CPU fallback on a paid GPU job.")
+    print(f"gpu={torch.cuda.get_device_name(0)}", flush=True)
+
+    vol.reload()
+    data_path = REMOTE_OUTPUTS / validate_volume_relative_path(dataset_root)
+    ckpt_path = REMOTE_OUTPUTS / validate_volume_relative_path(critic_checkpoint)
+    out_path = REMOTE_OUTPUTS / validate_volume_relative_path(output_path)
+    if not data_path.exists():
+        raise FileNotFoundError(f"dataset_root missing: {data_path}")
+    if not ckpt_path.is_file():
+        raise FileNotFoundError(f"critic checkpoint missing: {ckpt_path}")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    os.environ.update(
+        {
+            "RECAP_DEVICE": "cuda",
+            "RECAP_CRITIC_CHECKPOINT": str(ckpt_path),
+            "RECAP_ADVANTAGE_DATASET_REPO_ID": dataset_repo_id,
+            "RECAP_CRITIC_DATASET_ROOT": str(data_path),
+            "RECAP_ADVANTAGE_OUTPUT": str(out_path),
+        }
+    )
+    print(
+        f"label_config dataset={dataset_repo_id} root={data_path} "
+        f"critic={ckpt_path} out={out_path}",
+        flush=True,
+    )
+    from models.recap.label_advantage import main as label_main
+
+    label_main()
+    vol.commit()
+    payload = json.loads(out_path.read_text())
+    return json.dumps(
+        {
+            "status": "complete",
+            "output": str(out_path),
+            "counts": payload.get("counts"),
+            "positive_fraction_non_correction": payload.get(
+                "positive_fraction_non_correction"
+            ),
+            "thresholds_by_task": payload.get("thresholds_by_task"),
+        },
+        sort_keys=True,
+    )
+
+
+@app.local_entrypoint()
+def label(
+    dataset_repo_id: str,
+    dataset_root: str,
+    critic_checkpoint: str,
+    output_path: str,
+) -> None:
+    """Write advantage labels onto the critic volume. Does not train."""
+    print("=== RECAP ADVANTAGE LABEL ===")
+    print(f"dataset={dataset_repo_id}")
+    print(f"dataset_root={dataset_root}")
+    print(f"critic={critic_checkpoint}")
+    print(f"output={output_path}")
+    print(f"MODAL_GPU={MODAL_GPU}")
+    result = label_remote.remote(
+        dataset_repo_id=dataset_repo_id,
+        dataset_root=dataset_root,
+        critic_checkpoint=critic_checkpoint,
+        output_path=output_path,
+    )
+    print(result)
+
+
 @app.function(volumes={REMOTE_OUTPUTS: vol})
 def list_outputs() -> list[str]:
     vol.reload()
@@ -187,6 +297,7 @@ def main(
     chunk_size: int = 30,
     freeze: str = "none",
     init_from: str | None = None,
+    dataset_root: str | None = None,
     list_only: bool = False,
 ) -> None:
     if list_only:
@@ -203,10 +314,13 @@ def main(
         freeze=freeze,
     )
     if init_from is not None:
-        init_from = validate_volume_relative_path(init_from, expected_prefix="warm_start")
+        init_from = validate_volume_relative_path(init_from)
+    if dataset_root is not None:
+        dataset_root = validate_volume_relative_path(dataset_root)
 
     print("=== RECAP CRITIC LAUNCH ===")
     print(f"dataset={dataset_repo_id}")
+    print(f"dataset_root={dataset_root}")
     print(f"steps={steps} save_freq={save_freq} val_episodes={val_episodes}")
     print(f"init_from={init_from} chunk_size={chunk_size} freeze={freeze}")
     print(f"MODAL_GPU={MODAL_GPU}")
@@ -221,6 +335,7 @@ def main(
         chunk_size=chunk_size,
         freeze=freeze,
         init_from=init_from,
+        dataset_root=dataset_root,
     )
     print(result)
     print("Outputs volume: omx-recap-critic-logs")

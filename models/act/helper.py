@@ -1,3 +1,6 @@
+import os
+from pathlib import Path
+
 import torch
 from torch.utils.data import DataLoader, Dataset
 
@@ -7,8 +10,17 @@ from lerobot.datasets import LeRobotDataset, LeRobotDatasetMetadata
 from lerobot.transforms.transforms import ImageTransforms, ImageTransformsConfig
 
 
+def local_dataset_root() -> Path | None:
+    raw = os.environ.get("RECAP_POLICY_DATASET_ROOT")
+    return Path(raw).expanduser() if raw else None
+
+
 def make_dataloaders(cfg: ACTConfig, episodes: list[int] | None = None):
-    metadata = LeRobotDatasetMetadata(repo_id=cfg.dataset_repo_id, revision=cfg.dataset_revision)
+    metadata = LeRobotDatasetMetadata(
+        repo_id=cfg.dataset_repo_id,
+        revision=cfg.dataset_revision,
+        root=local_dataset_root(),
+    )
     train_episodes, holdout_episodes = resolve_train_holdout_episodes(
         metadata.total_episodes, cfg.train_split, cfg.seed
     )
@@ -74,7 +86,11 @@ class ACTDataset(Dataset):
         self.image_mean = torch.tensor([0.485, 0.456, 0.406], dtype=torch.float32).view(3, 1, 1)
         self.image_std = torch.tensor([0.229, 0.224, 0.225], dtype=torch.float32).view(3, 1, 1)
 
-        metadata = LeRobotDatasetMetadata(repo_id=cfg.dataset_repo_id, revision=cfg.dataset_revision)
+        metadata = LeRobotDatasetMetadata(
+            repo_id=cfg.dataset_repo_id,
+            revision=cfg.dataset_revision,
+            root=local_dataset_root(),
+        )
         self.qpos_mean = torch.as_tensor(metadata.stats["observation.state"]["mean"], dtype=torch.float32)
         self.qpos_std = torch.as_tensor(metadata.stats["observation.state"]["std"], dtype=torch.float32).clamp_min(1e-6)
         self.action_mean = torch.as_tensor(metadata.stats["action"]["mean"], dtype=torch.float32)
@@ -86,6 +102,7 @@ class ACTDataset(Dataset):
         self.dataset = LeRobotDataset(
             repo_id=cfg.dataset_repo_id,
             revision=cfg.dataset_revision,
+            root=local_dataset_root(),
             episodes=episodes,
             image_transforms=ImageTransforms(
                 ImageTransformsConfig(enable=transforms_enabled)
