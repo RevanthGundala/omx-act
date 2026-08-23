@@ -12,15 +12,30 @@ behaviour cloning with an unused sticker.
 
 ## Results
 
+Five position-and-orientation categories, three trials each (15 trials).
+
 | method | live success |
 |---|---|
-| custom ACT (48 demos) | 4/22 = 18% |
+| Base ACT (48 demos) | 4/15 = 27% |
 | + DAgger (18 human corrections) | 9/15 = 60% |
-| RECAP-ACT as implemented | 8/15 = 53% |
+| RECAP-ACT, mixed data | 8/15 = 53% |
 
-DAgger vs base is the only comparison we will stand behind (Fisher p = 0.0145).
-8/15 vs 9/15 is **not** a method comparison: placements and correction counts
-differ. Do not quote the withdrawn 82% SFT number.
+The first RECAP eval used a later set of physical placements, so 8/15 vs 9/15
+is not a matched method comparison. The token itself is unused (held-out L1
+moves ≤ 0.07% when it is flipped).
+
+Second iteration, same parent, same extra budget of 7 episodes, same 5×3 grid:
+
+| method | live success |
+|---|---|
+| parent mixed-data RECAP-ACT | 8/15 = 53% |
+| + 7 human corrections | 12/15 = 80% |
+| + 4 autonomous rollouts + 3 corrections | 3/15 = 20% |
+
+Adding only corrections improved the policy. Mixing in autonomous rollouts
+(three of the four were failures) **regressed below the parent**. Because the
+token still does not move the actions, both second-iteration numbers are
+data-mix results, not evidence that advantage conditioning worked.
 
 ## Install
 
