@@ -8,13 +8,15 @@ training, and eval. Teleop and data collection live in
 We also trained a [RECAP](https://arxiv.org/abs/2511.14759)-style
 advantage-conditioned ACT on mixed-quality robot data.
 
-The ACT policy, RECAP token, critic, and trainers are custom. We use
+The ACT / RECAP models and their training loops are custom
+(`train/act/custom.py`, `train/recap/`). We use
 [LeRobot](https://github.com/huggingface/lerobot) for dataset I/O
 (`LeRobotDataset`), image/action pre- and post-processors, the OMX
 follower and OpenCV camera drivers, and async eval
-(`PolicyServer` / `RobotClient`). Stock LeRobot ACT is the comparison
-baseline. `models/act/lerobot_policy.py` is the adapter that wraps our
-weights as a LeRobot policy so those paths work.
+(`PolicyServer` / `RobotClient`). Stock LeRobot ACT — trained with
+LeRobot's own loop — is the comparison baseline.
+`models/act/lerobot_policy.py` wraps our weights as a LeRobot policy so
+eval can go through that stack.
 
 ## Results
 
