@@ -1,4 +1,4 @@
-# act-sim
+# omx-act-recap
 
 Custom [ACT](https://arxiv.org/abs/2304.13705) for an OpenMANIPULATOR-X arm
 learning **place the sponge on a fixed hot pad**. This repo is the policy,
@@ -44,8 +44,8 @@ Adding only corrections improved the policy. Mixing in autonomous rollouts
 Python 3.12+, [uv](https://docs.astral.sh/uv/). macOS (MPS eval) or Linux (CUDA train).
 
 ```bash
-git clone https://github.com/RevanthGundala/act-sim.git
-cd act-sim
+git clone https://github.com/RevanthGundala/omx-act-recap.git
+cd omx-act-recap
 uv sync --group dev
 uv run pytest -q
 ```
@@ -176,7 +176,7 @@ tests/               pytest, grouped like the code
 ```
 
 This repo and `omx-training` both expose `configs`, `models`, `utils`. Pin
-this repo first on `sys.path` in entry scripts. Never put act-sim on
+this repo first on `sys.path` in entry scripts. Never put this repo on
 `PYTHONPATH` for an omx-training run.
 
 ## License
