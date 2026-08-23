@@ -1,10 +1,10 @@
 """Train all-positive RECAP SFT with true per-example token omission.
 
-This is intentionally separate from ``train_policy.py``. The legacy trainer
-uses a learned UNCONDITIONED token for conditioning dropout; this experiment
-matches PI's stated omission behavior by replacing the condition id with
-``MASKED_ADVANTAGE`` on a random share of examples, which
-``act_recap_masked.ACTPolicy`` omits from encoder and decoder attention.
+This is intentionally separate from ``train/recap/policy.py``. The live
+trainer uses a learned UNCONDITIONED token for conditioning dropout; this
+experiment matches PI's stated omission behavior by replacing the condition
+id with ``MASKED_ADVANTAGE`` on a random share of examples, which
+``models.recap.masked.ACTPolicy`` omits from encoder and decoder attention.
 
 All examples still target the same expert actions. Masked dropout therefore
 learns conditional and unconditional branches; it does not teach POSITIVE

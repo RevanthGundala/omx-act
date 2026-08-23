@@ -68,6 +68,13 @@ uv run python models/act/eval/async_lerobot.py \
 Export a `.pt` checkpoint first if you only have the training file:
 
 ```bash
+# base ACT / DAgger
+uv run python -m models.act.lerobot_policy \
+  --checkpoint /path/to/last.pt \
+  --output-dir /path/to/pretrained_model \
+  --action-space absolute
+
+# RECAP checkpoints only — omit --recap for a base ACT .pt
 uv run python -m models.act.lerobot_policy \
   --checkpoint /path/to/last.pt \
   --output-dir /path/to/pretrained_model \
@@ -136,7 +143,9 @@ uv run modal run --detach train/modal/custom_act.py \
 
 # RECAP: critic → labels → policy
 uv run modal run --detach train/modal/recap_critic.py
-uv run python -m train.recap.label_advantage --help
+RECAP_CRITIC_CHECKPOINT=outputs/act_experiments/recap_critic/<run>/checkpoints/last.pt \
+RECAP_ADVANTAGE_DATASET_REPO_ID=RevanthGundala/034-recap-balanced \
+  uv run python -m train.recap.label_advantage
 uv run modal run --detach train/modal/custom_act.py::recap_policy \
   --pretrained-checkpoint act_experiments/<run>/checkpoints/last.pt \
   --dataset-repo-id RevanthGundala/034-recap-balanced \

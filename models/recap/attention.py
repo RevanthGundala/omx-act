@@ -11,7 +11,7 @@ test_recap_attention_matches_base_attention and its cross-attention
 counterpart in tests/recap/test_recap_models.py exist to catch drift between
 them, and will fail if this copy diverges.
 
-act_recap_masked.py is standalone for the same reason.
+``models/recap/masked/`` is standalone for the same reason.
 """
 
 import torch

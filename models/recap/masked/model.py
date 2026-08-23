@@ -17,7 +17,7 @@ Pass ``MASKED_ADVANTAGE`` for a single sample or ``advantage=None`` for a whole
 batch. The parameter layout therefore differs from the baseline on purpose, so a
 baseline checkpoint does not load directly. Porting one is a concern of the tool
 that reads old checkpoints, not of this model: see ``convert_legacy_state_dict``
-in ``inspect_advantage_attention.py``.
+in ``utils/analysis/attention_maps.py``.
 """
 
 from enum import IntEnum

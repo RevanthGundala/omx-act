@@ -22,7 +22,8 @@ dependencies = [
     "av>=15,<16",
     # experiment tracking (optional; disable with ACT_DISABLE_MLFLOW=1)
     "mlflow>=2.17",
-    # Vast.ai launcher
+    "modal",
+    "opencv-python-headless",
     "vastai-sdk>=0.1.33",
 ]
 
@@ -36,15 +37,21 @@ include = ["configs*", "models*", "train*", "scripts*", "utils*"]
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
-    # models/recap/inspect_advantage_attention.py renders attention maps
+    # utils/analysis/attention_maps.py
     "matplotlib",
 ]
 
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
 [tool.pytest.ini_options]
-# Without this, every module import in the suite fails unless the caller
-# remembers PYTHONPATH=. -- friction that kept the tests from being run.
 pythonpath = ["."]
 testpaths = ["tests"]
+addopts = "-m 'not integration'"
+markers = [
+    "integration: needs network / Hugging Face (excluded from default pytest)",
+]
 
 [[tool.uv.index]]
 name = "pytorch-cu128"
@@ -52,7 +59,7 @@ url = "https://download.pytorch.org/whl/cu128"
 explicit = true
 
 [tool.uv.sources]
-lerobot = { git = "https://github.com/huggingface/lerobot.git", rev = "main" }
+lerobot = { git = "https://github.com/huggingface/lerobot.git", rev = "87242cfced5228b6181fb0047021d684d424df38" }
 torch = [
     { index = "pytorch-cu128", marker = "sys_platform == 'linux'" },
 ]

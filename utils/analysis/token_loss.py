@@ -1,6 +1,6 @@
 """Ablate the real advantage token and measure POLICY LOSS (L1).
 
-``check_token_sensitivity.py`` reports action displacement as a fraction of
+``utils/analysis/token_sensitivity.py`` reports action displacement as a fraction of
 observation-driven spread. This check asks a different question: do the real
 labels change the training objective? If flipping or zeroing the token barely
 moves L1 on held-out episodes, the labels are not informative for this policy.

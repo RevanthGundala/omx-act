@@ -15,6 +15,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+pytestmark = pytest.mark.integration
+
 SOURCE_REPO_ID = "RevanthGundala/011-place-sponge-in-bowl"
 OUTPUT_REPO_ID = "RevanthGundala/012-place-sponge-in-bowl-pytest-smoketest"
 NOOP_THRESHOLD_DEG = 0.1

@@ -1,7 +1,7 @@
 """Train the RECAP distributional critic (arXiv:2511.14759) on Monte Carlo returns.
 
 The critic is an observation-only V(o) trained by cross-entropy against the
-undiscounted empirical return-to-go that models/recap/build_dataset.py already
+undiscounted empirical return-to-go that scripts/recap/build_dataset.py already
 stores in the dataset. There is no discount factor and no Bellman bootstrapping
 (Sec. III), returns are discretized into 201 bins (Sec. IV-A), and values are
 normalized into (-1, 0) per task using the maximum episode length (Sec. V-C).

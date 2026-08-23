@@ -7,7 +7,7 @@ the conditioning token comes from:
   paper fixes "I_t to True in this stage, which we found to lead to slightly
   better results". Leave RECAP_POLICY_LABELS unset for this.
 * Improvement loop. Train on all collected data with per-transition labels from
-  models/recap/label_advantage.py, plus conditioning dropout so the policy also
+  train/recap/label_advantage.py, plus conditioning dropout so the policy also
   learns the unconditioned branch used for classifier-free guidance.
 
 Labels are keyed by the dataset's own global frame index rather than by position
@@ -155,7 +155,7 @@ class AdvantageDataset(Dataset):
             if out_of_range.any():
                 raise ValueError(
                     f"Labels cover {len(conditions)} frames but the dataset references index "
-                    f"{int(self.frame_ids.max())}; relabel with models/recap/label_advantage.py"
+                    f"{int(self.frame_ids.max())}; relabel with train/recap/label_advantage.py"
                 )
             if total_frames is not None and total_frames != len(conditions):
                 # Equal length is what ties the labels to this dataset. A
@@ -165,7 +165,7 @@ class AdvantageDataset(Dataset):
                 raise ValueError(
                     f"Labels cover {len(conditions)} frames but the dataset has "
                     f"{total_frames}; these labels were built for a different "
-                    "dataset. Relabel with models/recap/label_advantage.py, or "
+                    "dataset. Relabel with train/recap/label_advantage.py, or "
                     "point RECAP_POLICY_DATASET_REPO_ID at the labeled dataset."
                 )
 
