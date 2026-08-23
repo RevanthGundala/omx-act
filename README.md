@@ -6,22 +6,21 @@ training, and eval. Teleop and data collection live in
 `omx-training` (`--policy-code-root` points here).
 
 We then asked whether [RECAP](https://arxiv.org/abs/2511.14759) advantage
-conditioning helps a small deterministic ACT. **The token never fired.** Live
-"RECAP" numbers below are behaviour cloning with an unused sticker.
+conditioning helps a small deterministic ACT. **The token never fired.**
+Flipping it changes held-out action L1 by ≤ 0.07%. Live "RECAP" numbers are
+behaviour cloning with an unused sticker.
 
 ## Results
 
-| method | extra data | live | grid |
-|---|---|---|---|
-| custom ACT | 48 demos | 4/22 = 18% | unmatched |
-| + DAgger | 18 expert corrections | 9/15 = 60% | unmatched |
-| RECAP-ACT parent | mixed labels, unused token | 8/15 = 53% | 5×3 tape |
-| + 7 SPACE takeovers | extra corrections | 12/15 = 80% | same 5×3 |
-| + 4 autos + 3 SPACE | cloned on-policy fails | 3/15 = 20% | same 5×3 |
+| method | live success |
+|---|---|
+| custom ACT (48 demos) | 4/22 = 18% |
+| + DAgger (18 human corrections) | 9/15 = 60% |
+| RECAP-ACT as implemented | 8/15 = 53% |
 
-Held-out L1 moves ≤ 0.07% when the advantage bit is flipped. Do not quote the
-withdrawn 82% SFT number. DAgger 9/15 vs RECAP 8/15 is **not** a method
-comparison (different placements, 18 vs 7 corrections).
+DAgger vs base is the only comparison we will stand behind (Fisher p = 0.0145).
+8/15 vs 9/15 is **not** a method comparison: placements and correction counts
+differ. Do not quote the withdrawn 82% SFT number.
 
 ## Install
 
@@ -98,31 +97,7 @@ uv run python models/act/eval/async_custom.py \
 | `models/act/eval/stock_lerobot.py` | sync loop | stock LeRobot ACT |
 
 Wrist-flex has directional stiction. Always approach the start pose from
-below. Never raise motor current or PID gains. Use
-`--start-state-wrist-flex-offset 0` on the 034/036/037 start range.
-
-## No robot
-
-```bash
-uv run pytest -q
-
-# does this checkpoint actually use its advantage token?
-uv run python -m utils.analysis.token_sensitivity \
-  --checkpoint /path/to/step_020000.pt \
-  --dataset-repo-id RevanthGundala/034-recap-balanced \
-  --labels /path/to/advantage_labels.json \
-  --batches 150
-
-# held-out L1 when the token is flipped / dropped
-uv run python -m utils.analysis.token_loss \
-  --checkpoint /path/to/step_020000.pt \
-  --dataset-repo-id RevanthGundala/034-recap-balanced \
-  --labels /path/to/advantage_labels.json \
-  --train-split 0.8
-```
-
-Public datasets: `RevanthGundala/026-place-sponge-on-hot-pad-clean` (48 demos),
-`RevanthGundala/028-custom48-dagger18`, `RevanthGundala/034-recap-balanced`.
+below. Never raise motor current or PID gains.
 
 ## Train
 
