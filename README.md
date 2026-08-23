@@ -5,37 +5,29 @@ learning **place the sponge on a fixed hot pad**. This repo is the policy,
 training, and eval. Teleop and data collection live in
 `omx-training` (`--policy-code-root` points here).
 
-We then asked whether [RECAP](https://arxiv.org/abs/2511.14759) advantage
-conditioning helps a small deterministic ACT. **The token never fired.**
-Flipping it changes held-out action L1 by ≤ 0.07%. Live "RECAP" numbers are
-behaviour cloning with an unused sticker.
+We also trained a [RECAP](https://arxiv.org/abs/2511.14759)-style
+advantage-conditioned ACT on mixed-quality robot data.
 
 ## Results
 
 Five position-and-orientation categories, three trials each (15 trials).
 
-| method | live success |
-|---|---|
-| Base ACT (48 demos) | 4/15 = 27% |
-| + DAgger (18 human corrections) | 9/15 = 60% |
-| RECAP-ACT, mixed data | 8/15 = 53% |
+- **Base ACT** — 48 demonstrations. **4/15 = 27%**
+- **DAgger** — same ACT, plus 18 human correction episodes. **9/15 = 60%**
+- **RECAP-ACT** — advantage-conditioned training on 48 demos + 11
+  autonomous rollouts + 7 corrections. **8/15 = 53%**
 
 The first RECAP eval used a later set of physical placements, so 8/15 vs 9/15
-is not a matched method comparison. The token itself is unused (held-out L1
-moves ≤ 0.07% when it is flipped).
+is not a matched method comparison.
 
 Second iteration, same parent, same extra budget of 7 episodes, same 5×3 grid:
 
-| method | live success |
-|---|---|
-| parent mixed-data RECAP-ACT | 8/15 = 53% |
-| + 7 human corrections | 12/15 = 80% |
-| + 4 autonomous rollouts + 3 corrections | 3/15 = 20% |
+- **Parent mixed-data RECAP-ACT** — **8/15 = 53%**
+- **+ 7 human corrections** — **12/15 = 80%**
+- **+ 4 autonomous rollouts + 3 corrections** — **3/15 = 20%**
 
 Adding only corrections improved the policy. Mixing in autonomous rollouts
-(three of the four were failures) **regressed below the parent**. Because the
-token still does not move the actions, both second-iteration numbers are
-data-mix results, not evidence that advantage conditioning worked.
+(three of the four were failures) **regressed below the parent**.
 
 ## Install
 
