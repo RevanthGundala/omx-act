@@ -1,15 +1,11 @@
-# omx-act-recap
+# omx-act
 
 Custom [ACT](https://arxiv.org/abs/2304.13705) for an OpenMANIPULATOR-X arm
 learning **place the sponge on a fixed hot pad**. This repo is the policy,
 training, and eval. Teleop and data collection live in
 `omx-training` (`--policy-code-root` points here).
 
-We also trained a [RECAP](https://arxiv.org/abs/2511.14759)-style
-advantage-conditioned ACT on mixed-quality robot data.
-
-The ACT / RECAP models and their training loops are custom
-(`train/act/custom.py`, `train/recap/`). We use
+The ACT model and its training loop are custom (`train/act/custom.py`). We use
 [LeRobot](https://github.com/huggingface/lerobot) for dataset I/O
 (`LeRobotDataset`), image/action pre- and post-processors, the OMX
 follower and OpenCV camera drivers, and async eval
@@ -20,39 +16,27 @@ eval can go through that stack.
 
 ## Results
 
-Five position-and-orientation categories, three trials each (15 trials).
+Controlled physical evaluation on 30 matched sponge placements (5 layouts × 6 trials):
 
-- **Base ACT** — 48 demonstrations. **4/15 = 27%**
-- **DAgger** — same ACT, plus 18 human correction episodes. **9/15 = 60%**
-- **RECAP-ACT** — advantage-conditioned training on 48 demos + 11
-  autonomous rollouts + 7 corrections. **8/15 = 53%**
+- **Base ACT** — 48 demonstrations. **15/30 = 50%** (95% CI: 33–67%)
+- **DAgger (Round 1)** — +18 human corrections. **19/30 = 63%** (95% CI: 46–78%)
+- **DAgger (Round 2)** — +12 targeted corrections on failed layouts. **20/30 = 67%** (95% CI: 49–81%)
 
-The first RECAP eval used a later set of physical placements, so 8/15 vs 9/15
-is not a matched method comparison.
-
-Second iteration, same parent, same extra budget of 7 episodes, same 5×3 grid:
-
-- **Parent mixed-data RECAP-ACT** — **8/15 = 53%**
-- **+ 7 human corrections** — **12/15 = 80%**
-- **+ 4 autonomous rollouts + 3 corrections** — **3/15 = 20%**
-
-Adding only corrections improved the policy. Mixing in autonomous rollouts
-(three of the four were failures) **regressed below the parent**.
+All 36 failures were pick-up failures (sponge never moved or nudged slightly); targeted corrections eliminated misses on the specific layouts they targeted.
 
 ## Install
 
 Python 3.12+, [uv](https://docs.astral.sh/uv/). macOS (MPS eval) or Linux (CUDA train).
 
 ```bash
-git clone https://github.com/RevanthGundala/omx-act-recap.git
-cd omx-act-recap
+git clone https://github.com/RevanthGundala/omx-act.git
+cd omx-act
 uv sync --group dev
 uv run pytest -q
 ```
 
 `lerobot` is pulled from git. `torchcodec` does not load here (missing
-`libavutil.56`); dataset video goes through OpenCV
-(`models/recap/lerobot_source.py`).
+`libavutil.56`); dataset video goes through OpenCV.
 
 Hardware for live eval: OMX follower, two USB cameras (`top`, `wrist`),
 serial port in `utils/config.py`. List cameras with:
@@ -84,26 +68,17 @@ uv run python models/act/eval/async_lerobot.py \
 Export a `.pt` checkpoint first if you only have the training file:
 
 ```bash
-# base ACT / DAgger
 uv run python -m models.act.lerobot_policy \
   --checkpoint /path/to/last.pt \
   --output-dir /path/to/pretrained_model \
   --action-space absolute
-
-# RECAP checkpoints only — omit --recap for a base ACT .pt
-uv run python -m models.act.lerobot_policy \
-  --checkpoint /path/to/last.pt \
-  --output-dir /path/to/pretrained_model \
-  --action-space absolute \
-  --recap
 ```
 
 **Raw `.pt`** (no LeRobot server):
 
 ```bash
 uv run python models/act/eval/async_custom.py \
-  --checkpoint /path/to/last.pt \
-  --recap-advantage pos
+  --checkpoint /path/to/last.pt
 ```
 
 | script | clocking | loads |
@@ -132,26 +107,7 @@ uv run modal run --detach train/modal/custom_act.py \
   --dataset-repo-id RevanthGundala/028-custom48-dagger18 \
   --pretrained-checkpoint act_experiments/<run>/checkpoints/last.pt \
   --job-name act_custom_clean48_dagger18_ft10k --steps 10000
-
-# RECAP: critic → labels → policy
-uv run modal run --detach train/modal/recap_critic.py
-RECAP_CRITIC_CHECKPOINT=outputs/act_experiments/recap_critic/<run>/checkpoints/last.pt \
-RECAP_ADVANTAGE_DATASET_REPO_ID=RevanthGundala/034-recap-balanced \
-  uv run python -m train.recap.label_advantage
-uv run modal run --detach train/modal/custom_act.py::recap_policy \
-  --pretrained-checkpoint act_experiments/<run>/checkpoints/last.pt \
-  --dataset-repo-id RevanthGundala/034-recap-balanced \
-  --labels-path act_experiments/recap_labels/034-recap-balanced.json
 ```
-
-Local dataset that is not on Hugging Face:
-
-```bash
-RECAP_POLICY_DATASET_ROOT=/path/to/036-recap-corr7 \
-  uv run python -m train.recap.policy
-```
-
-Architecture and optimizer come from the warm-start checkpoint.
 
 ## Layout
 
@@ -159,18 +115,11 @@ Architecture and optimizer come from the warm-start checkpoint.
 models/act/          custom ACT (do not move lerobot_policy.py — omx-training
                      loads it by exact path)
   eval/              live-robot evaluation
-models/recap/
-  policy/            live architecture: 3-state token + CVAE
-  masked/            token can be omitted
-  critic/            V(o) only — no CVAE
 scripts/dataset/     dataset surgery, DAgger aggregate
-scripts/recap/       build RECAP mixes from demos / rollouts / corrections
 train/act/           ACT training loops
-train/recap/         critic, labeling, RECAP policy training
 train/modal/         Modal launchers + watchdog
 train/vastai/        vast.ai launchers
 utils/config.py      OMX ports / cameras
-utils/analysis/      token checks (sensitivity, L1, I(a;I|o))
 configs/act/base.py  hyperparameters
 tests/               pytest, grouped like the code
 ```

@@ -29,3 +29,13 @@ mlflow.db
 # Local Copilot skills
 .github/skills/bughunt/
 logs/
+
+# Retired RECAP code (kept untracked/ignored)
+models/recap/
+scripts/recap/
+train/recap/
+train/modal/recap_critic.py
+train/modal/recap_probe.py
+tests/recap/
+tests/dataset/test_build_recap_dataset.py
+tests/train/test_modal_recap_probe.py

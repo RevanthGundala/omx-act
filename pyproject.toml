@@ -1,7 +1,7 @@
 [project]
-name = "omx-act-recap"
+name = "omx-act"
 version = "0.1.0"
-description = "Custom ACT, DAgger, and RECAP for an OpenMANIPULATOR-X sponge-on-hot-pad task. Robot control lives in omx-training."
+description = "Custom ACT and DAgger for an OpenMANIPULATOR-X sponge-on-hot-pad task. Robot control lives in omx-training."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
